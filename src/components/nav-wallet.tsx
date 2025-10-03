@@ -1,12 +1,12 @@
 'use client'
 
-import { useAccount, useConnect, useDisconnect, useBalance, useReadContract } from 'wagmi'
+import { useAccount, useConnect, useDisconnect, useBalance, useReadContract, useChainId, useSwitchChain } from 'wagmi'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Wallet, LogOut, Copy, Check, ChevronDown, Settings, CheckCircle, AlertCircle, ExternalLink } from 'lucide-react'
+import { Wallet, LogOut, Copy, Check, ChevronDown, Settings, CheckCircle, AlertCircle, ExternalLink, RefreshCw } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { formatEther } from 'viem'
 import {
@@ -51,6 +51,12 @@ export function NavWallet() {
   const [copied, setCopied] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
   
+  // Network detection
+  const chainId = useChainId()
+  const { switchChain, isPending: isSwitchingChain } = useSwitchChain()
+  const filecoinCalibrationChainId = 314159
+  const isCorrectNetwork = chainId === filecoinCalibrationChainId
+  
   // Payment setup state
   const [depositAmount, setDepositAmount] = useState('100')
   const [storageAllowance, setStorageAllowance] = useState('10TiB')
@@ -62,12 +68,12 @@ export function NavWallet() {
   }, [])
 
   // Fetch native TFIL balance
-  const { data: tfilBalance } = useBalance({
+  const { data: tfilBalance, isLoading: tfilLoading, error: tfilError, refetch: refetchTfil } = useBalance({
     address: address,
   })
 
   // Fetch USDFC token balance
-  const { data: usdfcBalance } = useReadContract({
+  const { data: usdfcBalance, isLoading: usdfcLoading, error: usdfcError, refetch: refetchUsdfc } = useReadContract({
     address: USDFC_CONTRACT_ADDRESS,
     abi: ERC20_ABI,
     functionName: 'balanceOf',
@@ -76,6 +82,7 @@ export function NavWallet() {
       enabled: !!address,
     },
   })
+
 
   // Fetch USDFC token decimals
   const { data: usdfcDecimals } = useReadContract({
@@ -123,6 +130,22 @@ export function NavWallet() {
     }
   }
 
+  const handleRefreshBalances = async () => {
+    try {
+      await Promise.all([refetchTfil(), refetchUsdfc()])
+    } catch (error) {
+      console.error('Error refreshing balances:', error)
+    }
+  }
+
+  const handleSwitchNetwork = async () => {
+    try {
+      await switchChain({ chainId: filecoinCalibrationChainId })
+    } catch (error) {
+      console.error('Error switching network:', error)
+    }
+  }
+
   if (isConnected && address && isMounted) {
     const tfilFormatted = formatBalance(tfilBalance?.value)
     const usdfcFormatted = usdfcBalance && usdfcDecimals 
@@ -157,14 +180,75 @@ export function NavWallet() {
               </Button>
             </div>
             
+            {/* Network Status */}
+            <div className="mb-4 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Network</span>
+                {!isCorrectNetwork && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSwitchNetwork}
+                    disabled={isSwitchingChain}
+                    className="h-6 px-2 text-xs"
+                  >
+                    {isSwitchingChain ? (
+                      <div className="h-3 w-3 border border-current border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      'Switch'
+                    )}
+                  </Button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`h-2 w-2 rounded-full ${isCorrectNetwork ? 'bg-green-500' : 'bg-red-500'}`} />
+                <span className="text-xs text-slate-600 dark:text-slate-400">
+                  {isCorrectNetwork ? 'Filecoin Calibration' : `Chain ID: ${chainId}`}
+                </span>
+              </div>
+              {!isCorrectNetwork && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                  Switch to Filecoin Calibration (314159) to load balances
+                </p>
+              )}
+            </div>
+
             <div className="space-y-2 mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Balances</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRefreshBalances}
+                  disabled={tfilLoading || usdfcLoading || !isCorrectNetwork}
+                  className="h-6 px-2 text-xs"
+                >
+                  <RefreshCw className={`h-3 w-3 ${(tfilLoading || usdfcLoading) ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
               <div className="flex justify-between text-xs sm:text-sm">
                 <span className="text-slate-600 dark:text-slate-400">TFIL:</span>
-                <span className="font-medium">{tfilFormatted} TFIL</span>
+                <span className="font-medium">
+                  {tfilLoading ? (
+                    <span className="text-slate-400">Loading...</span>
+                  ) : tfilError ? (
+                    <span className="text-red-500">Error</span>
+                  ) : (
+                    `${tfilFormatted} TFIL`
+                  )}
+                </span>
               </div>
               <div className="flex justify-between text-xs sm:text-sm">
                 <span className="text-slate-600 dark:text-slate-400">USDFC:</span>
-                <span className="font-medium">{usdfcFormatted} USDFC</span>
+                <span className="font-medium">
+                  {usdfcLoading ? (
+                    <span className="text-slate-400">Loading...</span>
+                  ) : usdfcError ? (
+                    <span className="text-red-500">Error</span>
+                  ) : (
+                    `${usdfcFormatted} USDFC`
+                  )}
+                </span>
               </div>
             </div>
 
