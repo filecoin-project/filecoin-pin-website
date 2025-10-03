@@ -51,15 +51,6 @@ export function BalanceDisplay() {
     },
   })
 
-  // Fetch USDFC token decimals
-  const { data: usdfcDecimals } = useReadContract({
-    address: USDFC_CONTRACT_ADDRESS,
-    abi: ERC20_ABI,
-    functionName: 'decimals',
-    query: {
-      enabled: !!address,
-    },
-  })
 
   // Fetch USDFC token symbol
   const { data: usdfcSymbol } = useReadContract({
@@ -75,14 +66,14 @@ export function BalanceDisplay() {
     return null
   }
 
-  const formatBalance = (balance: bigint | undefined, decimals: number = 18) => {
+  const formatBalance = (balance: bigint | undefined) => {
     if (!balance) return '0.00'
     const formatted = formatEther(balance)
     return parseFloat(formatted).toFixed(4)
   }
 
-  const usdfcFormattedBalance = usdfcBalance && usdfcDecimals 
-    ? formatBalance(usdfcBalance, usdfcDecimals)
+  const usdfcFormattedBalance = usdfcBalance 
+    ? formatBalance(usdfcBalance)
     : '0.00'
 
   return (
