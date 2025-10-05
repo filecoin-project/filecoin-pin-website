@@ -60,7 +60,7 @@ export default function Home() {
   const [carFiles, setCarFiles] = useState<CarFile[]>([])
   const [isImporting, setIsImporting] = useState(false)
   const { address, isConnected } = useAccount()
-  const [paymentSetupComplete] = useState(false)
+  const [paymentSetupComplete] = useState(true)
 
   const chainId = useChainId()
   const { switchChain, isPending: isSwitchingChain } = useSwitchChain()
@@ -118,6 +118,30 @@ export default function Home() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
+  const getFilesFromEntry = async (entry: FileSystemEntry): Promise<File[]> => {
+    const files: File[] = []
+    
+    if (entry.isFile) {
+      return new Promise((resolve) => {
+        (entry as FileSystemFileEntry).file((file) => {
+          resolve([file])
+        })
+      })
+    } else if (entry.isDirectory) {
+      const dirReader = (entry as FileSystemDirectoryEntry).createReader()
+      const entries = await new Promise<FileSystemEntry[]>((resolve) => {
+        dirReader.readEntries(resolve)
+      })
+      
+      for (const subEntry of entries) {
+        const subFiles = await getFilesFromEntry(subEntry)
+        files.push(...subFiles)
+      }
+    }
+    
+    return files
+  }
+
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const newFiles: UploadedFile[] = acceptedFiles.map(file => ({
       file,
@@ -130,6 +154,36 @@ export default function Home() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    getFilesFromEvent: async (event) => {
+      const files: File[] = []
+      
+      // Handle drag and drop events
+      if ('dataTransfer' in event && event.dataTransfer) {
+        if (event.dataTransfer.items) {
+          // Handle folder drops
+          const items = Array.from(event.dataTransfer.items)
+          for (const item of items) {
+            if (item.kind === 'file') {
+              const entry = item.webkitGetAsEntry()
+              if (entry) {
+                const fileList = await getFilesFromEntry(entry)
+                files.push(...fileList)
+              }
+            }
+          }
+        } else if (event.dataTransfer.files) {
+          files.push(...Array.from(event.dataTransfer.files))
+        }
+      }
+      else if ('target' in event && event.target && 'files' in event.target) {
+        const input = event.target as HTMLInputElement
+        if (input.files) {
+          files.push(...Array.from(input.files))
+        }
+      }
+      
+      return files
+    },
     accept: {
       'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp'],
       'video/*': ['.mp4', '.avi', '.mov', '.wmv'],
@@ -623,261 +677,279 @@ export default function Home() {
           {/* Step 4: File Upload (only shown when ready) */}
           {currentStep === 4 && (
             <section>
-              <div className="text-center mb-4 sm:mb-6">
-                <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-                  Drag and drop files to pin them to the Filecoin network. 
-                  Your files will be stored securely with cryptographic proofs.
+              <div className="text-center mb-6 sm:mb-8">
+                <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-3">
+                  Upload to Filecoin
+                </h2>
+                <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
+                  Choose your upload method below. Files will be stored securely with cryptographic proofs on the Filecoin network.
                 </p>
               </div>
             
-              <div className="w-full max-w-4xl mx-auto space-y-4 sm:space-y-6">
-              <Card>
-                <CardHeader className="pb-4 sm:pb-6">
-                  <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
-                    <Upload className="h-4 w-4 sm:h-5 sm:w-5" />
-                    Upload Files to Filecoin
-                  </CardTitle>
-                  <CardDescription className="text-sm sm:text-base">
-                    Drag and drop files or click to browse. Files will be pinned to Filecoin network.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div
-                    {...getRootProps()}
-                    className={`border-2 border-dashed rounded-lg p-4 sm:p-6 md:p-8 text-center cursor-pointer transition-colors ${
-                      isDragActive 
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-950' 
-                        : 'border-slate-300 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-500'
-                    }`}
-                  >
-                    <input {...getInputProps()} />
-                    <Upload className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 mx-auto mb-3 sm:mb-4 text-slate-400" />
-                    {isDragActive ? (
-                      <p className="text-base sm:text-lg font-medium text-blue-600">Drop files here...</p>
-                    ) : (
-                      <div>
-                        <p className="text-base sm:text-lg font-medium text-slate-900 dark:text-white mb-2">
-                          Drag & drop files here, or click to select
-                        </p>
-                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-                          Supports images, videos, documents, and archives
-                        </p>
-            </div>
-          )}
-                  </div>
-
-                  {files.length > 0 && (
-                    <div className="mt-4 sm:mt-6">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-4">
-                        <h3 className="text-base sm:text-lg font-medium">Selected Files ({files.length})</h3>
-                        <Button 
-                          onClick={uploadFiles} 
-                          disabled={isUploading || files.every(f => f.status !== 'pending')}
-                          className="flex items-center gap-2 w-full sm:w-auto"
-                        >
-                          <Upload className="h-4 w-4" />
-                          {isUploading ? 'Uploading...' : 'Upload to Filecoin'}
-                        </Button>
+              <div className="w-full max-w-6xl mx-auto">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+                  {/* File Upload Section */}
+                  <Card className="h-full flex flex-col">
+                    <CardHeader className="pb-4">
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        <Upload className="h-5 w-5 text-blue-600" />
+                        Upload Files & Folders
+                      </CardTitle>
+                      <CardDescription>
+                        Drag and drop files, folders, or click to browse
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex-1 flex flex-col">
+                      <div
+                        {...getRootProps()}
+                        className={`border-2 border-dashed rounded-xl p-6 sm:p-8 text-center cursor-pointer transition-all duration-200 hover:scale-[1.02] flex-1 flex items-center justify-center ${
+                          isDragActive 
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950 scale-[1.02]' 
+                            : 'border-slate-300 dark:border-slate-600 hover:border-blue-400 dark:hover:border-blue-500'
+                        }`}
+                      >
+                        <input {...getInputProps()} />
+                        <div className="flex flex-col items-center space-y-4">
+                          <div className="p-4 rounded-full bg-blue-100 dark:bg-blue-900">
+                            <Upload className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          {isDragActive ? (
+                            <p className="text-lg font-medium text-blue-600">Drop files or folders here...</p>
+                          ) : (
+                            <div className="space-y-2">
+                              <p className="text-lg font-medium text-slate-900 dark:text-white">
+                                Drag & drop files or folders here
+                              </p>
+                              <p className="text-sm text-slate-500 dark:text-slate-400">
+                                or click to browse
+                              </p>
+                              <div className="flex flex-wrap justify-center gap-1 mt-3">
+                                <Badge variant="secondary" className="text-xs">Images</Badge>
+                                <Badge variant="secondary" className="text-xs">Videos</Badge>
+                                <Badge variant="secondary" className="text-xs">Documents</Badge>
+                                <Badge variant="secondary" className="text-xs">Folders</Badge>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="space-y-3">
-                        {files.map((fileItem) => (
-                          <div key={fileItem.id} className="flex items-start gap-3 p-3 border rounded-lg">
-                            <div className="flex-shrink-0 mt-0.5">
-                              {getStatusIcon(fileItem.status)}
-                            </div>
-                            
-                            <div className="flex-1 min-w-0">
-                              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
-                                <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                                  {fileItem.file.name}
-                                </p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">
-                                  {formatFileSize(fileItem.file.size)}
-                </p>
-              </div>
-                              
-                              {fileItem.status === 'uploading' && (
-                                <Progress value={fileItem.progress} className="mt-2" />
-                              )}
-                              
-                              {fileItem.status === 'completed' && (
-                                <div className="mt-2 space-y-1">
-                                  <p className="text-xs text-green-600 dark:text-green-400 break-all">
-                                    CID: {fileItem.cid}
-                                  </p>
-                                  <p className="text-xs text-blue-600 dark:text-blue-400 break-all">
-                                    Piece CID: {fileItem.pieceCid}
-                                  </p>
-            </div>
-          )}
-
-                              {fileItem.status === 'error' && (
-                                <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                                  {fileItem.error}
-                                </p>
-                              )}
-                            </div>
-                            
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeFile(fileItem.id)}
-                              className="h-8 w-8 p-0 flex-shrink-0"
+                      {files.length > 0 && (
+                        <div className="mt-6">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                            <h3 className="text-base font-medium">Selected Files ({files.length})</h3>
+                            <Button 
+                              onClick={uploadFiles} 
+                              disabled={isUploading || files.every(f => f.status !== 'pending')}
+                              className="flex items-center gap-2 w-full sm:w-auto"
                             >
-                              <X className="h-4 w-4" />
+                              <Upload className="h-4 w-4" />
+                              {isUploading ? 'Uploading...' : 'Upload to Filecoin'}
                             </Button>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
 
-            {/* CAR Import Section */}
-            <div className="w-full max-w-4xl mx-auto space-y-4 sm:space-y-6 mt-8">
-              <Card>
-                <CardHeader className="pb-4 sm:pb-6">
-                  <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
-                    <FileArchive className="h-4 w-4 sm:h-5 sm:w-5" />
-                    Import CAR Files
-                  </CardTitle>
-                  <CardDescription className="text-sm sm:text-base">
-                    Import existing CAR (Content Addressed Archive) files directly to Filecoin storage
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div
-                    {...getCarRootProps()}
-                    className={`border-2 border-dashed rounded-lg p-4 sm:p-6 md:p-8 text-center cursor-pointer transition-colors ${
-                      isCarDragActive 
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-950' 
-                        : 'border-slate-300 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-500'
-                    }`}
-                  >
-                    <input {...getCarInputProps()} />
-                    <FileArchive className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 mx-auto mb-3 sm:mb-4 text-slate-400" />
-                    {isCarDragActive ? (
-                      <p className="text-base sm:text-lg font-medium text-blue-600">Drop CAR files here...</p>
-                    ) : (
-            <div>
-                        <p className="text-base sm:text-lg font-medium text-slate-900 dark:text-white mb-2">
-                          Drag & drop CAR files here, or click to select
-                        </p>
-                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-                          Only .car files are supported
-                </p>
-              </div>
-                    )}
-                  </div>
-
-                  {carFiles.length > 0 && (
-                    <div className="mt-4 sm:mt-6">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-4">
-                        <h3 className="text-base sm:text-lg font-medium">CAR Files ({carFiles.length})</h3>
-                        <Button 
-                          onClick={importCarFiles} 
-                          disabled={isImporting || carFiles.every(f => f.status !== 'pending')}
-                          className="flex items-center gap-2 w-full sm:w-auto"
-                        >
-                          <FileArchive className="h-4 w-4" />
-                          {isImporting ? 'Importing...' : 'Import to Filecoin'}
-                        </Button>
-                      </div>
-
-                      <div className="space-y-3">
-                        {carFiles.map((fileItem) => (
-                          <div key={fileItem.id} className="flex items-start gap-3 p-3 border rounded-lg">
-                            <div className="flex-shrink-0 mt-1">
-                              {getStatusIcon(fileItem.status)}
-                            </div>
-                            
-                            <div className="flex-1 min-w-0">
-                              <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
-                                <p className="text-sm font-medium text-slate-900 dark:text-white break-all">
-                                  {fileItem.file.name}
-                                </p>
-                                <Badge variant="secondary" className="w-fit">
-                                  {formatFileSize(fileItem.file.size)}
-                                </Badge>
-                                <Badge 
-                                  variant={fileItem.status === 'completed' ? 'default' : 
-                                          fileItem.status === 'error' ? 'destructive' : 'secondary'}
-                                  className="w-fit"
-                                >
-                                  {getStatusText(fileItem.status)}
-                                </Badge>
-                              </div>
-                              
-                              {fileItem.status === 'uploading' && (
-                                <div className="mb-2">
-                                  <Progress value={fileItem.progress} className="h-2" />
-                                  <p className="text-xs text-slate-500 mt-1">{fileItem.progress}% uploaded</p>
+                          <div className="space-y-3 max-h-64 overflow-y-auto">
+                            {files.map((fileItem) => (
+                              <div key={fileItem.id} className="flex items-start gap-3 p-3 border rounded-lg">
+                                <div className="flex-shrink-0 mt-0.5">
+                                  {getStatusIcon(fileItem.status)}
                                 </div>
-                              )}
-                              
-                              {fileItem.cid && (
-                                <div className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-                                  <p><span className="font-medium">CID:</span> {fileItem.cid}</p>
-                                  {fileItem.pieceCid && (
-                                    <p><span className="font-medium">Piece CID:</span> {fileItem.pieceCid}</p>
+                                
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
+                                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                                      {fileItem.file.name}
+                                    </p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                                      {formatFileSize(fileItem.file.size)}
+                                    </p>
+                                  </div>
+                                  
+                                  {fileItem.status === 'uploading' && (
+                                    <Progress value={fileItem.progress} className="mt-2" />
                                   )}
-            </div>
-          )}
+                                  
+                                  {fileItem.status === 'completed' && (
+                                    <div className="mt-2 space-y-1">
+                                      <p className="text-xs text-green-600 dark:text-green-400 break-all">
+                                        CID: {fileItem.cid}
+                                      </p>
+                                      <p className="text-xs text-blue-600 dark:text-blue-400 break-all">
+                                        Piece CID: {fileItem.pieceCid}
+                                      </p>
+                                    </div>
+                                  )}
 
-                              {fileItem.error && (
-                                <Alert variant="destructive" className="mt-2">
-                                  <AlertCircle className="h-4 w-4" />
-                                  <AlertDescription className="text-xs">
-                                    {fileItem.error}
-                                  </AlertDescription>
-                                </Alert>
-                              )}
-                              
-                              <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2">
-                                <Badge variant="secondary" className="w-fit">
-                                  Provider: {fileItem.storageProvider}
-                                </Badge>
-                                {fileItem.downloadUrl && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => window.open(fileItem.downloadUrl, '_blank')}
-                                    className="h-6 text-xs w-fit"
-                                  >
-                                    <ExternalLink className="h-3 w-3 mr-1" />
-                                    Download
-                                  </Button>
-                                )}
+                                  {fileItem.status === 'error' && (
+                                    <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                                      {fileItem.error}
+                                    </p>
+                                  )}
+                                </div>
+                                
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => removeFile(fileItem.id)}
+                                  className="h-8 w-8 p-0 flex-shrink-0"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
                               </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* CAR Import Section */}
+                  <Card className="h-full flex flex-col">
+                    <CardHeader className="pb-4">
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        <FileArchive className="h-5 w-5 text-purple-600" />
+                        Import CAR Files
+                      </CardTitle>
+                      <CardDescription>
+                        Import existing CAR archives directly to Filecoin storage
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex-1 flex flex-col">
+                      <div
+                        {...getCarRootProps()}
+                        className={`border-2 border-dashed rounded-xl p-6 sm:p-8 text-center cursor-pointer transition-all duration-200 hover:scale-[1.02] flex-1 flex items-center justify-center ${
+                          isCarDragActive 
+                            ? 'border-purple-500 bg-purple-50 dark:bg-purple-950 scale-[1.02]' 
+                            : 'border-slate-300 dark:border-slate-600 hover:border-purple-400 dark:hover:border-purple-500'
+                        }`}
+                      >
+                        <input {...getCarInputProps()} />
+                        <div className="flex flex-col items-center space-y-4">
+                          <div className="p-4 rounded-full bg-purple-100 dark:bg-purple-900">
+                            <FileArchive className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+                          </div>
+                          {isCarDragActive ? (
+                            <p className="text-lg font-medium text-purple-600">Drop CAR files here...</p>
+                          ) : (
+                            <div className="space-y-2">
+                              <p className="text-lg font-medium text-slate-900 dark:text-white">
+                                Drag & drop CAR files here
+                              </p>
+                              <p className="text-sm text-slate-500 dark:text-slate-400">
+                                or click to browse
+                              </p>
+                              <Badge variant="secondary" className="text-xs">.car files only</Badge>
                             </div>
-                            
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeCarFile(fileItem.id)}
-                              className="h-8 w-8 p-0 flex-shrink-0"
+                          )}
+                        </div>
+                      </div>
+
+                      {carFiles.length > 0 && (
+                        <div className="mt-6">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                            <h3 className="text-base font-medium">CAR Files ({carFiles.length})</h3>
+                            <Button 
+                              onClick={importCarFiles} 
+                              disabled={isImporting || carFiles.every(f => f.status !== 'pending')}
+                              className="flex items-center gap-2 w-full sm:w-auto"
                             >
-                              <X className="h-4 w-4" />
+                              <FileArchive className="h-4 w-4" />
+                              {isImporting ? 'Importing...' : 'Import to Filecoin'}
                             </Button>
                           </div>
-                        ))}
-                      </div>
-              </div>
-                  )}
 
-                  <Alert className="mt-4">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      CAR files must be valid Content Addressed Archives. The system will extract root CIDs and upload to Filecoin storage providers.
-                    </AlertDescription>
-                  </Alert>
-                </CardContent>
-              </Card>
-            </div>
-          </section>
+                          <div className="space-y-3 max-h-64 overflow-y-auto">
+                            {carFiles.map((fileItem) => (
+                              <div key={fileItem.id} className="flex items-start gap-3 p-3 border rounded-lg">
+                                <div className="flex-shrink-0 mt-1">
+                                  {getStatusIcon(fileItem.status)}
+                                </div>
+                                
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
+                                    <p className="text-sm font-medium text-slate-900 dark:text-white break-all">
+                                      {fileItem.file.name}
+                                    </p>
+                                    <Badge variant="secondary" className="w-fit">
+                                      {formatFileSize(fileItem.file.size)}
+                                    </Badge>
+                                    <Badge 
+                                      variant={fileItem.status === 'completed' ? 'default' : 
+                                              fileItem.status === 'error' ? 'destructive' : 'secondary'}
+                                      className="w-fit"
+                                    >
+                                      {getStatusText(fileItem.status)}
+                                    </Badge>
+                                  </div>
+                                  
+                                  {fileItem.status === 'uploading' && (
+                                    <div className="mb-2">
+                                      <Progress value={fileItem.progress} className="h-2" />
+                                      <p className="text-xs text-slate-500 mt-1">{fileItem.progress}% uploaded</p>
+                                    </div>
+                                  )}
+                                  
+                                  {fileItem.cid && (
+                                    <div className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+                                      <p><span className="font-medium">CID:</span> {fileItem.cid}</p>
+                                      {fileItem.pieceCid && (
+                                        <p><span className="font-medium">Piece CID:</span> {fileItem.pieceCid}</p>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {fileItem.error && (
+                                    <Alert variant="destructive" className="mt-2">
+                                      <AlertCircle className="h-4 w-4" />
+                                      <AlertDescription className="text-xs">
+                                        {fileItem.error}
+                                      </AlertDescription>
+                                    </Alert>
+                                  )}
+                                  
+                                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2">
+                                    <Badge variant="secondary" className="w-fit">
+                                      Provider: {fileItem.storageProvider}
+                                    </Badge>
+                                    {fileItem.downloadUrl && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => window.open(fileItem.downloadUrl, '_blank')}
+                                        className="h-6 text-xs w-fit"
+                                      >
+                                        <ExternalLink className="h-3 w-3 mr-1" />
+                                        Download
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => removeCarFile(fileItem.id)}
+                                  className="h-8 w-8 p-0 flex-shrink-0"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <Alert className="mt-4">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription className="text-xs">
+                          CAR files must be valid Content Addressed Archives. The system will extract root CIDs and upload to Filecoin storage providers.
+                        </AlertDescription>
+                      </Alert>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </section>
           )}
 
 

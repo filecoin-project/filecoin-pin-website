@@ -35,12 +35,10 @@ const ERC20_ABI = [
 export function BalanceDisplay() {
   const { address, isConnected } = useAccount()
   
-  // Fetch native TFIL balance
   const { data: tfilBalance, isLoading: tfilLoading } = useBalance({
     address: address,
   })
 
-  // Fetch USDFC token balance
   const { data: usdfcBalance, isLoading: usdfcBalanceLoading } = useReadContract({
     address: USDFC_CONTRACT_ADDRESS,
     abi: ERC20_ABI,
@@ -51,8 +49,6 @@ export function BalanceDisplay() {
     },
   })
 
-
-  // Fetch USDFC token symbol
   const { data: usdfcSymbol } = useReadContract({
     address: USDFC_CONTRACT_ADDRESS,
     abi: ERC20_ABI,
