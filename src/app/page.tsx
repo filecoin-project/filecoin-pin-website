@@ -1,8 +1,8 @@
 'use client'
 
 import { NavWallet } from "@/components/nav-wallet";
-import { Upload, FileArchive, File, X, CheckCircle, AlertCircle, ExternalLink, Wallet, CreditCard, RefreshCw, Copy } from "lucide-react";
-import { useState, useCallback } from "react";
+import { Upload, File, X, CheckCircle, AlertCircle, ExternalLink, Wallet, CreditCard, RefreshCw, Copy } from "lucide-react";
+import { useState, useCallback, useEffect } from "react";
 import { useDropzone } from 'react-dropzone';
 import { useAccount, useBalance, useReadContract, useChainId, useSwitchChain } from 'wagmi';
 import { Button } from '@/components/ui/button';
@@ -33,16 +33,7 @@ const ERC20_ABI = [
 interface UploadedFile {
   file: File
   id: string
-  status: 'pending' | 'uploading' | 'completed' | 'error'
-  progress: number
-  cid?: string
-  pieceCid?: string
-  error?: string
-}
-
-interface CarFile {
-  file: File
-  id: string
+  type: 'regular' | 'car'
   status: 'pending' | 'validating' | 'uploading' | 'completed' | 'error'
   progress: number
   cid?: string
@@ -57,8 +48,6 @@ interface CarFile {
 export default function Home() {
   const [files, setFiles] = useState<UploadedFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
-  const [carFiles, setCarFiles] = useState<CarFile[]>([])
-  const [isImporting, setIsImporting] = useState(false)
   const { address, isConnected } = useAccount()
   const [paymentSetupComplete] = useState(true)
 
@@ -66,6 +55,23 @@ export default function Home() {
   const { switchChain, isPending: isSwitchingChain } = useSwitchChain()
   const filecoinCalibrationChainId = 314159
   const isCorrectNetwork = chainId === filecoinCalibrationChainId
+
+  // Auto-switch to Filecoin Calibration when connected to wrong network
+  useEffect(() => {
+    const autoSwitchNetwork = async () => {
+      if (isConnected && !isCorrectNetwork && !isSwitchingChain) {
+        console.log('Auto-switching to Filecoin Calibration testnet...')
+        try {
+          await switchChain({ chainId: filecoinCalibrationChainId })
+        } catch (error: unknown) {
+          console.error('Auto network switch failed:', error)
+          // If auto-switch fails, user will see the manual switch UI
+        }
+      }
+    }
+    
+    autoSwitchNetwork()
+  }, [isConnected, isCorrectNetwork, isSwitchingChain, switchChain, filecoinCalibrationChainId])
 
   const { data: tfilBalance, isLoading: tfilLoading, error: tfilError, refetch: refetchTfil } = useBalance({
     address: address,
@@ -105,7 +111,7 @@ export default function Home() {
   const handleSwitchNetwork = async () => {
     try {
       await switchChain({ chainId: filecoinCalibrationChainId })
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error switching network:', error)
     }
   }
@@ -146,6 +152,7 @@ export default function Home() {
     const newFiles: UploadedFile[] = acceptedFiles.map(file => ({
       file,
       id: Math.random().toString(36).substr(2, 9),
+      type: file.name.endsWith('.car') || file.type === 'application/car' ? 'car' : 'regular',
       status: 'pending',
       progress: 0
     }))
@@ -192,7 +199,8 @@ export default function Home() {
       'text/*': ['.txt', '.md', '.json', '.csv'],
       'application/zip': ['.zip'],
       'application/x-tar': ['.tar'],
-      'application/gzip': ['.gz']
+      'application/gzip': ['.gz'],
+      'application/car': ['.car']
     },
     multiple: true
   })
@@ -206,35 +214,69 @@ export default function Home() {
     
     for (const fileItem of files.filter(f => f.status === 'pending')) {
       try {
+        // Set initial status based on file type
+        const initialStatus = fileItem.type === 'car' ? 'validating' : 'uploading'
         setFiles(prev => prev.map(f => 
-          f.id === fileItem.id ? { ...f, status: 'uploading', progress: 0 } : f
+          f.id === fileItem.id ? { ...f, status: initialStatus, progress: fileItem.type === 'car' ? 10 : 0 } : f
         ))
 
-        for (let progress = 0; progress <= 100; progress += 10) {
-          await new Promise(resolve => setTimeout(resolve, 200))
+        if (fileItem.type === 'car') {
+          // CAR file validation step
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          
+          const mockRootCids = [
+            `Qm${Math.random().toString(36).substr(2, 44)}`,
+            `Qm${Math.random().toString(36).substr(2, 44)}`
+          ]
+
+          setFiles(prev => prev.map(f => 
+            f.id === fileItem.id ? { 
+              ...f, 
+              status: 'uploading', 
+              progress: 20,
+              rootCids: mockRootCids
+            } : f
+          ))
+        }
+
+        // Upload progress
+        const startProgress = fileItem.type === 'car' ? 20 : 0
+        const increment = fileItem.type === 'car' ? 20 : 10
+        
+        for (let progress = startProgress; progress <= 100; progress += increment) {
+          await new Promise(resolve => setTimeout(resolve, fileItem.type === 'car' ? 500 : 200))
           setFiles(prev => prev.map(f => 
             f.id === fileItem.id ? { ...f, progress } : f
           ))
         }
 
+        // Generate mock results based on file type
         const mockCid = `Qm${Math.random().toString(36).substr(2, 44)}`
         const mockPieceCid = `baga${Math.random().toString(36).substr(2, 44)}`
         
+        const completedFile = {
+          ...fileItem,
+          status: 'completed' as const,
+          progress: 100,
+          cid: mockCid,
+          pieceCid: mockPieceCid
+        }
+
+        // Add CAR-specific fields
+        if (fileItem.type === 'car') {
+          completedFile.storageProvider = `f0${Math.floor(Math.random() * 10000)}`
+          completedFile.downloadUrl = `https://api.calibration.node.glif.io/retrieve/${mockPieceCid}`
+        }
+        
         setFiles(prev => prev.map(f => 
-          f.id === fileItem.id ? { 
-            ...f, 
-            status: 'completed', 
-            progress: 100,
-            cid: mockCid,
-            pieceCid: mockPieceCid
-          } : f
+          f.id === fileItem.id ? completedFile : f
         ))
       } catch {
         setFiles(prev => prev.map(f => 
           f.id === fileItem.id ? { 
             ...f, 
             status: 'error', 
-            error: 'Upload failed'
+            error: fileItem.type === 'car' ? 'Import failed' : 'Upload failed'
           } : f
         ))
       }
@@ -243,92 +285,6 @@ export default function Home() {
     setIsUploading(false)
   }
 
-  // CAR import handlers
-  const onCarDrop = useCallback((acceptedFiles: File[]) => {
-    const carFiles = acceptedFiles.filter(file => 
-      file.name.endsWith('.car') || file.type === 'application/car'
-    )
-    
-    const newFiles: CarFile[] = carFiles.map(file => ({
-      file,
-      id: Math.random().toString(36).substr(2, 9),
-      status: 'pending',
-      progress: 0
-    }))
-    setCarFiles(prev => [...prev, ...newFiles])
-  }, [])
-
-  const { getRootProps: getCarRootProps, getInputProps: getCarInputProps, isDragActive: isCarDragActive } = useDropzone({
-    onDrop: onCarDrop,
-    accept: {
-      'application/car': ['.car']
-    },
-    multiple: true
-  })
-
-  const removeCarFile = (id: string) => {
-    setCarFiles(prev => prev.filter(file => file.id !== id))
-  }
-
-  const importCarFiles = async () => {
-    setIsImporting(true)
-    
-    for (const fileItem of carFiles.filter(f => f.status === 'pending')) {
-      try {
-        setCarFiles(prev => prev.map(f => 
-          f.id === fileItem.id ? { ...f, status: 'validating', progress: 10 } : f
-        ))
-
-        await new Promise(resolve => setTimeout(resolve, 1000))
-
-        const mockRootCids = [
-          `Qm${Math.random().toString(36).substr(2, 44)}`,
-          `Qm${Math.random().toString(36).substr(2, 44)}`
-        ]
-
-        setCarFiles(prev => prev.map(f => 
-          f.id === fileItem.id ? { 
-            ...f, 
-            status: 'uploading', 
-            progress: 20,
-            rootCids: mockRootCids
-          } : f
-        ))
-
-        for (let progress = 20; progress <= 100; progress += 20) {
-          await new Promise(resolve => setTimeout(resolve, 500))
-          setCarFiles(prev => prev.map(f => 
-            f.id === fileItem.id ? { ...f, progress } : f
-          ))
-        }
-
-        const mockPieceCid = `baga${Math.random().toString(36).substr(2, 44)}`
-        const mockStorageProvider = `f0${Math.floor(Math.random() * 10000)}`
-        const mockDownloadUrl = `https://api.calibration.node.glif.io/retrieve/${mockPieceCid}`
-        
-        setCarFiles(prev => prev.map(f => 
-          f.id === fileItem.id ? { 
-            ...f, 
-            status: 'completed', 
-            progress: 100,
-            pieceCid: mockPieceCid,
-            storageProvider: mockStorageProvider,
-            downloadUrl: mockDownloadUrl
-          } : f
-        ))
-      } catch {
-        setCarFiles(prev => prev.map(f => 
-          f.id === fileItem.id ? { 
-            ...f, 
-            status: 'error', 
-            error: 'Import failed'
-          } : f
-        ))
-      }
-    }
-    
-    setIsImporting(false)
-  }
 
 
 
@@ -352,6 +308,8 @@ export default function Home() {
     switch (status) {
       case 'pending':
         return 'Ready to upload'
+      case 'validating':
+        return 'Validating...'
       case 'uploading':
         return 'Uploading...'
       case 'completed':
@@ -443,7 +401,10 @@ export default function Home() {
             <section>
               <div className="text-center mb-4 sm:mb-6">
                 <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-                  Your wallet is connected but on the wrong network. Please switch to Filecoin Calibration testnet to continue.
+                  {isSwitchingChain 
+                    ? "Automatically switching to Filecoin Calibration testnet..." 
+                    : "Your wallet is connected but on the wrong network. Please switch to Filecoin Calibration testnet to continue."
+                  }
                 </p>
               </div>
               
@@ -451,32 +412,70 @@ export default function Home() {
                 <Card>
                   <CardHeader className="pb-4">
                     <CardTitle className="flex items-center gap-2 text-lg">
-                      <AlertCircle className="h-4 w-4 text-orange-600" />
-                      Network Switch Required
+                      {isSwitchingChain ? (
+                        <>
+                          <div className="h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                          Switching Network...
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle className="h-4 w-4 text-orange-600" />
+                          Network Switch Required
+                        </>
+                      )}
                     </CardTitle>
                     <CardDescription className="text-sm">
-                      Switch your wallet to the Filecoin Calibration testnet
+                      {isSwitchingChain 
+                        ? "Automatically switching to Filecoin Calibration testnet" 
+                        : "Switch your wallet to the Filecoin Calibration testnet"
+                      }
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="pt-0">
                     <div className="space-y-4">
-                      <Alert variant="destructive">
-                        <AlertCircle className="h-4 w-4" />
+                      <Alert variant={isSwitchingChain ? "default" : "destructive"}>
+                        {isSwitchingChain ? (
+                          <div className="h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <AlertCircle className="h-4 w-4" />
+                        )}
                         <AlertDescription>
-                          <strong>Wrong Network Detected!</strong> You&apos;re currently connected to Chain ID: {chainId}. 
-                          This app requires Filecoin Calibration testnet (Chain ID: {filecoinCalibrationChainId}).
+                          {isSwitchingChain ? (
+                            <>
+                              <strong>Switching Networks...</strong> Please confirm the network switch in your wallet popup.
+                            </>
+                          ) : (
+                            <>
+                              <strong>Wrong Network Detected!</strong> You&apos;re currently connected to Chain ID: {chainId}. 
+                              This app requires Filecoin Calibration testnet (Chain ID: {filecoinCalibrationChainId}).
+                            </>
+                          )}
                         </AlertDescription>
                       </Alert>
                       
-                      <div className="p-4 bg-orange-50 dark:bg-orange-950 rounded-lg">
-                        <h4 className="font-medium mb-2 text-orange-900 dark:text-orange-100">How to switch networks:</h4>
-                        <div className="space-y-2 text-sm text-orange-800 dark:text-orange-200">
-                          <p>1. Click the &quot;Switch Network&quot; button below</p>
-                          <p>2. Confirm the network switch in your wallet</p>
-                          <p>3. Wait for the network to switch</p>
-                          <p>4. Your balances will then load correctly</p>
-          </div>
-        </div>
+                      {!isSwitchingChain && (
+                        <div className="p-4 bg-orange-50 dark:bg-orange-950 rounded-lg">
+                          <h4 className="font-medium mb-2 text-orange-900 dark:text-orange-100">How to switch networks:</h4>
+                          <div className="space-y-2 text-sm text-orange-800 dark:text-orange-200">
+                            <p>1. Click the &quot;Switch Network&quot; button below</p>
+                            <p>2. Confirm the network switch in your wallet</p>
+                            <p>3. Wait for the network to switch</p>
+                            <p>4. Your balances will then load correctly</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {isSwitchingChain && (
+                        <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                          <h4 className="font-medium mb-2 text-blue-900 dark:text-blue-100">Network Switch in Progress:</h4>
+                          <div className="space-y-2 text-sm text-blue-800 dark:text-blue-200">
+                            <p>1. ✅ Automatic switch initiated</p>
+                            <p>2. ⏳ Please confirm in your wallet popup</p>
+                            <p>3. ⏳ Waiting for network switch...</p>
+                            <p>4. ⏳ Balances will load automatically</p>
+                          </div>
+                        </div>
+                      )}
 
                       <Button 
                         onClick={handleSwitchNetwork}
@@ -487,7 +486,7 @@ export default function Home() {
                         {isSwitchingChain ? (
                           <>
                             <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                            Switching Network...
+                            Switching Network Automatically...
                           </>
                         ) : (
                           <>
@@ -682,235 +681,140 @@ export default function Home() {
                   Upload to Filecoin
                 </h2>
                 <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
-                  Choose your upload method below. Files will be stored securely with cryptographic proofs on the Filecoin network.
+                  Upload files, folders, or CAR archives. Files will be stored securely with cryptographic proofs on the Filecoin network.
                 </p>
               </div>
             
-              <div className="w-full max-w-6xl mx-auto">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
-                  {/* File Upload Section */}
-                  <Card className="h-full flex flex-col">
-                    <CardHeader className="pb-4">
-                      <CardTitle className="flex items-center gap-2 text-lg">
-                        <Upload className="h-5 w-5 text-blue-600" />
-                        Upload Files & Folders
-                      </CardTitle>
-                      <CardDescription>
-                        Drag and drop files, folders, or click to browse
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex-1 flex flex-col">
-                      <div
-                        {...getRootProps()}
-                        className={`border-2 border-dashed rounded-xl p-6 sm:p-8 text-center cursor-pointer transition-all duration-200 hover:scale-[1.02] flex-1 flex items-center justify-center ${
-                          isDragActive 
-                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950 scale-[1.02]' 
-                            : 'border-slate-300 dark:border-slate-600 hover:border-blue-400 dark:hover:border-blue-500'
-                        }`}
-                      >
-                        <input {...getInputProps()} />
-                        <div className="flex flex-col items-center space-y-4">
-                          <div className="p-4 rounded-full bg-blue-100 dark:bg-blue-900">
-                            <Upload className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-                          </div>
-                          {isDragActive ? (
-                            <p className="text-lg font-medium text-blue-600">Drop files or folders here...</p>
-                          ) : (
-                            <div className="space-y-2">
-                              <p className="text-lg font-medium text-slate-900 dark:text-white">
-                                Drag & drop files or folders here
-                              </p>
-                              <p className="text-sm text-slate-500 dark:text-slate-400">
-                                or click to browse
-                              </p>
-                              <div className="flex flex-wrap justify-center gap-1 mt-3">
-                                <Badge variant="secondary" className="text-xs">Images</Badge>
-                                <Badge variant="secondary" className="text-xs">Videos</Badge>
-                                <Badge variant="secondary" className="text-xs">Documents</Badge>
-                                <Badge variant="secondary" className="text-xs">Folders</Badge>
-                              </div>
-                            </div>
-                          )}
+              <div className="w-full max-w-4xl mx-auto">
+                <Card className="h-full flex flex-col">
+                  <CardHeader className="pb-4">
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Upload className="h-5 w-5 text-blue-600" />
+                      Upload Files & Archives
+                    </CardTitle>
+                    <CardDescription>
+                      Drag and drop files, folders, or CAR archives, or click to browse
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex-1 flex flex-col">
+                    <div
+                      {...getRootProps()}
+                      className={`border-2 border-dashed rounded-xl p-6 sm:p-8 text-center cursor-pointer transition-all duration-200 hover:scale-[1.02] flex-1 flex items-center justify-center ${
+                        isDragActive 
+                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-950 scale-[1.02]' 
+                          : 'border-slate-300 dark:border-slate-600 hover:border-blue-400 dark:hover:border-blue-500'
+                      }`}
+                    >
+                      <input {...getInputProps()} />
+                      <div className="flex flex-col items-center space-y-4">
+                        <div className="p-4 rounded-full bg-blue-100 dark:bg-blue-900">
+                          <Upload className="h-8 w-8 text-blue-600 dark:text-blue-400" />
                         </div>
-                      </div>
-
-                      {files.length > 0 && (
-                        <div className="mt-6">
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                            <h3 className="text-base font-medium">Selected Files ({files.length})</h3>
-                            <Button 
-                              onClick={uploadFiles} 
-                              disabled={isUploading || files.every(f => f.status !== 'pending')}
-                              className="flex items-center gap-2 w-full sm:w-auto"
-                            >
-                              <Upload className="h-4 w-4" />
-                              {isUploading ? 'Uploading...' : 'Upload to Filecoin'}
-                            </Button>
+                        {isDragActive ? (
+                          <p className="text-lg font-medium text-blue-600">Drop files here...</p>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="text-lg font-medium text-slate-900 dark:text-white">
+                              Drag & drop files, folders, or CAR archives here
+                            </p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">
+                              or click to browse
+                            </p>
+                            <div className="flex flex-wrap justify-center gap-1 mt-3">
+                              <Badge variant="secondary" className="text-xs">Images</Badge>
+                              <Badge variant="secondary" className="text-xs">Videos</Badge>
+                              <Badge variant="secondary" className="text-xs">Documents</Badge>
+                              <Badge variant="secondary" className="text-xs">Folders</Badge>
+                              <Badge variant="secondary" className="text-xs">CAR Files</Badge>
+                            </div>
                           </div>
+                        )}
+                      </div>
+                    </div>
 
-                          <div className="space-y-3 max-h-64 overflow-y-auto">
-                            {files.map((fileItem) => (
-                              <div key={fileItem.id} className="flex items-start gap-3 p-3 border rounded-lg">
-                                <div className="flex-shrink-0 mt-0.5">
-                                  {getStatusIcon(fileItem.status)}
+                    {files.length > 0 && (
+                      <div className="mt-6">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                          <h3 className="text-base font-medium">Selected Files ({files.length})</h3>
+                          <Button 
+                            onClick={uploadFiles} 
+                            disabled={isUploading || files.every(f => f.status !== 'pending')}
+                            className="flex items-center gap-2 w-full sm:w-auto"
+                          >
+                            <Upload className="h-4 w-4" />
+                            {isUploading ? 'Uploading...' : 'Upload to Filecoin'}
+                          </Button>
+                        </div>
+
+                        <div className="space-y-3 max-h-64 overflow-y-auto">
+                          {files.map((fileItem) => (
+                            <div key={fileItem.id} className="flex items-start gap-3 p-3 border rounded-lg">
+                              <div className="flex-shrink-0 mt-0.5">
+                                {getStatusIcon(fileItem.status)}
+                              </div>
+                              
+                              <div className="flex-1 min-w-0">
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
+                                  <p className="text-sm font-medium text-slate-900 dark:text-white break-all">
+                                    {fileItem.file.name}
+                                  </p>
+                                  <Badge variant="secondary" className="w-fit">
+                                    {formatFileSize(fileItem.file.size)}
+                                  </Badge>
+                                  <Badge 
+                                    variant={fileItem.type === 'car' ? 'default' : 'secondary'}
+                                    className="w-fit"
+                                  >
+                                    {fileItem.type === 'car' ? 'CAR Archive' : 'Regular File'}
+                                  </Badge>
+                                  <Badge 
+                                    variant={fileItem.status === 'completed' ? 'default' : 
+                                            fileItem.status === 'error' ? 'destructive' : 'secondary'}
+                                    className="w-fit"
+                                  >
+                                    {getStatusText(fileItem.status)}
+                                  </Badge>
                                 </div>
                                 
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
-                                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-                                      {fileItem.file.name}
-                                    </p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                                      {formatFileSize(fileItem.file.size)}
-                                    </p>
+                                {(fileItem.status === 'uploading' || fileItem.status === 'validating') && (
+                                  <div className="mb-2">
+                                    <Progress value={fileItem.progress} className="h-2" />
+                                    <p className="text-xs text-slate-500 mt-1">{fileItem.progress}% {fileItem.status === 'validating' ? 'validated' : 'uploaded'}</p>
                                   </div>
-                                  
-                                  {fileItem.status === 'uploading' && (
-                                    <Progress value={fileItem.progress} className="mt-2" />
-                                  )}
-                                  
-                                  {fileItem.status === 'completed' && (
-                                    <div className="mt-2 space-y-1">
-                                      <p className="text-xs text-green-600 dark:text-green-400 break-all">
-                                        CID: {fileItem.cid}
-                                      </p>
-                                      <p className="text-xs text-blue-600 dark:text-blue-400 break-all">
-                                        Piece CID: {fileItem.pieceCid}
-                                      </p>
-                                    </div>
-                                  )}
+                                )}
+                                
+                                {fileItem.status === 'completed' && (
+                                  <div className="mt-2 space-y-1">
+                                    <p className="text-xs text-green-600 dark:text-green-400 break-all">
+                                      CID: {fileItem.cid}
+                                    </p>
+                                    <p className="text-xs text-blue-600 dark:text-blue-400 break-all">
+                                      Piece CID: {fileItem.pieceCid}
+                                    </p>
+                                    {fileItem.type === 'car' && fileItem.rootCids && (
+                                      <div className="text-xs text-purple-600 dark:text-purple-400">
+                                        <p>Root CIDs: {fileItem.rootCids.join(', ')}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
 
-                                  {fileItem.status === 'error' && (
-                                    <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                                {fileItem.status === 'error' && (
+                                  <Alert variant="destructive" className="mt-2">
+                                    <AlertCircle className="h-4 w-4" />
+                                    <AlertDescription className="text-xs">
                                       {fileItem.error}
-                                    </p>
-                                  )}
-                                </div>
+                                    </AlertDescription>
+                                  </Alert>
+                                )}
                                 
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => removeFile(fileItem.id)}
-                                  className="h-8 w-8 p-0 flex-shrink-0"
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  {/* CAR Import Section */}
-                  <Card className="h-full flex flex-col">
-                    <CardHeader className="pb-4">
-                      <CardTitle className="flex items-center gap-2 text-lg">
-                        <FileArchive className="h-5 w-5 text-purple-600" />
-                        Import CAR Files
-                      </CardTitle>
-                      <CardDescription>
-                        Import existing CAR archives directly to Filecoin storage
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex-1 flex flex-col">
-                      <div
-                        {...getCarRootProps()}
-                        className={`border-2 border-dashed rounded-xl p-6 sm:p-8 text-center cursor-pointer transition-all duration-200 hover:scale-[1.02] flex-1 flex items-center justify-center ${
-                          isCarDragActive 
-                            ? 'border-purple-500 bg-purple-50 dark:bg-purple-950 scale-[1.02]' 
-                            : 'border-slate-300 dark:border-slate-600 hover:border-purple-400 dark:hover:border-purple-500'
-                        }`}
-                      >
-                        <input {...getCarInputProps()} />
-                        <div className="flex flex-col items-center space-y-4">
-                          <div className="p-4 rounded-full bg-purple-100 dark:bg-purple-900">
-                            <FileArchive className="h-8 w-8 text-purple-600 dark:text-purple-400" />
-                          </div>
-                          {isCarDragActive ? (
-                            <p className="text-lg font-medium text-purple-600">Drop CAR files here...</p>
-                          ) : (
-                            <div className="space-y-2">
-                              <p className="text-lg font-medium text-slate-900 dark:text-white">
-                                Drag & drop CAR files here
-                              </p>
-                              <p className="text-sm text-slate-500 dark:text-slate-400">
-                                or click to browse
-                              </p>
-                              <Badge variant="secondary" className="text-xs">.car files only</Badge>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {carFiles.length > 0 && (
-                        <div className="mt-6">
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                            <h3 className="text-base font-medium">CAR Files ({carFiles.length})</h3>
-                            <Button 
-                              onClick={importCarFiles} 
-                              disabled={isImporting || carFiles.every(f => f.status !== 'pending')}
-                              className="flex items-center gap-2 w-full sm:w-auto"
-                            >
-                              <FileArchive className="h-4 w-4" />
-                              {isImporting ? 'Importing...' : 'Import to Filecoin'}
-                            </Button>
-                          </div>
-
-                          <div className="space-y-3 max-h-64 overflow-y-auto">
-                            {carFiles.map((fileItem) => (
-                              <div key={fileItem.id} className="flex items-start gap-3 p-3 border rounded-lg">
-                                <div className="flex-shrink-0 mt-1">
-                                  {getStatusIcon(fileItem.status)}
-                                </div>
-                                
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
-                                    <p className="text-sm font-medium text-slate-900 dark:text-white break-all">
-                                      {fileItem.file.name}
-                                    </p>
-                                    <Badge variant="secondary" className="w-fit">
-                                      {formatFileSize(fileItem.file.size)}
-                                    </Badge>
-                                    <Badge 
-                                      variant={fileItem.status === 'completed' ? 'default' : 
-                                              fileItem.status === 'error' ? 'destructive' : 'secondary'}
-                                      className="w-fit"
-                                    >
-                                      {getStatusText(fileItem.status)}
-                                    </Badge>
-                                  </div>
-                                  
-                                  {fileItem.status === 'uploading' && (
-                                    <div className="mb-2">
-                                      <Progress value={fileItem.progress} className="h-2" />
-                                      <p className="text-xs text-slate-500 mt-1">{fileItem.progress}% uploaded</p>
-                                    </div>
-                                  )}
-                                  
-                                  {fileItem.cid && (
-                                    <div className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-                                      <p><span className="font-medium">CID:</span> {fileItem.cid}</p>
-                                      {fileItem.pieceCid && (
-                                        <p><span className="font-medium">Piece CID:</span> {fileItem.pieceCid}</p>
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {fileItem.error && (
-                                    <Alert variant="destructive" className="mt-2">
-                                      <AlertCircle className="h-4 w-4" />
-                                      <AlertDescription className="text-xs">
-                                        {fileItem.error}
-                                      </AlertDescription>
-                                    </Alert>
-                                  )}
-                                  
+                                {fileItem.type === 'car' && fileItem.status === 'completed' && (
                                   <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2">
-                                    <Badge variant="secondary" className="w-fit">
-                                      Provider: {fileItem.storageProvider}
-                                    </Badge>
+                                    {fileItem.storageProvider && (
+                                      <Badge variant="secondary" className="w-fit">
+                                        Provider: {fileItem.storageProvider}
+                                      </Badge>
+                                    )}
                                     {fileItem.downloadUrl && (
                                       <Button
                                         variant="outline"
@@ -923,31 +827,31 @@ export default function Home() {
                                       </Button>
                                     )}
                                   </div>
-                                </div>
-                                
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => removeCarFile(fileItem.id)}
-                                  className="h-8 w-8 p-0 flex-shrink-0"
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
+                                )}
                               </div>
-                            ))}
-                          </div>
+                              
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeFile(fileItem.id)}
+                                className="h-8 w-8 p-0 flex-shrink-0"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
                         </div>
-                      )}
+                      </div>
+                    )}
 
-                      <Alert className="mt-4">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription className="text-xs">
-                          CAR files must be valid Content Addressed Archives. The system will extract root CIDs and upload to Filecoin storage providers.
-                        </AlertDescription>
-                      </Alert>
-                    </CardContent>
-                  </Card>
-                </div>
+                    <Alert className="mt-4">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription className="text-xs">
+                        Supports regular files, folders, and CAR archives. CAR files will be validated and imported directly to Filecoin storage providers.
+                      </AlertDescription>
+                    </Alert>
+                  </CardContent>
+                </Card>
               </div>
             </section>
           )}
