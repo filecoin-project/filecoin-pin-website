@@ -1,0 +1,28 @@
+{
+  "name": "filecoin-pin-website",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "lint": "biome check --no-errors-on-unmatched --files-ignore-unknown=true .",
+    "lint:fix": "biome check --no-errors-on-unmatched --files-ignore-unknown=true --write .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.5",
+    "@eslint/js": "^9.37.0",
+    "@types/node": "^24.7.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.1",
+    "@vitejs/plugin-react": "^5.0.4",
+    "globals": "^16.4.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.9"
+  }
+}
