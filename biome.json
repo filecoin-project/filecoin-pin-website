@@ -77,7 +77,7 @@
         "useImportExtensions": {
           "level": "error",
           "options": {
-            "forceJsExtensions": true
+            "forceJsExtensions": false
           }
         }
       },

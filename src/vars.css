@@ -1,0 +1,32 @@
+:root {
+  /* Colors */
+  --color-background: #27272a;
+  --color-text-primary: #ffffff;
+  --color-text-muted: #888;
+
+  /* Brand colors */
+  --color-brand-primary: #646cff;
+  --color-brand-react: #61dafb;
+
+  /* Glow effects */
+  --glow-brand-primary: #646cffaa;
+  --glow-brand-react: #61dafbaa;
+
+  /* Spacing */
+  --spacing-xs: 0.5em;
+  --spacing-sm: 1em;
+  --spacing-md: 1.5em;
+  --spacing-lg: 2em;
+  --spacing-xl: 3em;
+
+  /* Grid */
+  --grid-sidebar-ratio: 2fr;
+  --grid-content-ratio: 4fr;
+
+  /* Logo */
+  --logo-height: 6em;
+
+  /* Transitions */
+  --transition-default: 300ms;
+  --transition-filter: filter var(--transition-default);
+}
