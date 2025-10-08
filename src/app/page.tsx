@@ -1,6 +1,5 @@
 'use client'
 
-import { NavWallet } from "@/components/nav-wallet";
 import { Upload, File, X, CheckCircle, AlertCircle, ExternalLink, Wallet, CreditCard, RefreshCw, Copy } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 import { useDropzone } from 'react-dropzone';
@@ -10,6 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { SidebarLayout } from "@/components/layout/sidebar-layout";
+import { Header } from "@/components/layout/header";
+import { Sidebar } from "@/components/layout/sidebar";
 
 const USDFC_CONTRACT_ADDRESS = '0xb3042734b608a1B16e9e86B374A3f3e389B4cDf0' as const
 
@@ -69,7 +71,7 @@ export default function Home() {
         }
       }
     }
-    
+
     autoSwitchNetwork()
   }, [isConnected, isCorrectNetwork, isSwitchingChain, switchChain, filecoinCalibrationChainId])
 
@@ -87,11 +89,11 @@ export default function Home() {
     },
   })
 
-  const hasFunds = tfilBalance && parseFloat(tfilBalance.formatted) > 0 || 
+  const hasFunds = tfilBalance && parseFloat(tfilBalance.formatted) > 0 ||
                    usdfcBalance && usdfcBalance > BigInt(0)
 
   const getCurrentStep = () => {
-    if (!isConnected) return 1 
+    if (!isConnected) return 1
     if (!isCorrectNetwork) return 1.5
     if (!hasFunds) return 2
     if (!paymentSetupComplete) return 3
@@ -126,7 +128,7 @@ export default function Home() {
 
   const getFilesFromEntry = async (entry: FileSystemEntry): Promise<File[]> => {
     const files: File[] = []
-    
+
     if (entry.isFile) {
       return new Promise((resolve) => {
         (entry as FileSystemFileEntry).file((file) => {
@@ -138,13 +140,13 @@ export default function Home() {
       const entries = await new Promise<FileSystemEntry[]>((resolve) => {
         dirReader.readEntries(resolve)
       })
-      
+
       for (const subEntry of entries) {
         const subFiles = await getFilesFromEntry(subEntry)
         files.push(...subFiles)
       }
     }
-    
+
     return files
   }
 
@@ -163,7 +165,7 @@ export default function Home() {
     onDrop,
     getFilesFromEvent: async (event) => {
       const files: File[] = []
-      
+
       // Handle drag and drop events
       if ('dataTransfer' in event && event.dataTransfer) {
         if (event.dataTransfer.items) {
@@ -188,7 +190,7 @@ export default function Home() {
           files.push(...Array.from(input.files))
         }
       }
-      
+
       return files
     },
     accept: {
@@ -211,28 +213,28 @@ export default function Home() {
 
   const uploadFiles = async () => {
     setIsUploading(true)
-    
+
     for (const fileItem of files.filter(f => f.status === 'pending')) {
       try {
         // Set initial status based on file type
         const initialStatus = fileItem.type === 'car' ? 'validating' : 'uploading'
-        setFiles(prev => prev.map(f => 
+        setFiles(prev => prev.map(f =>
           f.id === fileItem.id ? { ...f, status: initialStatus, progress: fileItem.type === 'car' ? 10 : 0 } : f
         ))
 
         if (fileItem.type === 'car') {
           // CAR file validation step
           await new Promise(resolve => setTimeout(resolve, 1000))
-          
+
           const mockRootCids = [
             `Qm${Math.random().toString(36).substr(2, 44)}`,
             `Qm${Math.random().toString(36).substr(2, 44)}`
           ]
 
-          setFiles(prev => prev.map(f => 
-            f.id === fileItem.id ? { 
-              ...f, 
-              status: 'uploading', 
+          setFiles(prev => prev.map(f =>
+            f.id === fileItem.id ? {
+              ...f,
+              status: 'uploading',
               progress: 20,
               rootCids: mockRootCids
             } : f
@@ -242,10 +244,10 @@ export default function Home() {
         // Upload progress
         const startProgress = fileItem.type === 'car' ? 20 : 0
         const increment = fileItem.type === 'car' ? 20 : 10
-        
+
         for (let progress = startProgress; progress <= 100; progress += increment) {
           await new Promise(resolve => setTimeout(resolve, fileItem.type === 'car' ? 500 : 200))
-          setFiles(prev => prev.map(f => 
+          setFiles(prev => prev.map(f =>
             f.id === fileItem.id ? { ...f, progress } : f
           ))
         }
@@ -253,7 +255,7 @@ export default function Home() {
         // Generate mock results based on file type
         const mockCid = `Qm${Math.random().toString(36).substr(2, 44)}`
         const mockPieceCid = `baga${Math.random().toString(36).substr(2, 44)}`
-        
+
         const completedFile = {
           ...fileItem,
           status: 'completed' as const,
@@ -267,21 +269,21 @@ export default function Home() {
           completedFile.storageProvider = `f0${Math.floor(Math.random() * 10000)}`
           completedFile.downloadUrl = `https://api.calibration.node.glif.io/retrieve/${mockPieceCid}`
         }
-        
-        setFiles(prev => prev.map(f => 
+
+        setFiles(prev => prev.map(f =>
           f.id === fileItem.id ? completedFile : f
         ))
       } catch {
-        setFiles(prev => prev.map(f => 
-          f.id === fileItem.id ? { 
-            ...f, 
-            status: 'error', 
+        setFiles(prev => prev.map(f =>
+          f.id === fileItem.id ? {
+            ...f,
+            status: 'error',
             error: fileItem.type === 'car' ? 'Import failed' : 'Upload failed'
           } : f
         ))
       }
     }
-    
+
     setIsUploading(false)
   }
 
@@ -326,38 +328,11 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 overflow-x-hidden">
-      {/* Header */}
-      <header className="border-b border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-3 sm:py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Upload className="w-5 h-5 text-white" />
-              </div>
-              <div>
-              <span className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
-                Filecoin Pin
-              </span>
-                <p className="text-xs text-slate-500 dark:text-slate-400 -mt-1">
-                  Pin and share files on Filecoin
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4 sm:space-x-6">
-              {/* Network Status Indicator */}
-              {isConnected && (
-                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800">
-                  <div className={`h-2 w-2 rounded-full ${isCorrectNetwork ? 'bg-green-500' : 'bg-red-500'}`} />
-                  <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                    {isCorrectNetwork ? 'Filecoin Calibration' : `Chain ${chainId}`}
-                  </span>
-                </div>
-              )}
-              <NavWallet />
-            </div>
-          </div>
-        </div>
-      </header>
+
+      <SidebarLayout
+        header={<Header isConnected={isConnected} isCorrectNetwork={isCorrectNetwork} chainId={chainId} />}
+        sidebar={<Sidebar />}
+      >
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-4 sm:py-6">
@@ -401,13 +376,13 @@ export default function Home() {
             <section>
               <div className="text-center mb-4 sm:mb-6">
                 <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-                  {isSwitchingChain 
-                    ? "Automatically switching to Filecoin Calibration testnet..." 
+                  {isSwitchingChain
+                    ? "Automatically switching to Filecoin Calibration testnet..."
                     : "Your wallet is connected but on the wrong network. Please switch to Filecoin Calibration testnet to continue."
                   }
                 </p>
               </div>
-              
+
               <div className="w-full max-w-2xl mx-auto">
                 <Card>
                   <CardHeader className="pb-4">
@@ -425,8 +400,8 @@ export default function Home() {
                       )}
                     </CardTitle>
                     <CardDescription className="text-sm">
-                      {isSwitchingChain 
-                        ? "Automatically switching to Filecoin Calibration testnet" 
+                      {isSwitchingChain
+                        ? "Automatically switching to Filecoin Calibration testnet"
                         : "Switch your wallet to the Filecoin Calibration testnet"
                       }
                     </CardDescription>
@@ -446,13 +421,13 @@ export default function Home() {
                             </>
                           ) : (
                             <>
-                              <strong>Wrong Network Detected!</strong> You&apos;re currently connected to Chain ID: {chainId}. 
+                              <strong>Wrong Network Detected!</strong> You&apos;re currently connected to Chain ID: {chainId}.
                               This app requires Filecoin Calibration testnet (Chain ID: {filecoinCalibrationChainId}).
                             </>
                           )}
                         </AlertDescription>
                       </Alert>
-                      
+
                       {!isSwitchingChain && (
                         <div className="p-4 bg-orange-50 dark:bg-orange-950 rounded-lg">
                           <h4 className="font-medium mb-2 text-orange-900 dark:text-orange-100">How to switch networks:</h4>
@@ -477,7 +452,7 @@ export default function Home() {
                         </div>
                       )}
 
-                      <Button 
+                      <Button
                         onClick={handleSwitchNetwork}
                         disabled={isSwitchingChain}
                         className="w-full"
@@ -510,7 +485,7 @@ export default function Home() {
                   Filecoin Pay is the go-to payment service that can be easily linked with your crypto wallet
                 </p>
               </div>
-              
+
               <div className="w-full max-w-2xl mx-auto">
                 <Card>
                   <CardHeader className="pb-4">
@@ -562,7 +537,7 @@ export default function Home() {
                         </span>
                       </div>
                     </div>
-                    
+
                     <Alert className="mt-4">
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>
@@ -576,9 +551,9 @@ export default function Home() {
                       <div className="space-y-2 text-sm">
                         <div className="flex items-center gap-2">
                           <ExternalLink className="h-4 w-4 text-blue-600" />
-                          <a 
-                            href="https://faucet.calibration.fildev.network/funds.html" 
-                            target="_blank" 
+                          <a
+                            href="https://faucet.calibration.fildev.network/funds.html"
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline"
                           >
@@ -587,9 +562,9 @@ export default function Home() {
                         </div>
                         <div className="flex items-center gap-2">
                           <ExternalLink className="h-4 w-4 text-blue-600" />
-                          <a 
-                            href="https://docs.secured.finance/usdfc-stablecoin/getting-started#testnet-resources" 
-                            target="_blank" 
+                          <a
+                            href="https://docs.secured.finance/usdfc-stablecoin/getting-started#testnet-resources"
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline"
                           >
@@ -649,7 +624,7 @@ export default function Home() {
                         Please complete the payment setup in the wallet dropdown menu to continue with file uploads.
                       </AlertDescription>
                     </Alert>
-                    
+
                     <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
                       <h4 className="font-medium mb-2">Current Status:</h4>
                       <div className="space-y-2 text-sm">
@@ -684,7 +659,7 @@ export default function Home() {
                   Upload files, folders, or CAR archives. Files will be stored securely with cryptographic proofs on the Filecoin network.
                 </p>
               </div>
-            
+
               <div className="w-full max-w-4xl mx-auto">
                 <Card className="h-full flex flex-col">
                   <CardHeader className="pb-4">
@@ -700,8 +675,8 @@ export default function Home() {
                     <div
                       {...getRootProps()}
                       className={`border-2 border-dashed rounded-xl p-6 sm:p-8 text-center cursor-pointer transition-all duration-200 hover:scale-[1.02] flex-1 flex items-center justify-center ${
-                        isDragActive 
-                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-950 scale-[1.02]' 
+                        isDragActive
+                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-950 scale-[1.02]'
                           : 'border-slate-300 dark:border-slate-600 hover:border-blue-400 dark:hover:border-blue-500'
                       }`}
                     >
@@ -736,8 +711,8 @@ export default function Home() {
                       <div className="mt-6">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                           <h3 className="text-base font-medium">Selected Files ({files.length})</h3>
-                          <Button 
-                            onClick={uploadFiles} 
+                          <Button
+                            onClick={uploadFiles}
                             disabled={isUploading || files.every(f => f.status !== 'pending')}
                             className="flex items-center gap-2 w-full sm:w-auto"
                           >
@@ -752,7 +727,7 @@ export default function Home() {
                               <div className="flex-shrink-0 mt-0.5">
                                 {getStatusIcon(fileItem.status)}
                               </div>
-                              
+
                               <div className="flex-1 min-w-0">
                                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
                                   <p className="text-sm font-medium text-slate-900 dark:text-white break-all">
@@ -761,28 +736,28 @@ export default function Home() {
                                   <Badge variant="secondary" className="w-fit">
                                     {formatFileSize(fileItem.file.size)}
                                   </Badge>
-                                  <Badge 
+                                  <Badge
                                     variant={fileItem.type === 'car' ? 'default' : 'secondary'}
                                     className="w-fit"
                                   >
                                     {fileItem.type === 'car' ? 'CAR Archive' : 'Regular File'}
                                   </Badge>
-                                  <Badge 
-                                    variant={fileItem.status === 'completed' ? 'default' : 
+                                  <Badge
+                                    variant={fileItem.status === 'completed' ? 'default' :
                                             fileItem.status === 'error' ? 'destructive' : 'secondary'}
                                     className="w-fit"
                                   >
                                     {getStatusText(fileItem.status)}
                                   </Badge>
                                 </div>
-                                
+
                                 {(fileItem.status === 'uploading' || fileItem.status === 'validating') && (
                                   <div className="mb-2">
                                     <Progress value={fileItem.progress} className="h-2" />
                                     <p className="text-xs text-slate-500 mt-1">{fileItem.progress}% {fileItem.status === 'validating' ? 'validated' : 'uploaded'}</p>
                                   </div>
                                 )}
-                                
+
                                 {fileItem.status === 'completed' && (
                                   <div className="mt-2 space-y-1">
                                     <p className="text-xs text-green-600 dark:text-green-400 break-all">
@@ -807,7 +782,7 @@ export default function Home() {
                                     </AlertDescription>
                                   </Alert>
                                 )}
-                                
+
                                 {fileItem.type === 'car' && fileItem.status === 'completed' && (
                                   <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-2">
                                     {fileItem.storageProvider && (
@@ -829,7 +804,7 @@ export default function Home() {
                                   </div>
                                 )}
                               </div>
-                              
+
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -859,6 +834,8 @@ export default function Home() {
 
         </div>
       </main>
+      </SidebarLayout>
+
     </div>
   );
 }
