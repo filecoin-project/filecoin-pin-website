@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping build the Filecoin Pin demo! This document captures the preferred project layout, upcoming integration points for the `filecoin-pin` SDK, and day-to-day conventions.
+Thanks for helping build the Filecoin Pin demo! This document captures the preferred project layout, upcoming integration points for the [`filecoin-pin`](https://github.com/filecoin-project/filecoin-pin), and day-to-day conventions.
 
 ## Local Setup
 
