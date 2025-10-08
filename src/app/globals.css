@@ -7,6 +7,9 @@
   --color-brand-50: #10B4FF;
   --color-brand-100: #003669;
   --color-brand-200: #001D3B;
+  
+  --color-button-brand: #086dc5;
+  --color-button-brand-disabled: #005280;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
