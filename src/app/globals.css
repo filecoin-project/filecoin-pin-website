@@ -1,5 +1,5 @@
-@import "tailwindcss";
-@import "tw-animate-css";
+@import 'tailwindcss';
+@import 'tw-animate-css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -41,6 +41,10 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+}
+
+@utility brand-outline {
+  outline: 2px solid var(--color-zinc-50);
 }
 
 :root {
@@ -119,27 +123,28 @@
   body {
     @apply bg-background text-foreground;
   }
-  
+
   /* Ensure proper mobile viewport handling */
   html {
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
   }
-  
+
   /* Improve touch targets on mobile */
   @media (max-width: 640px) {
-    button, [role="button"] {
+    button,
+    [role='button'] {
       min-height: 44px;
       min-width: 44px;
     }
-    
+
     /* Ensure proper spacing on very small screens */
     .container {
       padding-left: 1rem;
       padding-right: 1rem;
     }
   }
-  
+
   /* Extra small screens (phones in portrait) */
   @media (max-width: 480px) {
     .container {
@@ -147,7 +152,7 @@
       padding-right: 0.75rem;
     }
   }
-  
+
   /* Better text rendering on mobile */
   @media (max-width: 640px) {
     body {
