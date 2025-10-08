@@ -4,6 +4,10 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --color-brand-50: #10B4FF;
+  --color-brand-100: #003669;
+  --color-brand-200: #001D3B;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
@@ -119,27 +123,27 @@
   body {
     @apply bg-background text-foreground;
   }
-  
+
   /* Ensure proper mobile viewport handling */
   html {
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
   }
-  
+
   /* Improve touch targets on mobile */
   @media (max-width: 640px) {
     button, [role="button"] {
       min-height: 44px;
       min-width: 44px;
     }
-    
+
     /* Ensure proper spacing on very small screens */
     .container {
       padding-left: 1rem;
       padding-right: 1rem;
     }
   }
-  
+
   /* Extra small screens (phones in portrait) */
   @media (max-width: 480px) {
     .container {
@@ -147,7 +151,7 @@
       padding-right: 0.75rem;
     }
   }
-  
+
   /* Better text rendering on mobile */
   @media (max-width: 640px) {
     body {
