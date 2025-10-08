@@ -50,3 +50,7 @@ The Vite server supports hot-module reloading, so UI changes show up immediately
 - Wire the hardcoded wallet logic into the Filecoin Pin client SDK.
 - Build the file upload workflow, including progress states and success/error handling.
 - Layer in design system components or styles that align with the upcoming high-fidelity mocks.
+
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the planned module structure and workflow guidelines.
