@@ -1,23 +1,6 @@
 import { getPaymentStatus, type PaymentStatus } from 'filecoin-pin/core/payments'
 import type { SynapseService } from 'filecoin-pin/core/synapse'
-
-export const formatTokenBalance = (balance: bigint, decimals: number, fractionDigits = 4) => {
-  const negative = balance < 0n
-  const absolute = negative ? -balance : balance
-  const divisor = 10n ** BigInt(decimals)
-  const whole = absolute / divisor
-  const remainder = absolute % divisor
-
-  if (remainder === 0n) {
-    return negative ? `-${whole.toString()}` : whole.toString()
-  }
-
-  const remainderString = remainder.toString().padStart(Number(divisor.toString().length - 1), '0')
-  const trimmed = remainderString.slice(0, fractionDigits).replace(/0+$/, '')
-  const fraction = trimmed.length > 0 ? trimmed : '0'
-  const value = `${whole.toString()}.${fraction}`
-  return negative ? `-${value}` : value
-}
+import { formatFIL, formatUSDFC } from 'filecoin-pin/core/utils'
 
 export const shortenAddress = (address: string, visibleChars = 4) => {
   if (address.length <= visibleChars * 2) return address
@@ -40,14 +23,16 @@ export interface WalletSnapshot {
 
 export const fetchWalletSnapshot = async (synapse: SynapseService['synapse']): Promise<WalletSnapshot> => {
   const status = await getPaymentStatus(synapse)
+  const isCalibration = status.network === 'calibration'
+  const usdfcLabel = isCalibration ? 'tUSDFC' : 'USDFC'
   return {
     address: status.address,
     network: status.network,
     filBalance: status.filBalance,
     usdfcBalance: status.usdfcBalance,
     formatted: {
-      fil: formatTokenBalance(status.filBalance, 18),
-      usdfc: formatTokenBalance(status.usdfcBalance, 18),
+      fil: formatFIL(status.filBalance, isCalibration, 2),
+      usdfc: `${formatUSDFC(status.usdfcBalance, 2)} ${usdfcLabel}`,
     },
     raw: status,
   }
