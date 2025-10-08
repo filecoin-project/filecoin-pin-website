@@ -1,12 +1,10 @@
 import { PillWrapper } from './pill-wrapper'
 
-type BalanceItem = {
-  label: 'tFIL' | 'tUSDFC'
-  value: string
-}
-
 type PillBalanceProps = {
-  balances: BalanceItem[]
+  balances: [
+    { label: 'tFIL'; value: string },
+    { label: 'tUSDFC'; value: string },
+  ]
 }
 
 function PillBalance({ balances }: PillBalanceProps) {
