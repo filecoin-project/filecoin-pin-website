@@ -7,6 +7,10 @@ Thanks for helping build the Filecoin Pin demo! This document captures the prefe
 1. Install dependencies with `npm install`.
 2. Run `npm run dev` and open `http://localhost:5173` to iterate locally.
 3. Use `npm run lint` before opening a PR.
+4. Provide a Vite-friendly `.env` file with:
+   - `VITE_FILECOIN_PRIVATE_KEY` – required for Synapse wallet queries (use calibration test keys for local work).
+   - `VITE_FILECOIN_RPC_URL` – optional override for the Filecoin RPC endpoint.
+   - `VITE_WARM_STORAGE_ADDRESS` – optional warm storage contract override.
 
 ## Source Layout
 
