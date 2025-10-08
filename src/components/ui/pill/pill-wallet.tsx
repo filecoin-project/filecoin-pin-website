@@ -1,11 +1,11 @@
 import { PillWrapper } from './pill-wrapper'
 
-interface WalletPillProps {
+type PillWalletProps = {
   address: string
   href: string
 }
 
-function WalletPill({ address, href }: WalletPillProps) {
+function PillWallet({ address, href }: PillWalletProps) {
   return (
     <PillWrapper href={href} ariaLabel={`Wallet address: ${address}`}>
       <span>
@@ -15,4 +15,4 @@ function WalletPill({ address, href }: WalletPillProps) {
   )
 }
 
-export { WalletPill }
+export { PillWallet }

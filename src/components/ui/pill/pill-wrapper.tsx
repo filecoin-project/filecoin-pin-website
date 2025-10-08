@@ -1,4 +1,4 @@
-interface PillWrapperProps {
+type PillWrapperProps = {
   children: React.ReactNode
   ariaLabel: string
   href?: string
@@ -17,7 +17,7 @@ function PillWrapper({ children, ariaLabel, href }: PillWrapperProps) {
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="absolute inset-0 outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
+          className="absolute inset-0 outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:ring-offset-2"
         />
       )}
     </div>

@@ -1,15 +1,15 @@
 import { PillWrapper } from './pill-wrapper'
 
-interface BalanceItem {
+type BalanceItem = {
   label: 'tFIL' | 'tUSDFC'
   value: string
 }
 
-interface BalancePillProps {
+type PillBalanceProps = {
   balances: BalanceItem[]
 }
 
-function BalancePill({ balances }: BalancePillProps) {
+function PillBalance({ balances }: PillBalanceProps) {
   const ariaLabel = `Balances: ${balances.map((balance) => `${balance.value} ${balance.label}`).join(', ')}`
 
   return (
@@ -26,4 +26,4 @@ function BalancePill({ balances }: BalancePillProps) {
   )
 }
 
-export { BalancePill }
+export { PillBalance }
