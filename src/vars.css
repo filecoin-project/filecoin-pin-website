@@ -1,16 +1,20 @@
 :root {
   /* Colors */
-  --color-background: #27272a;
+  --color-background: #000000;
   --color-text-primary: #ffffff;
-  --color-text-muted: #9f9fa9;
+  --color-background-transparent: rgba(0, 0, 0, 0);
 
   /* Brand colors */
-  --color-brand-primary: #646cff;
-  --color-brand-react: #61dafb;
+  --color-brand-primary: #3b82f6;
+  --color-brand-accent: #10b4ff;
 
   /* Glow effects */
-  --glow-brand-primary: #646cffaa;
-  --glow-brand-react: #61dafbaa;
+  /* Any glow effects? */
+
+  /* Muted colors */
+  --color-text-primary-muted: #9f9fa9;
+  --color-brand-primary-muted: #363636;
+  --color-brand-accent-muted: #003669;
 
   /* Spacing */
   --spacing-xs: 0.5em;
@@ -22,9 +26,6 @@
   /* Grid */
   --grid-sidebar-ratio: 2fr;
   --grid-content-ratio: 4fr;
-
-  /* Logo */
-  --logo-height: 6em;
 
   /* Transitions */
   --transition-default: 300ms;
