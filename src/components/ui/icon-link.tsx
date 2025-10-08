@@ -1,11 +1,11 @@
 import { LucideIcon } from 'lucide-react'
 
-type IconLinkProps = {
+type LinkIconProps = {
   icon: LucideIcon
   text: string
   href: string
 }
-function IconLink({ icon: Icon, text, href }: IconLinkProps) {
+function LinkIcon({ icon: Icon, text, href }: LinkIconProps) {
   return (
     <a
       href={href}
@@ -17,4 +17,4 @@ function IconLink({ icon: Icon, text, href }: IconLinkProps) {
   )
 }
 
-export { IconLink }
+export { LinkIcon }
