@@ -328,11 +328,13 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 overflow-x-hidden">
+
       <SidebarLayout
-      sidebar={<Sidebar />}
-      header={<Header isConnected={isConnected} isCorrectNetwork={isCorrectNetwork} chainId={chainId} />}
+        header={<Header isConnected={isConnected} isCorrectNetwork={isCorrectNetwork} chainId={chainId} />}
+        sidebar={<Sidebar />}
       >
-              {/* Main Content */}
+
+      {/* Main Content */}
       <main className="container mx-auto px-4 py-4 sm:py-6">
         <div className="space-y-6 sm:space-y-8">
 
@@ -832,9 +834,7 @@ export default function Home() {
 
         </div>
       </main>
-
       </SidebarLayout>
-
 
     </div>
   );
