@@ -7,10 +7,10 @@ export const useWallet = () => {
   return useMemo(
     () => ({
       status: wallet.status,
-      address: wallet.status === 'ready' ? wallet.data.address : wallet.data?.address,
-      network: wallet.status === 'ready' ? wallet.data.network : wallet.data?.network,
-      balances: wallet.status === 'ready' ? wallet.data.formatted : wallet.data?.formatted,
-      raw: wallet.status === 'ready' ? wallet.data.raw : wallet.data?.raw,
+      address: wallet.data?.address,
+      network: wallet.data?.network,
+      balances: wallet.data?.formatted,
+      raw: wallet.data?.raw,
       error: wallet.status === 'error' ? wallet.error : undefined,
       refresh: refreshWallet,
     }),

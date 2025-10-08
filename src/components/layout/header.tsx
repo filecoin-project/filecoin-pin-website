@@ -21,10 +21,14 @@ export default function Header() {
       <div>
         <h1>Filecoin Pin | IPFS DEMO</h1>
       </div>
-      <div>
-        <span title={balances?.fil ?? undefined}>tFIL {filDisplay}</span>
-        <span title={balances?.usdfc ?? undefined}>tUSDFC {usdfcDisplay}</span>
-        <span title={address ?? error ?? undefined}>{addressDisplay}</span>
+      <div className="wallet-info">
+        <div className="wallet-info-item">
+          <span title={balances?.fil ?? undefined}>tFIL {filDisplay}</span>
+          <span title={balances?.usdfc ?? undefined}>tUSDFC {usdfcDisplay}</span>
+        </div>
+        <div className="wallet-info-item">
+          <span title={address ?? error ?? undefined}>{addressDisplay}</span>
+        </div>
       </div>
     </header>
   )

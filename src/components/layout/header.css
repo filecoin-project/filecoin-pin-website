@@ -2,10 +2,19 @@
 .header {
   grid-row: 1;
   grid-column: 1;
-  width: 100%;
   padding: 1rem 2rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border: 1px solid gray;
+}
+
+.wallet-info {
+  display: flex;
+  gap: 1rem;
+}
+
+.wallet-info-item {
+  display: flex;
+  gap: 0.5rem;
 }
