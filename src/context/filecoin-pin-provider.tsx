@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { filecoinPinConfig } from '../lib/filecoin-pin/config.ts'
 import { getSynapseClient } from '../lib/filecoin-pin/synapse.ts'
 import { fetchWalletSnapshot, type WalletSnapshot } from '../lib/filecoin-pin/wallet.ts'
@@ -20,20 +20,10 @@ const initialState: WalletState = { status: 'idle' }
 
 export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
   const [wallet, setWallet] = useState<WalletState>(initialState)
-  const isMountedRef = useRef(true)
   const config = filecoinPinConfig
-
-  console.log('config', config)
-
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false
-    }
-  }, [])
 
   const refreshWallet = useCallback(async () => {
     if (!config.privateKey) {
-      if (!isMountedRef.current) return
       setWallet((prev) => ({
         status: 'error',
         error: 'Missing VITE_FILECOIN_PRIVATE_KEY environment variable. Wallet data unavailable.',
@@ -42,25 +32,19 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
       return
     }
 
-    if (isMountedRef.current) {
-      setWallet((prev) => ({
-        status: 'loading',
-        data: prev.status === 'ready' ? prev.data : undefined,
-      }))
-    }
+    setWallet((prev) => ({
+      status: 'loading',
+      data: prev.status === 'ready' ? prev.data : undefined,
+    }))
 
     try {
       const synapse = await getSynapseClient(config)
-
-      console.log('synapse', synapse)
       const snapshot = await fetchWalletSnapshot(synapse)
-      if (!isMountedRef.current) return
       setWallet({
         status: 'ready',
         data: snapshot,
       })
     } catch (error) {
-      if (!isMountedRef.current) return
       console.error('Failed to load wallet balances', error)
       setWallet((prev) => ({
         status: 'error',
