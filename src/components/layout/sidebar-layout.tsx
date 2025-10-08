@@ -1,10 +1,11 @@
 import React from 'react'
+import clsx from 'clsx'
 
 interface SidebarLayoutProps {
   children: React.ReactNode
   sidebar?: React.ReactNode
   header?: React.ReactNode
-  sidebarWidth?: string
+  sidebarWidth?: `w-${number}`
 }
 
 export function SidebarLayout({
@@ -24,7 +25,7 @@ export function SidebarLayout({
       <div className="flex flex-grow flex-row">
         {sidebar && (
           <aside
-            className={`${sidebarWidth} hidden h-screen border-r border-zinc-800 py-10 pr-15 pl-10 sm:block`}
+            className={clsx(`${sidebarWidth} hidden h-screen border-r border-zinc-800 py-10 pr-15 pl-10 sm:block`)}
           >
             {sidebar}
           </aside>

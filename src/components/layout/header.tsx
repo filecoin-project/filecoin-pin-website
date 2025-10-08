@@ -1,15 +1,17 @@
 import { Upload } from 'lucide-react'
 import { NavWallet } from '../nav-wallet'
 
+type HeaderProps = {
+  isConnected: boolean
+  isCorrectNetwork: boolean
+  chainId: number
+}
+
 function Header({
   isConnected,
   isCorrectNetwork,
   chainId,
-}: {
-  isConnected: boolean
-  isCorrectNetwork: boolean
-  chainId: number
-}) {
+}: HeaderProps) {
   return (
     <header>
       <div className="flex items-center justify-between">
