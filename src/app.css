@@ -10,13 +10,13 @@
   color: var(--color-text-primary);
 }
 
-.main-content {
+/* .main-content {
   grid-row: 2;
   grid-column: 1;
   display: grid;
   grid-template-columns: var(--grid-sidebar-ratio) var(--grid-content-ratio);
   min-height: 0;
-}
+} */
 
 .card {
   padding: var(--spacing-lg);

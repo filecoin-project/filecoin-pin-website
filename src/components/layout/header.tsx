@@ -1,6 +1,9 @@
 import { useWallet } from '../../hooks/use-wallet.ts'
 import { shortenAddress } from '../../lib/filecoin-pin/wallet.ts'
 import './header.css'
+import { Logo } from '../ui/logo.tsx'
+import { PillBalance } from '../ui/pill/pill-balance.tsx'
+import { PillWallet } from '../ui/pill/pill-wallet.tsx'
 
 export default function Header() {
   const { status, balances, address, error, network } = useWallet()
@@ -21,18 +24,23 @@ export default function Header() {
   const addressDisplay = address ? shortenAddress(address) : renderValue()
 
   return (
-    <header className="header">
+    <header className="flex items-center justify-between">
       <div>
-        <h1>Filecoin Pin | IPFS DEMO</h1>
+        <Logo />
       </div>
+
       <div className="wallet-info">
-        <div className="wallet-info-item">
-          <span title={balances?.fil ?? undefined}>{filDisplay}</span>
-          <span title={balances?.usdfc ?? undefined}>{usdfcDisplay}</span>
-        </div>
-        <div className="wallet-info-item">
+        <PillBalance
+          balances={[
+            { label: 'tFIL', value: filDisplay },
+            { label: 'tUSDFC', value: usdfcDisplay },
+          ]}
+        />
+        <PillWallet address={addressDisplay} href={`https://filscan.io/en/address/${address}`} />
+
+        {/* <div className="wallet-info-item">
           <span title={address ?? error ?? undefined}>{addressDisplay}</span>
-        </div>
+        </div> */}
       </div>
     </header>
   )

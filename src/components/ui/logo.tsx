@@ -9,7 +9,7 @@ function Logo() {
 
 function DemoBadge() {
   return (
-    <span className="uppercase px-2 py-0.5 rounded-sm text-brand-50 border bg-brand-200 text-sm font-mono border-brand-100">
+    <span className="uppercase px-2 py-0.5 rounded-sm text-[var(--color-brand-50)] border bg-[var(--color-brand-200)] text-sm font-mono border-[var(--color-brand-100)]">
       Demo
     </span>
   )
