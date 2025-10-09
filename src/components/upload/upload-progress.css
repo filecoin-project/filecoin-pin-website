@@ -202,3 +202,145 @@
   font-size: 12px;
   margin-top: 8px;
 }
+
+/* TODO: EVERYTHING BELOW THIS should be replaced with proper styling.. and probably everything above as well. */
+.completed-details {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #3a3a3a;
+}
+
+.detail-section {
+  margin-bottom: 20px;
+}
+
+.detail-label {
+  color: #999;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.detail-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: #1a1a1a;
+  border-radius: 8px;
+  border: 1px solid #3a3a3a;
+}
+
+.cid-link {
+  color: #0066ff;
+  text-decoration: none;
+  font-family: monospace;
+  font-size: 14px;
+  word-break: break-all;
+  flex: 1;
+}
+
+.cid-link:hover {
+  text-decoration: underline;
+}
+
+.piece-cid {
+  color: #ccc;
+  font-family: monospace;
+  font-size: 14px;
+  word-break: break-all;
+  flex: 1;
+}
+
+.provider-link {
+  color: #0066ff;
+  text-decoration: none;
+  font-size: 14px;
+  flex: 1;
+}
+
+.provider-link:hover {
+  text-decoration: underline;
+}
+
+.copy-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+
+.copy-button:hover {
+  opacity: 1;
+}
+
+.download-button {
+  text-decoration: none;
+  font-size: 18px;
+  padding: 4px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+
+.download-button:hover {
+  opacity: 1;
+}
+
+.completed-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.view-proofs-button {
+  background: #0066ff;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.view-proofs-button:hover {
+  background: #0052cc;
+}
+
+.transaction-hash-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #3a3a3a;
+}
+
+.transaction-hash-label {
+  color: #999;
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.transaction-hash-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.transaction-hash-link {
+  color: #0066ff;
+  text-decoration: none;
+  font-family: monospace;
+  font-size: 12px;
+  word-break: break-all;
+  flex: 1;
+}
+
+.transaction-hash-link:hover {
+  text-decoration: underline;
+}

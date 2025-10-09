@@ -14,6 +14,11 @@ interface UploadProgressProps {
   progress: UploadProgress[]
   isExpanded?: boolean
   onToggleExpanded?: () => void
+  cid?: string
+  pieceCid?: string
+  providerName?: string
+  transactionHash?: string
+  network?: string
 }
 
 // simple type to help with searching for UploadProgress['step'] in the first step group
@@ -56,6 +61,11 @@ export default function UploadProgress({
   progress,
   isExpanded = true,
   onToggleExpanded,
+  cid,
+  pieceCid,
+  providerName,
+  transactionHash,
+  network,
 }: UploadProgressProps) {
   // Calculate combined progress for the first stage (creating CAR + checking readiness + uploading)
   const getCombinedFirstStageProgress = useCallback(() => {
@@ -131,6 +141,16 @@ export default function UploadProgress({
     }
   }
 
+  // Check if all steps are completed AND we have a CID (upload actually finished)
+  const isCompleted = progress.every((p) => p.status === 'completed') && !!cid
+
+  // Check if any step is in error
+  const hasError = progress.some((p) => p.status === 'error')
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text)
+  }
+
   return (
     <div className="upload-progress-container">
       <div className="upload-header">
@@ -144,7 +164,13 @@ export default function UploadProgress({
             <div className="file-size">{fileSize}</div>
           </div>
           <div className="file-card-actions">
-            <span className="status-badge in-progress">In progress</span>
+            {isCompleted ? (
+              <span className="status-badge completed">✓ Pinned</span>
+            ) : hasError ? (
+              <span className="status-badge error">Error</span>
+            ) : (
+              <span className="status-badge in-progress">In progress</span>
+            )}
             {onToggleExpanded && (
               <button className="expand-button" onClick={onToggleExpanded} type="button">
                 {isExpanded ? '⌄' : '⌃'}
@@ -153,7 +179,7 @@ export default function UploadProgress({
           </div>
         </div>
 
-        {isExpanded && (
+        {isExpanded && !isCompleted && (
           <div className="progress-steps">
             {/* Combined first stage: creating-car + checking-readiness + uploading-car */}
             {progress.find((p) => p.step === 'creating-car') && (
@@ -199,9 +225,119 @@ export default function UploadProgress({
                       </div>
                     )}
                     {step.error && <div className="error-message">{step.error}</div>}
+
+                    {/* Show transaction hash in the finalizing step */}
+                    {step.step === 'finalizing-transaction' && transactionHash && (
+                      <div className="transaction-hash-section">
+                        <div className="transaction-hash-label">Transaction hash</div>
+                        <div className="transaction-hash-value">
+                          <a
+                            href={`https://calibration.filfox.info/en/message/${transactionHash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="transaction-hash-link"
+                          >
+                            {transactionHash}
+                          </a>
+                          <button
+                            className="copy-button"
+                            onClick={() => copyToClipboard(transactionHash)}
+                            type="button"
+                            title="Copy to clipboard"
+                          >
+                            📋
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
+          </div>
+        )}
+
+        {/* Completed state - show CIDs and provider info */}
+        {isExpanded && isCompleted && cid && (
+          <div className="completed-details">
+            <div className="detail-section">
+              <div className="detail-label">IPFS Root CID</div>
+              <div className="detail-value">
+                <a
+                  href={`https://dweb.link/ipfs/${cid}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="cid-link"
+                >
+                  {cid}
+                </a>
+                <button
+                  className="copy-button"
+                  onClick={() => copyToClipboard(cid)}
+                  type="button"
+                  title="Copy to clipboard"
+                >
+                  📋
+                </button>
+                <a
+                  href={`https://dweb.link/ipfs/${cid}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="download-button"
+                  title="Download"
+                >
+                  ⬇️
+                </a>
+              </div>
+            </div>
+
+            {pieceCid && (
+              <div className="detail-section">
+                <div className="detail-label">Filecoin Piece CID</div>
+                <div className="detail-value">
+                  <span className="piece-cid">{pieceCid}</span>
+                  <button
+                    className="copy-button"
+                    onClick={() => copyToClipboard(pieceCid)}
+                    type="button"
+                    title="Copy to clipboard"
+                  >
+                    📋
+                  </button>
+                    <a
+                      href={`https://pdp.vxb.ai/${network || 'calibration'}/piece/${pieceCid}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="download-button"
+                      title="View on PDP Explorer"
+                    >
+                      ⬇️
+                    </a>
+                </div>
+              </div>
+            )}
+
+            {providerName && (
+              <div className="detail-section">
+                <div className="detail-label">Provider</div>
+                <div className="detail-value">
+                  <a
+                    href={`https://filfox.info/en/address/${providerName}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="provider-link"
+                  >
+                    {providerName}
+                  </a>
+                </div>
+              </div>
+            )}
+
+
+            <div className="completed-actions">
+              <button className="view-proofs-button" type="button">
+                View proofs
+              </button>
+            </div>
           </div>
         )}
       </div>

@@ -11,6 +11,8 @@ interface UploadState {
   progress: UploadProgress[]
   error?: string
   currentCid?: string
+  pieceCid?: string
+  transactionHash?: string
 }
 
 const initialProgress: UploadProgress[] = [
@@ -59,17 +61,26 @@ export const useFilecoinUpload = () => {
     return announcingStep?.status === 'in-progress'
   }, [uploadState.progress])
 
+  // Debug logging for IPNI check
+  console.debug('[FilecoinUpload] IPNI check state:', {
+    currentCid: uploadState.currentCid,
+    isAnnouncingCids,
+    announcingStep: uploadState.progress.find((p) => p.step === 'announcing-cids')
+  })
+
   // Use IPNI check hook to poll for CID availability
   useIpniCheck({
     cid: uploadState.currentCid ?? null,
     isActive: isAnnouncingCids,
-    maxAttempts: 5,
+    maxAttempts: 10,
     onSuccess: () => {
+      console.debug('[FilecoinUpload] IPNI check succeeded, marking announcing-cids as completed')
       updateProgress('announcing-cids', { status: 'completed', progress: 100 })
     },
     onError: () => {
       // If IPNI check fails after max attempts, still mark as completed
       // The CID might still be announced, just not visible yet
+      console.debug('[FilecoinUpload] IPNI check failed after max attempts, marking announcing-cids as completed')
       updateProgress('announcing-cids', { status: 'completed', progress: 100 })
     },
   })
@@ -155,19 +166,31 @@ export const useFilecoinUpload = () => {
         await executeUpload(synapseService, carResult.carBytes, carResult.rootCid, {
           logger,
           contextId: `upload-${Date.now()}`,
-          // @ts-expect-error: metadata is not in filecoin-pin yet, see https://github.com/filecoin-project/filecoin-pin/pull/89
           metadata: {
             ...(metadata ?? {}),
             label: file.name,
           },
           callbacks: {
-            onUploadComplete: () => {
+            onUploadComplete: (pieceCid) => {
+              console.debug('[FilecoinUpload] Upload complete, piece CID:', pieceCid)
+              // Store the piece CID from the callback
+              setUploadState((prev) => ({
+                ...prev,
+                pieceCid: pieceCid.toString(),
+              }))
               updateProgress('uploading-car', { status: 'completed', progress: 100 })
               // now the other steps can move to in-progress
               updateProgress('announcing-cids', { status: 'in-progress', progress: 0 })
             },
             onPieceAdded: (transaction) => {
               console.debug('[FilecoinUpload] Piece add transaction:', { transaction })
+              // Store the transaction hash if available
+              if (transaction?.hash) {
+                setUploadState((prev) => ({
+                  ...prev,
+                  transactionHash: transaction.hash,
+                }))
+              }
               // now the finalizing-transaction step can move to in-progress
               updateProgress('finalizing-transaction', { status: 'in-progress', progress: 0 })
             },
@@ -203,6 +226,8 @@ export const useFilecoinUpload = () => {
       isUploading: false,
       progress: initialProgress,
       currentCid: undefined,
+      pieceCid: undefined,
+      transactionHash: undefined,
     })
   }, [])
 

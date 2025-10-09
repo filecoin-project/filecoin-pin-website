@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useContext, useState } from 'react'
+import { FilecoinPinContext } from '../../context/filecoin-pin-provider.tsx'
 import { useFilecoinUpload } from '../../hooks/use-filecoin-upload.ts'
 import DragNDrop from '../upload/drag-n-drop.tsx'
 import UploadProgress from '../upload/upload-progress.tsx'
@@ -9,6 +10,12 @@ export default function Content() {
   const [uploadedFile, setUploadedFile] = useState<{ file: File; cid: string } | null>(null)
   const [isExpanded, setIsExpanded] = useState(true)
   const { uploadState, uploadFile, resetUpload } = useFilecoinUpload()
+  const context = useContext(FilecoinPinContext)
+  if (!context) {
+    throw new Error('Content must be used within FilecoinPinProvider')
+  }
+
+  const { providerInfo, wallet } = context
 
   const handleUpload = (filesToUpload: File[]) => {
     if (filesToUpload.length === 0) {
@@ -53,6 +60,11 @@ export default function Content() {
             isExpanded={isExpanded}
             onToggleExpanded={() => setIsExpanded(!isExpanded)}
             progress={uploadState.progress}
+            cid={uploadState.currentCid}
+            pieceCid={uploadState.pieceCid}
+            providerName={providerInfo?.name || (providerInfo?.id ? String(providerInfo.id) : undefined)}
+            transactionHash={uploadState.transactionHash}
+            network={wallet.status === 'ready' ? wallet.data.network : undefined}
           />
           {uploadState.error && (
             <div className="error-message">
