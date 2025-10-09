@@ -1,10 +1,7 @@
-
 function Logo() {
   return (
     <div className="flex items-center gap-4">
-      <span className="text-xl font-medium text-white">
-        Filecoin Pin | IPFS
-      </span>
+      <span className="text-xl font-medium text-white">Filecoin Pin | IPFS</span>
       <DemoBadge />
     </div>
   )

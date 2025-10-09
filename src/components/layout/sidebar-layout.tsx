@@ -1,4 +1,3 @@
-import React from 'react'
 import clsx from 'clsx'
 
 interface SidebarLayoutProps {
@@ -8,12 +7,7 @@ interface SidebarLayoutProps {
   sidebarWidth?: `w-${number}`
 }
 
-export function SidebarLayout({
-  children,
-  sidebar,
-  header,
-  sidebarWidth = 'w-96',
-}: SidebarLayoutProps) {
+export function SidebarLayout({ children, sidebar, header, sidebarWidth = 'w-96' }: SidebarLayoutProps) {
   return (
     <div className="flex min-h-screen flex-col">
       {header && (

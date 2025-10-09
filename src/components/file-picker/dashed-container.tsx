@@ -1,5 +1,5 @@
 import { clsx } from 'clsx'
-import { ComponentPropsWithRef } from 'react'
+import { type ComponentPropsWithRef } from 'react'
 
 export type DashedContainerProps = ComponentPropsWithRef<'div'>
 
@@ -9,7 +9,7 @@ export function DashedContainer({ className, ...rest }: DashedContainerProps) {
       {...rest}
       className={clsx(
         className,
-        'flex h-full w-full items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-950',
+        'flex h-full w-full items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-950'
       )}
     />
   )
