@@ -3,6 +3,7 @@ import { useFilecoinUpload } from '../../hooks/use-filecoin-upload.ts'
 import DragNDrop from '../upload/drag-n-drop.tsx'
 import UploadProgress from '../upload/upload-progress.tsx'
 import './content.css'
+import PageTitle from '../ui/page-title.tsx'
 
 export default function Content() {
   const [uploadedFile, setUploadedFile] = useState<{ file: File; cid: string } | null>(null)
@@ -42,8 +43,7 @@ export default function Content() {
 
   return (
     <div className="content">
-      <h1>IPFS Pin on Filecoin</h1>
-      <p>Pin any IPFS file to a decentralized network of Filecoin storage providers</p>
+      <PageTitle />
 
       {uploadedFile ? (
         <div className="upload-progress-section">
