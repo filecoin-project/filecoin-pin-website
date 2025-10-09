@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
-import Button from '../common/button.tsx'
+import Button from '../ui/button.tsx'
 import './drag-n-drop.css'
 
 interface FileWithPreview extends File {
