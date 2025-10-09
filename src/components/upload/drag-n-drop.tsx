@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useContext, useEffect, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import Button from '../ui/button.tsx'
+import { FilecoinPinContext } from '../../context/filecoin-pin-provider.tsx'
 import './drag-n-drop.css'
 
 interface FileWithPreview extends File {
@@ -22,6 +23,12 @@ export default function DragNDrop({
   accept,
   isUploading = false,
 }: DragNDropProps) {
+  const context = useContext(FilecoinPinContext)
+  if (!context) {
+    throw new Error('DragNDrop must be used within FilecoinPinProvider')
+  }
+  const { dataSet, ensureDataSet, storageContext } = context
+
   const [selectedFiles, setSelectedFiles] = useState<FileWithPreview[]>([])
 
   const onDrop = useCallback(
@@ -43,15 +50,30 @@ export default function DragNDrop({
         const limited = maxFiles ? allFiles.slice(0, maxFiles) : allFiles
         onFilesSelected(limited)
       }
+
+      // Trigger data set initialization when files are selected
+      void ensureDataSet()
     },
-    [maxFiles, onFilesSelected, selectedFiles]
+    [maxFiles, onFilesSelected, selectedFiles, ensureDataSet]
   )
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     maxFiles,
     accept,
+    onDragEnter: () => {
+      // Trigger data set initialization when user hovers files over dropzone
+      void ensureDataSet()
+    },
   })
+
+  const rootProps = getRootProps()
+
+  // Trigger data set initialization when user clicks to open file picker
+  const handleDropzoneClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    rootProps.onClick?.(event)
+    void ensureDataSet()
+  }, [ensureDataSet])
 
   const clearAllFiles = useCallback(() => {
     // Clean up all preview URLs
@@ -81,8 +103,9 @@ export default function DragNDrop({
   return (
     <div className="drag-n-drop-container">
       <div
-        {...getRootProps()}
+        {...rootProps}
         className={`drop-zone ${isDragActive ? 'dragging' : ''} ${selectedFiles.length > 0 ? 'has-files' : ''}`}
+        onClick={handleDropzoneClick}
       >
         <input {...getInputProps()} />
 
@@ -120,13 +143,13 @@ export default function DragNDrop({
           Cancel
         </Button>
         <Button
-          disabled={selectedFiles.length === 0 || isUploading}
-          isLoading={isUploading}
+          disabled={selectedFiles.length === 0 || isUploading || !storageContext}
+          isLoading={isUploading || dataSet.status === 'initializing'}
           onClick={() => onUpload?.(selectedFiles)}
           size="md"
           variant="primary"
         >
-          Upload
+          {dataSet.status === 'initializing' ? 'Initializing...' : 'Upload'}
         </Button>
       </div>
     </div>

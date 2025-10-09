@@ -1,4 +1,3 @@
-import { createStorageContext } from 'filecoin-pin/core/synapse'
 import { createCarFromFile } from 'filecoin-pin/core/unixfs'
 import { checkUploadReadiness, executeUpload } from 'filecoin-pin/core/upload'
 import pino from 'pino'
@@ -40,7 +39,7 @@ export const useFilecoinUpload = () => {
   if (!context) {
     throw new Error('useFilecoinUpload must be used within FilecoinPinProvider')
   }
-  const { synapse } = context
+  const { synapse, storageContext, providerInfo } = context
 
   const [uploadState, setUploadState] = useState<UploadState>({
     isUploading: false,
@@ -133,13 +132,20 @@ export const useFilecoinUpload = () => {
           },
         })
 
-        // setup storage context and the SynapseService object:
-        const storageContext = await createStorageContext(synapse, logger)
-        console.debug('[FilecoinUpload] Storage context created:', {
-          providerInfo: storageContext.providerInfo,
+        // Ensure we have storage context from provider (created during data set initialization)
+        if (!storageContext || !providerInfo) {
+          // This should never happen because the upload button is disabled if the data set is not ready
+          throw new Error('Storage context not ready. Please ensure a data set is initialized before uploading.')
+        }
+
+        console.debug('[FilecoinUpload] Using storage context from provider:', {
+          providerInfo,
+          dataSetId: storageContext.dataSetId,
         })
+
         const synapseService = {
-          ...storageContext,
+          storage: storageContext,
+          providerInfo,
           synapse,
         }
 
@@ -189,7 +195,7 @@ export const useFilecoinUpload = () => {
         }))
       }
     },
-    [updateProgress, synapse]
+    [updateProgress, synapse, storageContext, providerInfo]
   )
 
   const resetUpload = useCallback(() => {
