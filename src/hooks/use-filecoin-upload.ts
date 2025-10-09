@@ -1,22 +1,38 @@
-// import { validatePaymentCapacity } from 'filecoin-pin/core/payments'
 import { createStorageContext } from 'filecoin-pin/core/synapse'
 import { createCarFromFile } from 'filecoin-pin/core/unixfs'
 import { checkUploadReadiness, executeUpload } from 'filecoin-pin/core/upload'
 import pino from 'pino'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { UploadProgress } from '../components/upload/upload-progress.tsx'
 import { filecoinPinConfig } from '../lib/filecoin-pin/config.ts'
 import { getSynapseClient } from '../lib/filecoin-pin/synapse.ts'
+import { useIpniCheck } from './use-ipni-check.ts'
 
 interface UploadState {
   isUploading: boolean
   progress: UploadProgress[]
   error?: string
+  currentCid?: string
 }
 
 const initialProgress: UploadProgress[] = [
   { step: 'creating-car', progress: 0, status: 'pending' },
+  { step: 'checking-readiness', progress: 0, status: 'pending' },
+  { step: 'uploading-car', progress: 0, status: 'pending' },
+  /**
+   * NOT GRANULAR.. only pending, in progress, completed
+   *
+   * This moves from pending to in-progress once the upload is completed.
+   * We then would want to verify that the CID is retrievable via IPNI before
+   * moving to completed.
+   */
   { step: 'announcing-cids', progress: 0, status: 'pending' },
+  /**
+   * NOT GRANULAR.. only pending, in progress, completed
+   * This moves from pending to in-progress once the upload is completed.
+   * We then would want to verify that the transaction is on chain before moving to completed.
+   * in-progress->completed is confirmed by the onPieceConfirmed callback to `executeUpload`
+   */
   { step: 'finalizing-transaction', progress: 0, status: 'pending' },
 ]
 
@@ -33,6 +49,27 @@ export const useFilecoinUpload = () => {
     }))
   }, [])
 
+  // Check if announcing-cids is in progress
+  const isAnnouncingCids = useMemo(() => {
+    const announcingStep = uploadState.progress.find((p) => p.step === 'announcing-cids')
+    return announcingStep?.status === 'in-progress'
+  }, [uploadState.progress])
+
+  // Use IPNI check hook to poll for CID availability
+  useIpniCheck({
+    cid: uploadState.currentCid ?? null,
+    isActive: isAnnouncingCids,
+    maxAttempts: 10,
+    onSuccess: () => {
+      updateProgress('announcing-cids', { status: 'completed', progress: 100 })
+    },
+    onError: () => {
+      // If IPNI check fails after max attempts, still mark as completed
+      // The CID might still be announced, just not visible yet
+      updateProgress('announcing-cids', { status: 'completed', progress: 100 })
+    },
+  })
+
   const uploadFile = useCallback(
     async (file: File): Promise<string> => {
       setUploadState({
@@ -48,17 +85,24 @@ export const useFilecoinUpload = () => {
         const carResult = await createCarFromFile(file, {
           onProgress: (bytesProcessed: number, totalBytes: number) => {
             const progressPercent = Math.round((bytesProcessed / totalBytes) * 100)
-
             updateProgress('creating-car', { progress: progressPercent })
           },
         })
 
-        console.log('CAR result:', carResult)
+        // Store the CID for IPNI checking
+        setUploadState((prev) => ({
+          ...prev,
+          currentCid: carResult.rootCid.toString(),
+        }))
 
         updateProgress('creating-car', { status: 'completed', progress: 100 })
         // creating the car is done, but its not uploaded yet.
 
+        // Step 2: Check readiness
+        updateProgress('checking-readiness', { status: 'in-progress', progress: 0 })
+
         const synapse = await getSynapseClient(filecoinPinConfig)
+        updateProgress('checking-readiness', { progress: 50 })
 
         // validate that we can actually upload the car, passing the autoConfigureAllowances flag to true to automatically configure allowances if needed.
         const readinessCheck = await checkUploadReadiness({
@@ -66,13 +110,13 @@ export const useFilecoinUpload = () => {
           fileSize: carResult.carBytes.length,
           autoConfigureAllowances: true,
         })
-        console.log('Readiness check:', readinessCheck)
 
         if (readinessCheck.status === 'blocked') {
           // TODO: show the user the reasons why the upload is blocked, prompt them to fix based on the suggestions.
-          console.error('Readiness check failed:', readinessCheck)
           throw new Error('Readiness check failed')
         }
+
+        updateProgress('checking-readiness', { status: 'completed', progress: 100 })
 
         // Create a simple logger for the upload
         const logger = pino({
@@ -84,52 +128,41 @@ export const useFilecoinUpload = () => {
 
         // setup storage context and the SynapseService object:
         const storageContext = await createStorageContext(synapse, logger)
+        console.debug('[FilecoinUpload] Storage context created:', {
+          providerInfo: storageContext.providerInfo,
+        })
         const synapseService = {
           ...storageContext,
           synapse,
         }
 
-        // Step 2: Upload CAR to Synapse (Filecoin SP)
-        updateProgress('announcing-cids', { status: 'in-progress', progress: 0 })
+        // Step 3: Upload CAR to Synapse (Filecoin SP)
+        updateProgress('uploading-car', { status: 'in-progress', progress: 0 })
 
-        const uploadResult = await executeUpload(synapseService, carResult.carBytes, carResult.rootCid, {
+        await executeUpload(synapseService, carResult.carBytes, carResult.rootCid, {
           logger,
           contextId: `upload-${Date.now()}`,
           callbacks: {
-            onUploadComplete: (pieceCid) => {
-              console.log('Upload complete:', pieceCid)
-              updateProgress('announcing-cids', { progress: 50 })
+            onUploadComplete: () => {
+              updateProgress('uploading-car', { status: 'completed', progress: 100 })
+              // now the other steps can move to in-progress
+              updateProgress('announcing-cids', { status: 'in-progress', progress: 0 })
             },
-            onPieceAdded: (transaction) => {
-              console.log('Piece added:', transaction)
-              updateProgress('announcing-cids', { progress: 75 })
+            onPieceAdded: () => {
+              // now the finalizing-transaction step can move to in-progress
+              updateProgress('finalizing-transaction', { status: 'in-progress', progress: 0 })
             },
-            onPieceConfirmed: (pieceIds) => {
-              console.log('Piece confirmed:', pieceIds)
-              updateProgress('announcing-cids', { progress: 100 })
+            onPieceConfirmed: () => {
+              // Complete finalization
+              updateProgress('finalizing-transaction', { status: 'completed', progress: 100 })
             },
           },
         })
 
-        console.log('Upload result:', uploadResult)
-
-        updateProgress('announcing-cids', { status: 'completed', progress: 100 })
-
-        // Step 3: Finalize storage transaction
-        updateProgress('finalizing-transaction', { status: 'in-progress', progress: 0 })
-
-        // The upload process includes transaction finalization
-        // Simulate final processing time
-        for (let i = 0; i <= 100; i += 20) {
-          updateProgress('finalizing-transaction', { progress: i })
-          await new Promise((resolve) => setTimeout(resolve, 100))
-        }
-
-        updateProgress('finalizing-transaction', { status: 'completed', progress: 100 })
-
         // Return the actual CID from the CAR result
         return carResult.rootCid.toString()
       } catch (error) {
+        console.error('[FilecoinUpload] Upload failed with error:', error)
         const errorMessage = error instanceof Error ? error.message : 'Upload failed'
         setUploadState((prev) => ({
           ...prev,
@@ -150,6 +183,7 @@ export const useFilecoinUpload = () => {
     setUploadState({
       isUploading: false,
       progress: initialProgress,
+      currentCid: undefined,
     })
   }, [])
 

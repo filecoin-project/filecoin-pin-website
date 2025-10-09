@@ -9,25 +9,27 @@ export default function Content() {
   const [isExpanded, setIsExpanded] = useState(true)
   const { uploadState, uploadFile, resetUpload } = useFilecoinUpload()
 
-  const handleUpload = async (filesToUpload: File[]) => {
+  const handleUpload = (filesToUpload: File[]) => {
     if (filesToUpload.length === 0) {
       alert('Please select files to upload')
       return
     }
 
-    try {
-      // For demo purposes, upload the first file
-      const file = filesToUpload[0]
-      // Set uploadedFile immediately to switch to progress view
-      setUploadedFile({ file, cid: '' })
+    // For demo purposes, upload the first file
+    const file = filesToUpload[0]
+    // Set uploadedFile immediately to switch to progress view
+    setUploadedFile({ file, cid: '' })
 
-      const cid = await uploadFile(file)
-      // Update with actual CID when upload completes
-      setUploadedFile({ file, cid })
-    } catch (error) {
-      console.error('Upload failed:', error)
-      // Keep the uploadedFile state so the error message shows in the progress view
-    }
+    // Start upload in the background without blocking the handler
+    uploadFile(file)
+      .then((cid) => {
+        // Update with actual CID when upload completes
+        setUploadedFile({ file, cid })
+      })
+      .catch((error) => {
+        console.error('Upload failed:', error)
+        // Keep the uploadedFile state so the error message shows in the progress view
+      })
   }
 
   const formatFileSize = (bytes: number): string => {

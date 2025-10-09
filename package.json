@@ -11,7 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "filecoin-pin": "^0.7.0",
+    "filecoin-pin": "^0.7.2",
     "pino": "^10.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -24,7 +24,9 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.1",
     "@vitejs/plugin-react": "^5.0.4",
+    "buffer": "^6.0.3",
     "globals": "^16.4.0",
+    "process": "^0.11.10",
     "typescript": "~5.9.3",
     "vite": "^7.1.9"
   }
