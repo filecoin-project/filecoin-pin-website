@@ -1,5 +1,5 @@
 import { clsx } from 'clsx'
-import { type ComponentPropsWithRef } from 'react'
+import type { ComponentPropsWithRef } from 'react'
 
 export type DashedContainerProps = ComponentPropsWithRef<'div'>
 

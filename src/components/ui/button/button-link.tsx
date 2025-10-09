@@ -6,7 +6,7 @@ type ButtonLinkProps = Omit<ButtonBaseProps, 'onClick'> & {
 
 function ButtonLink({ href, children, disabled, variant = 'secondary', ...props }: ButtonLinkProps) {
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer">
+    <a href={href} rel="noopener noreferrer" target="_blank">
       <ButtonBase disabled={disabled} variant={variant} {...props}>
         {children}
       </ButtonBase>
