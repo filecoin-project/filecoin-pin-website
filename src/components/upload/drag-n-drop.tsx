@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
-import Button from '../ui/button.tsx'
 import { FilecoinPinContext } from '../../context/filecoin-pin-provider.tsx'
+import Button from '../ui/button.tsx'
 import './drag-n-drop.css'
 
 interface FileWithPreview extends File {
@@ -70,10 +70,21 @@ export default function DragNDrop({
   const rootProps = getRootProps()
 
   // Trigger data set initialization when user clicks to open file picker
-  const handleDropzoneClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    rootProps.onClick?.(event)
-    void ensureDataSet()
-  }, [ensureDataSet])
+  const handleDropzoneClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      rootProps.onClick?.(event)
+      void ensureDataSet()
+    },
+    [ensureDataSet]
+  )
+
+  const handleDropzoneKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      rootProps.onKeyDown?.(event)
+      void ensureDataSet()
+    },
+    [ensureDataSet]
+  )
 
   const clearAllFiles = useCallback(() => {
     // Clean up all preview URLs
@@ -103,9 +114,11 @@ export default function DragNDrop({
   return (
     <div className="drag-n-drop-container">
       <div
+        role="listbox"
         {...rootProps}
         className={`drop-zone ${isDragActive ? 'dragging' : ''} ${selectedFiles.length > 0 ? 'has-files' : ''}`}
         onClick={handleDropzoneClick}
+        onKeyDown={handleDropzoneKeyDown}
       >
         <input {...getInputProps()} />
 
