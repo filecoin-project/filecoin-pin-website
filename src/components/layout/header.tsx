@@ -1,13 +1,12 @@
 import { useWallet } from '../../hooks/use-wallet.ts'
 import { shortenAddress } from '../../lib/filecoin-pin/wallet.ts'
+import { type FilLabel, type UsdfcLabel } from '../../types/network.ts'
 import {
   CALIBRATION_LABEL_FIL,
   CALIBRATION_LABEL_USDFC,
-  type FilLabel,
   MAINNET_LABEL_FIL,
   MAINNET_LABEL_USDFC,
-  type UsdfcLabel,
-} from '../../types/network.ts'
+} from '../../constants/network.tsx'
 import { Logo } from '../ui/logo.tsx'
 import { PillBalance } from '../ui/pill/pill-balance.tsx'
 import { PillWallet } from '../ui/pill/pill-wallet.tsx'
