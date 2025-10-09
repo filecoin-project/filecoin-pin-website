@@ -35,9 +35,7 @@ export default function Header() {
 
   return (
     <header className="flex items-center justify-between">
-      <div>
-        <Logo />
-      </div>
+      <Logo />
 
       <div className="flex items-center gap-4">
         {filDisplay.label && usdfcDisplay.label && (
