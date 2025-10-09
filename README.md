@@ -70,6 +70,31 @@ Config:
 - `biome.json` – Biome rules for linting/formatting
 - `vite.config.ts` – Vite dev server and build configuration
 
+## Outstanding Work
+
+### Multi-User Support with Shared Wallet
+
+**Status:** Not yet implemented
+
+This demo site is designed to be deployed with a shared session key for a private Calibration testnet wallet. Multiple users will be uploading files using the same wallet/data set, but each user should only see their own uploads when they return to the site.
+
+**What's needed:**
+- Track uploaded piece metadata in browser localStorage (piece CID, root CID, file name, upload timestamp)
+- When displaying uploads, filter the data set pieces to only show those that match the user's localStorage records
+- Use the `metadata` field on uploads (now supported) to store labels like filename for better UX
+
+**Current state:**
+- ✅ Metadata support is implemented in `filecoin-pin` and can be passed through `executeUpload()`
+- ✅ Uploads work and store files to the shared data set
+- ❌ No localStorage tracking - users can't see their previous uploads
+- ❌ No UI to display a user's upload history
+- ❌ No filtering - would show all pieces in the shared data set if we fetched them
+
+**Technical approach:**
+1. When upload completes, store `{ pieceCid, rootCid, label, timestamp }` to localStorage
+2. Create a hook to fetch piece metadata for pieces in localStorage using `warmStorage.getPieceMetadata(dataSetId, pieceId)`
+3. Display filtered list of user's uploads with download links
+
 ## Contributing
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the planned module structure and workflow guidelines.
