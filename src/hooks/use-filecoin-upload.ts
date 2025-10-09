@@ -76,7 +76,7 @@ export const useFilecoinUpload = () => {
   })
 
   const uploadFile = useCallback(
-    async (file: File): Promise<string> => {
+    async (file: File, metadata?: Record<string, string>): Promise<string> => {
       setUploadState({
         isUploading: true,
         progress: initialProgress,
@@ -149,6 +149,11 @@ export const useFilecoinUpload = () => {
         await executeUpload(synapseService, carResult.carBytes, carResult.rootCid, {
           logger,
           contextId: `upload-${Date.now()}`,
+          // @ts-expect-error: metadata is not in filecoin-pin yet, see https://github.com/filecoin-project/filecoin-pin/pull/89
+          metadata: {
+            ...(metadata ?? {}),
+            label: file.name,
+          },
           callbacks: {
             onUploadComplete: () => {
               updateProgress('uploading-car', { status: 'completed', progress: 100 })
