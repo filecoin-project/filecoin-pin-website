@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   define: {
     'process.env': {
-      PROVIDER_ADDRESS: '0xa3971A7234a3379A1813d9867B531e7EeB20ae07',
+      PROVIDER_ADDRESS: process.env.PROVIDER_ADDRESS,
     },
     global: 'globalThis',
   },

@@ -26,6 +26,16 @@ export const useIpniCheck = ({
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isCheckingRef = useRef(false)
 
+  // Store callbacks in refs to prevent pollWithBackoff from being recreated
+  const onSuccessRef = useRef(onSuccess)
+  const onErrorRef = useRef(onError)
+
+  // Update refs when callbacks change
+  useEffect(() => {
+    onSuccessRef.current = onSuccess
+    onErrorRef.current = onError
+  }, [onSuccess, onError])
+
   const checkIpni = useCallback(async (currentCid: string): Promise<boolean> => {
     try {
       const response = await fetch(`https://cid.contact/cid/${currentCid}`)
@@ -44,6 +54,7 @@ export const useIpniCheck = ({
       return
     }
 
+    console.debug('[IpniCheck] Starting IPNI polling for CID', cid)
     isCheckingRef.current = true
     attemptRef.current = 0
 
@@ -54,19 +65,21 @@ export const useIpniCheck = ({
       }
 
       attemptRef.current += 1
+      console.debug(`[IpniCheck] Attempt ${attemptRef.current}/${maxAttempts} for CID ${cid}`)
 
       const success = await checkIpni(cid)
 
       if (success) {
         isCheckingRef.current = false
-        onSuccess()
+        onSuccessRef.current()
         return
       }
 
       // Check if we've exceeded max attempts
       if (attemptRef.current >= maxAttempts) {
+        console.debug(`[IpniCheck] Max attempts (${maxAttempts}) reached for CID ${cid}`)
         isCheckingRef.current = false
-        onError?.(new Error(`IPNI check failed after ${maxAttempts} attempts`))
+        onErrorRef.current?.(new Error(`IPNI check failed after ${maxAttempts} attempts`))
         return
       }
 
@@ -79,7 +92,7 @@ export const useIpniCheck = ({
 
     // Start polling
     poll()
-  }, [cid, isActive, checkIpni, onSuccess, onError, maxAttempts, initialDelayMs, maxDelayMs])
+  }, [cid, isActive, checkIpni, maxAttempts, initialDelayMs, maxDelayMs])
 
   // Start polling when isActive becomes true
   useEffect(() => {
