@@ -1,8 +1,7 @@
-.upload-section {
-  margin-top: 2rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
+.content {
+  grid-column: 2;
+  padding: 2rem;
+  border: 1px solid gray;
 }
 
 .upload-progress-section {
