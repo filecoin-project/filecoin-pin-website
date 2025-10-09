@@ -2,10 +2,9 @@ import { createStorageContext } from 'filecoin-pin/core/synapse'
 import { createCarFromFile } from 'filecoin-pin/core/unixfs'
 import { checkUploadReadiness, executeUpload } from 'filecoin-pin/core/upload'
 import pino from 'pino'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useContext, useMemo, useState } from 'react'
 import type { UploadProgress } from '../components/upload/upload-progress.tsx'
-import { filecoinPinConfig } from '../lib/filecoin-pin/config.ts'
-import { getSynapseClient } from '../lib/filecoin-pin/synapse.ts'
+import { FilecoinPinContext } from '../context/filecoin-pin-provider.tsx'
 import { useIpniCheck } from './use-ipni-check.ts'
 
 interface UploadState {
@@ -37,6 +36,12 @@ const initialProgress: UploadProgress[] = [
 ]
 
 export const useFilecoinUpload = () => {
+  const context = useContext(FilecoinPinContext)
+  if (!context) {
+    throw new Error('useFilecoinUpload must be used within FilecoinPinProvider')
+  }
+  const { synapse } = context
+
   const [uploadState, setUploadState] = useState<UploadState>({
     isUploading: false,
     progress: initialProgress,
@@ -101,7 +106,9 @@ export const useFilecoinUpload = () => {
         // Step 2: Check readiness
         updateProgress('checking-readiness', { status: 'in-progress', progress: 0 })
 
-        const synapse = await getSynapseClient(filecoinPinConfig)
+        if (!synapse) {
+          throw new Error('Synapse client not initialized. Please check your configuration.')
+        }
         updateProgress('checking-readiness', { progress: 50 })
 
         // validate that we can actually upload the car, passing the autoConfigureAllowances flag to true to automatically configure allowances if needed.
@@ -148,7 +155,8 @@ export const useFilecoinUpload = () => {
               // now the other steps can move to in-progress
               updateProgress('announcing-cids', { status: 'in-progress', progress: 0 })
             },
-            onPieceAdded: () => {
+            onPieceAdded: (transaction) => {
+              console.debug('[FilecoinUpload] Piece add transaction:', { transaction })
               // now the finalizing-transaction step can move to in-progress
               updateProgress('finalizing-transaction', { status: 'in-progress', progress: 0 })
             },
@@ -176,7 +184,7 @@ export const useFilecoinUpload = () => {
         }))
       }
     },
-    [updateProgress]
+    [updateProgress, synapse]
   )
 
   const resetUpload = useCallback(() => {

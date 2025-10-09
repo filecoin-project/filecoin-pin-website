@@ -1,4 +1,5 @@
-import { createContext, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import type { SynapseService } from 'filecoin-pin/core/synapse'
+import { createContext, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { filecoinPinConfig } from '../lib/filecoin-pin/config.ts'
 import { getSynapseClient } from '../lib/filecoin-pin/synapse.ts'
 import { fetchWalletSnapshot, type WalletSnapshot } from '../lib/filecoin-pin/wallet.ts'
@@ -12,6 +13,7 @@ type WalletState =
 export interface FilecoinPinContextValue {
   wallet: WalletState
   refreshWallet: () => Promise<void>
+  synapse: SynapseService['synapse'] | null
 }
 
 export const FilecoinPinContext = createContext<FilecoinPinContextValue | undefined>(undefined)
@@ -20,6 +22,7 @@ const initialState: WalletState = { status: 'idle' }
 
 export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
   const [wallet, setWallet] = useState<WalletState>(initialState)
+  const synapseRef = useRef<SynapseService['synapse'] | null>(null)
   const config = filecoinPinConfig
 
   const refreshWallet = useCallback(async () => {
@@ -39,6 +42,7 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       const synapse = await getSynapseClient(config)
+      synapseRef.current = synapse
       const snapshot = await fetchWalletSnapshot(synapse)
       setWallet({
         status: 'ready',
@@ -62,6 +66,7 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
     () => ({
       wallet,
       refreshWallet,
+      synapse: synapseRef.current,
     }),
     [wallet, refreshWallet]
   )

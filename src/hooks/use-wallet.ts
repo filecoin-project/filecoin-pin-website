@@ -1,8 +1,13 @@
-import { useMemo } from 'react'
-import { useFilecoinPin } from './use-filecoin-pin.ts'
+import { useContext, useMemo } from 'react'
+import { FilecoinPinContext } from '../context/filecoin-pin-provider.tsx'
 
 export const useWallet = () => {
-  const { wallet, refreshWallet } = useFilecoinPin()
+  const context = useContext(FilecoinPinContext)
+  if (!context) {
+    throw new Error('useWallet must be used within FilecoinPinProvider')
+  }
+
+  const { wallet, refreshWallet } = context
 
   return useMemo(
     () => ({

@@ -34,17 +34,20 @@ const createStepGroup = (progress: UploadProgress[]) => {
     'uploading-car': 'uploadingCar',
   }
 
-  return progress.reduce<typeof firstStepGroup>((acc, p) => {
-    const key = stepMap[p.step]
-    if (key) {
-      acc[key] = { progress: p.progress, status: p.status }
+  return progress.reduce<typeof firstStepGroup>(
+    (acc, p) => {
+      const key = stepMap[p.step]
+      if (key) {
+        acc[key] = { progress: p.progress, status: p.status }
+      }
+      return acc
+    },
+    {
+      creatingCar: { progress: 0, status: 'pending' },
+      checkingReadiness: { progress: 0, status: 'pending' },
+      uploadingCar: { progress: 0, status: 'pending' },
     }
-    return acc
-  }, {
-    creatingCar: { progress: 0, status: 'pending' },
-    checkingReadiness: { progress: 0, status: 'pending' },
-    uploadingCar: { progress: 0, status: 'pending' },
-  })
+  )
 }
 
 export default function UploadProgress({
@@ -54,7 +57,6 @@ export default function UploadProgress({
   isExpanded = true,
   onToggleExpanded,
 }: UploadProgressProps) {
-
   // Calculate combined progress for the first stage (creating CAR + checking readiness + uploading)
   const getCombinedFirstStageProgress = useCallback(() => {
     const { creatingCar, checkingReadiness, uploadingCar } = createStepGroup(progress)

@@ -1,6 +1,20 @@
 # Filecoin Pin Demo
 
-Single-page React + TypeScript app scaffolding the experience for Filecoin Pin. The goal is to provide a lightweight demo that ships with a hard-coded wallet, a file upload flow, and the base layout for later hi‑fi mock integration.
+A simple, easy-to-understand demo showing how to use [`filecoin-pin`](https://github.com/filecoin-project/filecoin-pin) to upload files to Filecoin. This single-page React + TypeScript app demonstrates the core upload workflow with progress tracking and wallet integration.
+
+## Key Files - Understanding the Demo
+
+The main logic for using `filecoin-pin` is in just two files:
+
+- **`src/hooks/use-filecoin-upload.ts`** - The heart of the demo. Shows how to:
+  - Create a CAR file from user files
+  - Check upload readiness
+  - Execute uploads to Filecoin
+  - Track progress through each step
+
+- **`src/context/filecoin-pin-provider.tsx`** - Manages the Synapse client initialization and wallet state. All other hooks consume this context.
+
+Everything else in the codebase is just UI components and glue code to wire up the demo experience.
 
 ## Stack
 
@@ -38,18 +52,23 @@ The Vite server supports hot-module reloading, so UI changes show up immediately
 
 ## Project Layout
 
-- `src/app.tsx` – top-level layout shell for the demo.
-- `src/main.tsx` – React entry point; Vite mounts the SPA here.
-- `src/app.css` – global styles; tailor to match hi-fi mocks.
-- `public/` – static assets copied as-is.
-- `tsconfig.json` – TypeScript configuration shared by app and tooling.
-- `biome.json` – Biome rules for linting/formatting.
+Core logic:
+- **`src/hooks/use-filecoin-upload.ts`** – Main upload logic demonstrating `filecoin-pin` usage
+- **`src/context/filecoin-pin-provider.tsx`** – Synapse client and wallet state management
+- `src/hooks/use-wallet.ts` – Simple selector hook for wallet data
+- `src/hooks/use-ipni-check.ts` – Polls IPNI to verify CID announcements
+- `src/lib/filecoin-pin/` – Configuration and Synapse client singleton
 
-## Next Steps
+UI components (standard React):
+- `src/components/upload/` – Drag-and-drop zone and progress display
+- `src/components/layout/` – Header, sidebar, content layout
+- `src/app.tsx` – Top-level layout shell
+- `src/main.tsx` – React entry point
 
-- Wire the hardcoded wallet logic into the Filecoin Pin client SDK.
-- Build the file upload workflow, including progress states and success/error handling.
-- Layer in design system components or styles that align with the upcoming high-fidelity mocks.
+Config:
+- `tsconfig.json` – TypeScript configuration
+- `biome.json` – Biome rules for linting/formatting
+- `vite.config.ts` – Vite dev server and build configuration
 
 ## Contributing
 
