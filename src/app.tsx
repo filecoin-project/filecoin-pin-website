@@ -2,16 +2,15 @@ import './app.css'
 import Content from './components/layout/content.tsx'
 import Header from './components/layout/header.tsx'
 import Sidebar from './components/layout/sidebar.tsx'
+import { SidebarLayout } from './components/layout/sidebar-layout.tsx'
 
 function App() {
   return (
-    <>
-      <Header />
+    <SidebarLayout header={<Header />} sidebar={<Sidebar />}>
       <div className="main-content">
-        <Sidebar />
         <Content />
       </div>
-    </>
+    </SidebarLayout>
   )
 }
 
