@@ -1,25 +1,18 @@
-import { createStorageContext, type SynapseService } from 'filecoin-pin/core/synapse'
-import pino from 'pino'
+import type { SynapseService } from 'filecoin-pin/core/synapse'
 import { createContext, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type DataSetState, useDataSetManager } from '../hooks/use-data-set-manager.ts'
 import { filecoinPinConfig } from '../lib/filecoin-pin/config.ts'
 import { getSynapseClient } from '../lib/filecoin-pin/synapse.ts'
 import { fetchWalletSnapshot, type WalletSnapshot } from '../lib/filecoin-pin/wallet.ts'
-import { getStoredDataSetId, storeDataSetId } from '../lib/local-storage/data-set.ts'
 
-type ProviderInfo = SynapseService['providerInfo']
-type StorageContext = SynapseService['storage']
+type ProviderInfo = NonNullable<ReturnType<typeof useDataSetManager>['providerInfo']>
+type StorageContext = NonNullable<ReturnType<typeof useDataSetManager>['storageContext']>
 
 type WalletState =
   | { status: 'idle'; data?: WalletSnapshot }
   | { status: 'loading'; data?: WalletSnapshot }
   | { status: 'ready'; data: WalletSnapshot }
   | { status: 'error'; error: string; data?: WalletSnapshot }
-
-type DataSetState =
-  | { status: 'idle'; dataSetId?: number }
-  | { status: 'initializing'; dataSetId?: number }
-  | { status: 'ready'; dataSetId: number; storageContext: StorageContext; providerInfo: ProviderInfo }
-  | { status: 'error'; error: string; dataSetId?: number }
 
 export interface FilecoinPinContextValue {
   wallet: WalletState
@@ -39,14 +32,17 @@ export interface FilecoinPinContextValue {
 export const FilecoinPinContext = createContext<FilecoinPinContextValue | undefined>(undefined)
 
 const initialWalletState: WalletState = { status: 'idle' }
-const initialDataSetState: DataSetState = { status: 'idle' }
 
 export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
   const [wallet, setWallet] = useState<WalletState>(initialWalletState)
-  const [dataSet, setDataSet] = useState<DataSetState>(initialDataSetState)
   const synapseRef = useRef<SynapseService['synapse'] | null>(null)
-  const isEnsuringDataSetRef = useRef<boolean>(false)
   const config = filecoinPinConfig
+
+  // Use the data set manager hook
+  const { dataSet, ensureDataSet, storageContext, providerInfo } = useDataSetManager({
+    synapse: synapseRef.current,
+    walletAddress: wallet.status === 'ready' ? wallet.data.address : null,
+  })
 
   const refreshWallet = useCallback(async () => {
     if (!config.privateKey) {
@@ -81,130 +77,6 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [config])
 
-  /**
-   * Ensure a data set exists for the current wallet.
-   *
-   * This is called both:
-   * 1. Proactively when wallet + synapse are ready (for better UX)
-   * 2. On-demand when user shows upload intent (file selected, drag hover, etc.)
-   *
-   * - Returns null if wallet/synapse aren't ready yet (will retry automatically)
-   * - Checks localStorage for existing data set ID
-   * - If found, returns it immediately
-   * - If not found, creates a new data set and stores it
-   * - Guards against duplicate concurrent calls using a ref
-   *
-   * @returns The data set ID, or null if prerequisites aren't ready or initialization fails
-   */
-  const ensureDataSet = useCallback(async (): Promise<number | null> => {
-    // Guard against duplicate concurrent calls (before state updates)
-    if (isEnsuringDataSetRef.current) {
-      console.debug('[DataSet] Already ensuring data set (guarded by ref), skipping duplicate call')
-      return dataSet.dataSetId ?? null
-    }
-
-    // Set the ref guard
-    isEnsuringDataSetRef.current = true
-
-    try {
-      const synapse = synapseRef.current
-
-      // Check if wallet is ready
-      if (wallet.status !== 'ready' || !wallet.data?.address) {
-        console.debug('[DataSet] Wallet not ready yet, will retry when ready')
-        return null
-      }
-
-      if (!synapse) {
-        console.debug('[DataSet] Synapse not initialized yet, will retry when ready')
-        return null
-      }
-
-      // If we already have a data set ready, return it immediately
-      if (dataSet.status === 'ready' && dataSet.dataSetId) {
-        return dataSet.dataSetId
-      }
-
-      // If already initializing (state-based check), wait for it
-      if (dataSet.status === 'initializing') {
-        console.debug('[DataSet] Already initializing (status check), skipping duplicate request')
-        return dataSet.dataSetId ?? null
-      }
-
-      const walletAddress = wallet.data.address
-
-      // Check localStorage first
-      const storedId = getStoredDataSetId(walletAddress)
-
-      // Need to create storage context (either for existing or new data set)
-      setDataSet((prev) => ({ status: 'initializing', dataSetId: storedId ?? prev.dataSetId }))
-
-      try {
-        const logger = pino({
-          level: 'debug',
-          browser: {
-            asObject: true,
-          },
-        })
-
-        if (storedId) {
-          console.debug('[DataSet] Found existing data set ID in localStorage, creating storage context:', storedId)
-
-          const result = await createStorageContext(synapse, logger, {
-            dataset: {
-              useExisting: storedId,
-            },
-          })
-
-          setDataSet({
-            status: 'ready',
-            dataSetId: storedId,
-            storageContext: result.storage,
-            providerInfo: result.providerInfo,
-          })
-          return storedId
-        }
-
-        console.debug('[DataSet] Creating new data set for wallet:', walletAddress)
-
-        const result = await createStorageContext(synapse, logger, {
-          dataset: {
-            createNew: true,
-          },
-        })
-
-        const newDataSetId = result.storage.dataSetId
-        if (!newDataSetId) {
-          throw new Error('Data set ID not returned from storage context creation')
-        }
-
-        // Store for future use
-        storeDataSetId(walletAddress, newDataSetId)
-        console.debug('[DataSet] Created and stored new data set ID:', newDataSetId)
-
-        setDataSet({
-          status: 'ready',
-          dataSetId: newDataSetId,
-          storageContext: result.storage,
-          providerInfo: result.providerInfo,
-        })
-        return newDataSetId
-      } catch (error) {
-        console.error('[DataSet] Failed to create data set:', error)
-        const errorMessage = error instanceof Error ? error.message : 'Failed to initialize data set'
-        setDataSet((prev) => ({
-          status: 'error',
-          error: errorMessage,
-          dataSetId: prev.dataSetId,
-        }))
-        return null
-      }
-    } finally {
-      // Always release the guard, even on early returns
-      isEnsuringDataSetRef.current = false
-    }
-  }, [wallet, dataSet, config])
-
   useEffect(() => {
     void refreshWallet()
   }, [refreshWallet])
@@ -235,10 +107,10 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
       synapse: synapseRef.current,
       dataSet,
       ensureDataSet,
-      storageContext: dataSet.status === 'ready' ? dataSet.storageContext : null,
-      providerInfo: dataSet.status === 'ready' ? dataSet.providerInfo : null,
+      storageContext,
+      providerInfo,
     }),
-    [wallet, refreshWallet, dataSet, ensureDataSet]
+    [wallet, refreshWallet, dataSet, ensureDataSet, storageContext, providerInfo]
   )
 
   return <FilecoinPinContext.Provider value={value}>{children}</FilecoinPinContext.Provider>

@@ -52,4 +52,3 @@ export const storeDataSetId = (walletAddress: string, dataSetId: number): void =
     console.warn('[DataSetStorage] Failed to store data set ID in localStorage:', error)
   }
 }
-
