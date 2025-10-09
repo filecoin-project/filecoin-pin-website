@@ -19,7 +19,7 @@ export function SidebarLayout({ children, sidebar, header, sidebarWidth = 'w-96'
       <div className="flex flex-grow flex-row">
         {sidebar && (
           <aside
-            className={clsx(`${sidebarWidth} hidden h-screen border-r border-zinc-800 py-10 pr-15 pl-10 sm:block`)}
+            className={clsx(`${sidebarWidth} hidden h-screen border-r border-zinc-800 py-10 pr-15 pl-10 lg:block`)}
           >
             {sidebar}
           </aside>

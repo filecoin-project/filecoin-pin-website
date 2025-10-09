@@ -1,4 +1,4 @@
-import { PillWrapper } from './pill-wrapper'
+import { PillWrapper } from './pill-wrapper.tsx'
 
 type PillWalletProps = {
   address: string
@@ -7,10 +7,8 @@ type PillWalletProps = {
 
 function PillWallet({ address, href }: PillWalletProps) {
   return (
-    <PillWrapper href={href} ariaLabel={`Wallet address: ${address}`}>
-      <span>
-        {address.slice(0, 6)}...{address.slice(-7)}
-      </span>
+    <PillWrapper ariaLabel={`Wallet address: ${address}`} href={href}>
+      <span>{address}</span>
     </PillWrapper>
   )
 }

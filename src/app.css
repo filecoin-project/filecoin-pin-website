@@ -3,20 +3,9 @@
 #root {
   min-height: 100vh;
   min-width: 100vw;
-  display: grid;
-  grid-template-rows: auto 1fr;
-  grid-template-columns: 1fr;
   background-color: var(--color-background);
   color: var(--color-text-primary);
 }
-
-/* .main-content {
-  grid-row: 2;
-  grid-column: 1;
-  display: grid;
-  grid-template-columns: var(--grid-sidebar-ratio) var(--grid-content-ratio);
-  min-height: 0;
-} */
 
 .card {
   padding: var(--spacing-lg);
