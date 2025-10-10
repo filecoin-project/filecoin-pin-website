@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 @theme {
   --color-brand-50: oklch(0.98 0.0157 216.67); /* #EDFBFF */
@@ -19,9 +20,6 @@
   --color-badge-in-progress: #3B1400;
   --color-badge-in-progress-text: #FF8C3B;
   --color-badge-in-progress-border: #662100;
-  
-  --color-badge-success: #001D3B;
-  --color-badge-success-border: #003669;
 }
 
 

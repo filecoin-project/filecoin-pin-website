@@ -8,7 +8,7 @@ type CardWrapperProps = {
 type CardHeaderProps = {
   title: string
   status: UploadProgress['status']
-  estimatedTime?: string
+  estimatedTime?: number
 }
 
 type CardContentProps = {
@@ -19,10 +19,11 @@ function CardWrapper({ children }: CardWrapperProps) {
   return <div className="bg-zinc-900 p-6 rounded-lg space-y-6">{children}</div>
 }
 
-function CardHeader({ title, status }: CardHeaderProps) {
+function CardHeader({ title, status, estimatedTime }: CardHeaderProps) {
   return (
     <div className="flex items-center justify-between">
       <h3 className="font-medium">{title}</h3>
+      {status === 'in-progress' && estimatedTime && <span className="text-sm text-zinc-400">{estimatedTime}%</span>}
       {status !== 'in-progress' && <BadgeStatus status={status} />}
     </div>
   )

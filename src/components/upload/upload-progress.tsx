@@ -1,7 +1,8 @@
 import { useCallback } from 'react'
-import './upload-progress.css'
 import { CardHeader, CardWrapper } from '../ui/card.tsx'
 import { ProgressBar } from '../ui/progress-bar.tsx'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion.tsx'
+import { BadgeStatus } from '../ui/badge-status.tsx'
 
 export interface UploadProgress {
   step: 'creating-car' | 'uploading-car' | 'checking-readiness' | 'announcing-cids' | 'finalizing-transaction'
@@ -52,13 +53,7 @@ const createStepGroup = (progress: UploadProgress[]) => {
   )
 }
 
-export default function UploadProgress({
-  fileName,
-  fileSize,
-  progress,
-  isExpanded = true,
-  onToggleExpanded,
-}: UploadProgressProps) {
+export default function UploadProgress({ fileName, fileSize, progress }: UploadProgressProps) {
   // Calculate combined progress for the first stage (creating CAR + checking readiness + uploading)
   const getCombinedFirstStageProgress = useCallback(() => {
     const { creatingCar, checkingReadiness, uploadingCar } = createStepGroup(progress)
@@ -108,57 +103,60 @@ export default function UploadProgress({
   }
 
   return (
-    <div className="upload-progress-container">
-      <div className="upload-header">
-        <h2>Uploaded files</h2>
-      </div>
-
-      <div className="file-card">
-        <div className="file-card-header">
-          <div className="file-info">
-            <div className="file-name">{fileName}</div>
-            <div className="file-size">{fileSize}</div>
+    <Accordion
+      className="rounded-xl space-y-6 overflow-hidden border p-6 border-zinc-700"
+      collapsible
+      defaultValue="file-card"
+      type="single"
+    >
+      <AccordionItem value="file-card">
+        <div className="flex justify-between items-center">
+          <div className="flex flex-col gap-1">
+            <p className="text-white font-medium">{fileName}</p>
+            <p className="text-zinc-400">{fileSize}</p>
           </div>
-          <div className="file-card-actions">
-            <span className="status-badge in-progress">In progress</span>
-            {onToggleExpanded && (
-              <button className="expand-button" onClick={onToggleExpanded} type="button">
-                {isExpanded ? '⌄' : '⌃'}
-              </button>
+          <div className="flex items-center gap-6">
+            {getCombinedFirstStageStatus() === 'completed' ? (
+              <BadgeStatus status="pinned" />
+            ) : (
+              <BadgeStatus status={getCombinedFirstStageStatus()} />
             )}
+            <AccordionTrigger />
           </div>
         </div>
 
-        {isExpanded && (
-          <div className="progress-steps">
-            {/* Combined first stage: creating-car + checking-readiness + uploading-car */}
-            {progress.find((p) => p.step === 'creating-car') && (
-              <CardWrapper>
-                <CardHeader status={getCombinedFirstStageStatus()} title={getStepLabel('creating-car')} />
-                {getCombinedFirstStageStatus() === 'in-progress' && (
-                  <ProgressBar progress={getCombinedFirstStageProgress()} />
-                )}
-              </CardWrapper>
-            )}
+        <AccordionContent className="space-y-6 mt-6">
+          {/* Combined first stage: creating-car + checking-readiness + uploading-car */}
+          {progress.find((p) => p.step === 'creating-car') && (
+            <CardWrapper>
+              <CardHeader
+                estimatedTime={getCombinedFirstStageProgress()}
+                status={getCombinedFirstStageStatus()}
+                title={getStepLabel('creating-car')}
+              />
+              {getCombinedFirstStageStatus() === 'in-progress' && (
+                <ProgressBar progress={getCombinedFirstStageProgress()} />
+              )}
+            </CardWrapper>
+          )}
 
-            {/* Show remaining steps individually */}
-            {progress
-              .filter(
-                (step) =>
-                  step.step !== 'creating-car' && step.step !== 'checking-readiness' && step.step !== 'uploading-car'
+          {/* Show remaining steps individually */}
+          {progress
+            .filter(
+              (step) =>
+                step.step !== 'creating-car' && step.step !== 'checking-readiness' && step.step !== 'uploading-car'
+            )
+            .map((step) => {
+              return (
+                <CardWrapper key={step.step}>
+                  <CardHeader status={step.status} title={getStepLabel(step.step)} />
+                  {step.status === 'in-progress' && <ProgressBar progress={step.progress} />}
+                  {step.error && <div className="error-message">{step.error}</div>}
+                </CardWrapper>
               )
-              .map((step) => {
-                return (
-                  <CardWrapper key={step.step}>
-                    <CardHeader status={step.status} title={getStepLabel(step.step)} />
-                    {step.status === 'in-progress' && <ProgressBar progress={step.progress} />}
-                    {step.error && <div className="error-message">{step.error}</div>}
-                  </CardWrapper>
-                )
-              })}
-          </div>
-        )}
-      </div>
-    </div>
+            })}
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
   )
 }

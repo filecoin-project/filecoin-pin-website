@@ -4,6 +4,7 @@ import DragNDrop from '../upload/drag-n-drop.tsx'
 import UploadProgress from '../upload/upload-progress.tsx'
 import './content.css'
 import { PageTitle } from '../ui/page-title.tsx'
+import { Heading } from '../ui/heading.tsx'
 
 export default function Content() {
   const [uploadedFile, setUploadedFile] = useState<{ file: File; cid: string } | null>(null)
@@ -39,7 +40,8 @@ export default function Content() {
       <PageTitle />
 
       {uploadedFile ? (
-        <div className="upload-progress-section">
+        <div className="space-y-6">
+          <Heading tag="h2">Uploaded files</Heading>
           <UploadProgress
             fileName={uploadedFile.file.name}
             fileSize={formatFileSize(uploadedFile.file.size)}
@@ -78,7 +80,7 @@ export default function Content() {
         </div>
       ) : (
         <div className="space-y-6">
-          <h2 className="text-xl font-medium text-white">Upload a file</h2>
+          <Heading tag="h2">Upload a file</Heading>
           <DragNDrop isUploading={uploadState.isUploading} onUpload={handleUpload} />
         </div>
       )}
