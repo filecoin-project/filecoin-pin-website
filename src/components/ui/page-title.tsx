@@ -9,4 +9,4 @@ function PageTitle() {
   )
 }
 
-export default PageTitle
+export { PageTitle }

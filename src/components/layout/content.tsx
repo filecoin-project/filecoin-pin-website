@@ -3,21 +3,14 @@ import { useFilecoinUpload } from '../../hooks/use-filecoin-upload.ts'
 import DragNDrop from '../upload/drag-n-drop.tsx'
 import UploadProgress from '../upload/upload-progress.tsx'
 import './content.css'
-import PageTitle from '../ui/page-title.tsx'
+import { PageTitle } from '../ui/page-title.tsx'
 
 export default function Content() {
   const [uploadedFile, setUploadedFile] = useState<{ file: File; cid: string } | null>(null)
   const [isExpanded, setIsExpanded] = useState(true)
   const { uploadState, uploadFile, resetUpload } = useFilecoinUpload()
 
-  const handleUpload = (filesToUpload: File[]) => {
-    if (filesToUpload.length === 0) {
-      alert('Please select files to upload')
-      return
-    }
-
-    // For demo purposes, upload the first file
-    const file = filesToUpload[0]
+  const handleUpload = (file: File) => {
     // Set uploadedFile immediately to switch to progress view
     setUploadedFile({ file, cid: '' })
 
@@ -42,7 +35,7 @@ export default function Content() {
   }
 
   return (
-    <div className="content">
+    <div className="space-y-10">
       <PageTitle />
 
       {uploadedFile ? (
@@ -84,7 +77,8 @@ export default function Content() {
           )}
         </div>
       ) : (
-        <div className="upload-section">
+        <div className="space-y-6">
+          <h2 className="text-xl font-medium text-white">Upload a file</h2>
           <DragNDrop isUploading={uploadState.isUploading} onUpload={handleUpload} />
         </div>
       )}

@@ -21,7 +21,7 @@ export function UploadInstructions({ maxSize, ...rest }: UploadInstructionsProps
 
         <div className="space-y-1 text-center">
           <p>
-            <span className="font-medium text-[#10B4FF]">Click to upload</span> or drag and drop
+            <span className="font-medium text-brand-500">Click to upload</span> or drag and drop
           </p>
           <p className="text-sm">(Up to {prettyBytes(maxSize)})</p>
         </div>
