@@ -49,3 +49,9 @@ jobs:
           fi
           echo "✅ Build artifacts validated successfully"
 
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-dist
+          path: dist
+          retention-days: 7
