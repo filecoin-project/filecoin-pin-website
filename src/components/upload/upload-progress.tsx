@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { CardHeader, CardWrapper } from '../ui/card.tsx'
 import { ProgressBar } from '../ui/progress-bar.tsx'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion.tsx'
+import { BadgeStatus } from '../ui/badge-status.tsx'
 
 export interface UploadProgress {
   step: 'creating-car' | 'uploading-car' | 'checking-readiness' | 'announcing-cids' | 'finalizing-transaction'
@@ -115,7 +116,14 @@ export default function UploadProgress({ fileName, fileSize, progress }: UploadP
               <div className="text-white">{fileName}</div>
               <div className="text-zinc-400">{fileSize}</div>
             </div>
-            <AccordionTrigger />
+            <div className="flex items-center gap-6">
+              {getCombinedFirstStageStatus() === 'completed' ? (
+                <BadgeStatus status={'pinned'} />
+              ) : (
+                <BadgeStatus status={getCombinedFirstStageStatus()} />
+              )}
+              <AccordionTrigger />
+            </div>
           </div>
         </div>
 
@@ -123,7 +131,11 @@ export default function UploadProgress({ fileName, fileSize, progress }: UploadP
           {/* Combined first stage: creating-car + checking-readiness + uploading-car */}
           {progress.find((p) => p.step === 'creating-car') && (
             <CardWrapper>
-              <CardHeader status={getCombinedFirstStageStatus()} title={getStepLabel('creating-car')} />
+              <CardHeader
+                estimatedTime={getCombinedFirstStageProgress()}
+                status={getCombinedFirstStageStatus()}
+                title={getStepLabel('creating-car')}
+              />
               {getCombinedFirstStageStatus() === 'in-progress' && (
                 <ProgressBar progress={getCombinedFirstStageProgress()} />
               )}
