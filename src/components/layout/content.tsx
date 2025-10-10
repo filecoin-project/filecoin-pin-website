@@ -118,7 +118,7 @@ export default function Content() {
       {/* Show drag-n-drop - disabled when actively uploading */}
       <div className="space-y-6">
         <Heading tag="h2">Upload a file</Heading>
-        <DragNDrop key={dragDropKey} isUploading={uploadState.isUploading} onUpload={handleUpload} />
+        <DragNDrop isUploading={uploadState.isUploading} key={dragDropKey} onUpload={handleUpload} />
       </div>
 
       {/* Show active upload progress */}
@@ -140,7 +140,9 @@ export default function Content() {
         </div>
       )}
 
-      {(isLoadingPieces || isInitializing) && uploadHistory.length === 0 && <LoadingState message={getLoadingMessage()} />}
+      {(isLoadingPieces || isInitializing) && uploadHistory.length === 0 && (
+        <LoadingState message={getLoadingMessage()} />
+      )}
       {/* Always show upload history when available */}
       {uploadHistory.length > 0 && (
         <div className="space-y-6">
