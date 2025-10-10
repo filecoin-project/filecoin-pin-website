@@ -73,16 +73,19 @@ export const useFilecoinUpload = () => {
   useIpniCheck({
     cid: uploadState.currentCid ?? null,
     isActive: isAnnouncingCids,
-    maxAttempts: 1,
+    maxAttempts: 5,
     onSuccess: () => {
       console.debug('[FilecoinUpload] IPNI check succeeded, marking announcing-cids as completed')
       updateProgress('announcing-cids', { status: 'completed', progress: 100 })
     },
-    onError: () => {
-      // If IPNI check fails after max attempts, still mark as completed
-      // The CID might still be announced, just not visible yet
-      console.debug('[FilecoinUpload] IPNI check failed after max attempts, marking announcing-cids as completed')
-      updateProgress('announcing-cids', { status: 'completed', progress: 100 })
+    onError: (error) => {
+      // IPNI check failed - mark as error with a helpful message
+      console.warn('[FilecoinUpload] IPNI check failed after max attempts:', error.message)
+      updateProgress('announcing-cids', {
+        status: 'error',
+        progress: 0,
+        error: 'CID not yet indexed by IPNI. The file is stored but may take time to be discoverable on the network.'
+      })
     },
   })
 

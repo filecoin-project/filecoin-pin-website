@@ -115,7 +115,16 @@ export default function UploadProgress({
     }
   }
 
-  const getStepIcon = (step: UploadProgress['step']) => {
+  const getStepIcon = (step: UploadProgress['step'], status: UploadProgress['status']) => {
+    // Show error icon for failed steps
+    if (status === 'error') {
+      return '×'
+    }
+    // Show checkmark for completed steps
+    if (status === 'completed') {
+      return '✓'
+    }
+    // Show step-specific icons for pending/in-progress
     switch (step) {
       case 'creating-car':
       case 'checking-readiness':
@@ -180,7 +189,7 @@ export default function UploadProgress({
             {/* Combined first stage: creating-car + checking-readiness + uploading-car */}
             {progress.find((p) => p.step === 'creating-car') && (
               <div className={`progress-step ${getCombinedFirstStageStatus()}`} key="combined-upload">
-                <div className="step-icon">{getStepIcon('creating-car')}</div>
+                <div className="step-icon">{getStepIcon('creating-car', getCombinedFirstStageStatus())}</div>
                 <div className="step-content">
                   <div className="step-header">
                     <span className="step-label">{getStepLabel('creating-car')}</span>
@@ -206,7 +215,7 @@ export default function UploadProgress({
               )
               .map((step) => (
                 <div className={`progress-step ${step.status}`} key={step.step}>
-                  <div className="step-icon">{getStepIcon(step.step)}</div>
+                  <div className="step-icon">{getStepIcon(step.step, step.status)}</div>
                   <div className="step-content">
                     <div className="step-header">
                       <span className="step-label">{getStepLabel(step.step)}</span>
