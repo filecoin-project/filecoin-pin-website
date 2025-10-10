@@ -24,6 +24,7 @@ export default function Content() {
   const [uploadedFile, setUploadedFile] = useState<{ file: File; cid: string } | null>(null)
   const [isExpanded, setIsExpanded] = useState(true)
   const [expandedHistoryItems, setExpandedHistoryItems] = useState<Set<string>>(new Set())
+  const [dragDropKey, setDragDropKey] = useState(0) // Key to force DragNDrop remount
   const { uploadState, uploadFile, resetUpload } = useFilecoinUpload()
   const { pieces: uploadHistory, refreshPieces, isLoading: isLoadingPieces } = useDatasetPieces()
   const context = useContext(FilecoinPinContext)
@@ -33,9 +34,9 @@ export default function Content() {
 
   const { providerInfo, wallet, synapse } = context
 
-  // Determine if we're still initializing (wallet, synapse, provider, or pieces loading)
-  const isInitializing =
-    wallet.status === 'loading' || wallet.status === 'idle' || !synapse || !providerInfo || isLoadingPieces
+  // Determine if we're still initializing (wallet, synapse, provider)
+  // Note: We don't block on isLoadingPieces - users can upload while history loads
+  const isInitializing = wallet.status === 'loading' || wallet.status === 'idle' || !synapse || !providerInfo
 
   // Get loading message based on current state
   const getLoadingMessage = () => {
@@ -47,9 +48,6 @@ export default function Content() {
     }
     if (!providerInfo) {
       return 'Selecting storage provider...'
-    }
-    if (isLoadingPieces) {
-      return 'Loading your uploaded files...'
     }
     return 'Preparing upload interface...'
   }
@@ -93,6 +91,8 @@ export default function Content() {
         // Clear the uploadedFile after adding to history so the upload form shows again
         setUploadedFile(null)
         resetUpload()
+        // Increment key to force DragNDrop to remount and clear its state
+        setDragDropKey((prev) => prev + 1)
       }, 2000)
     }
   }, [uploadState.isUploading, uploadState.progress, uploadState.currentCid, refreshPieces, resetUpload])
@@ -104,6 +104,8 @@ export default function Content() {
       const timer = setTimeout(() => {
         setUploadedFile(null)
         resetUpload()
+        // Increment key to force DragNDrop to remount and clear its state
+        setDragDropKey((prev) => prev + 1)
       }, 5000)
       return () => clearTimeout(timer)
     }
@@ -119,7 +121,7 @@ export default function Content() {
         {isInitializing ? (
           <LoadingState message={getLoadingMessage()} />
         ) : (
-          <DragNDrop isUploading={uploadState.isUploading} onUpload={handleUpload} />
+          <DragNDrop key={dragDropKey} isUploading={uploadState.isUploading} onUpload={handleUpload} />
         )}
       </div>
 
