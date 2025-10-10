@@ -1,7 +1,7 @@
 import { Synapse } from '@filoz/synapse-sdk'
 import { BrowserProvider } from 'ethers'
-import { initializeSynapse, type SynapseService } from 'filecoin-pin/core/synapse'
 import type { SynapseSetupConfig } from 'filecoin-pin/core/synapse'
+import { initializeSynapse, type SynapseService } from 'filecoin-pin/core/synapse'
 import pino from 'pino'
 
 const logger = pino({
