@@ -3,9 +3,9 @@ import { FilecoinPinContext } from '../../context/filecoin-pin-provider.tsx'
 import { useDatasetPieces } from '../../hooks/use-dataset-pieces.ts'
 import { useFilecoinUpload } from '../../hooks/use-filecoin-upload.ts'
 import { formatFileSize } from '../../utils/format-file-size.ts'
+import { Heading } from '../ui/heading.tsx'
 import { LoadingState } from '../ui/loading-state.tsx'
 import { PageTitle } from '../ui/page-title.tsx'
-import { Heading } from '../ui/heading.tsx'
 import DragNDrop from '../upload/drag-n-drop.tsx'
 import type { UploadProgress as UploadProgressType } from '../upload/upload-progress.tsx'
 import UploadProgress from '../upload/upload-progress.tsx'
@@ -90,22 +90,38 @@ export default function Content() {
       // Add a small delay to ensure the piece is indexed
       setTimeout(() => {
         refreshPieces()
+        // Clear the uploadedFile after adding to history so the upload form shows again
+        setUploadedFile(null)
+        resetUpload()
       }, 2000)
     }
-  }, [uploadState.isUploading, uploadState.progress, uploadState.currentCid, refreshPieces])
+  }, [uploadState.isUploading, uploadState.progress, uploadState.currentCid, refreshPieces, resetUpload])
+
+  // Auto-clear upload state on error
+  useEffect(() => {
+    if (uploadState.error) {
+      // Keep showing the error for a bit, then auto-clear after 5 seconds
+      const timer = setTimeout(() => {
+        setUploadedFile(null)
+        resetUpload()
+      }, 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [uploadState.error, resetUpload])
 
   return (
     <div className="space-y-10">
       <PageTitle />
 
-      {/* Show drag-n-drop only when not actively uploading */}
-      {!uploadedFile && (
-        <div className="space-y-6">
-          <Heading tag="h2">Upload a file</Heading>
-          {isInitializing && <LoadingState message={getLoadingMessage()} />}
+      {/* Show drag-n-drop - disabled when actively uploading */}
+      <div className="space-y-6">
+        <Heading tag="h2">Upload a file</Heading>
+        {isInitializing ? (
+          <LoadingState message={getLoadingMessage()} />
+        ) : (
           <DragNDrop isUploading={uploadState.isUploading} onUpload={handleUpload} />
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Show active upload progress */}
       {uploadedFile && (
@@ -123,34 +139,6 @@ export default function Content() {
             providerName={providerInfo?.name || (providerInfo?.id ? String(providerInfo.id) : undefined)}
             transactionHash={uploadState.transactionHash}
           />
-          {uploadState.error && (
-            <div className="error-message">
-              <p>Upload failed: {uploadState.error}</p>
-              <button
-                onClick={() => {
-                  setUploadedFile(null)
-                  resetUpload()
-                }}
-                type="button"
-              >
-                Try Again
-              </button>
-            </div>
-          )}
-          {!uploadState.isUploading && uploadState.progress.every((p) => p.status === 'completed') && (
-            <div className="success-message">
-              <p>✅ File successfully uploaded! CID: {uploadedFile.cid}</p>
-              <button
-                onClick={() => {
-                  setUploadedFile(null)
-                  resetUpload()
-                }}
-                type="button"
-              >
-                Upload Another File
-              </button>
-            </div>
-          )}
         </div>
       )}
 

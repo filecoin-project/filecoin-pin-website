@@ -1,8 +1,8 @@
 import { useCallback } from 'react'
-import { CardHeader, CardWrapper } from '../ui/card.tsx'
-import { ProgressBar } from '../ui/progress-bar.tsx'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion.tsx'
 import { BadgeStatus } from '../ui/badge-status.tsx'
+import { CardHeader, CardWrapper } from '../ui/card.tsx'
+import { ProgressBar } from '../ui/progress-bar.tsx'
 
 export interface UploadProgress {
   step: 'creating-car' | 'uploading-car' | 'checking-readiness' | 'announcing-cids' | 'finalizing-transaction'
@@ -118,6 +118,19 @@ export default function UploadProgress({
     }
   }
 
+  const getEstimatedTime = (step: UploadProgress['step']) => {
+    switch (step) {
+      case 'creating-car':
+      case 'checking-readiness':
+      case 'uploading-car':
+        return 'Estimated time: ~30 seconds'
+      case 'announcing-cids':
+        return 'Estimated time: ~30 seconds'
+      case 'finalizing-transaction':
+        return 'Estimated time: ~30-60 seconds'
+    }
+  }
+
   // Check if all steps are completed AND we have a CID (upload actually finished)
   const isCompleted = progress.every((p) => p.status === 'completed') && !!cid
 
@@ -132,7 +145,10 @@ export default function UploadProgress({
   const getBadgeStatus = () => {
     if (isCompleted) return 'pinned'
     if (hasError) return 'error'
-    return getCombinedFirstStageStatus()
+    // Check if any step is in progress
+    if (progress.some((p) => p.status === 'in-progress')) return 'in-progress'
+    // If no steps are in progress but not all completed, must be pending
+    return 'pending'
   }
 
   return (
@@ -163,7 +179,7 @@ export default function UploadProgress({
               {progress.find((p) => p.step === 'creating-car') && (
                 <CardWrapper>
                   <CardHeader
-                    estimatedTime={getCombinedFirstStageProgress()}
+                    estimatedTime={getEstimatedTime('creating-car')}
                     status={getCombinedFirstStageStatus()}
                     title={getStepLabel('creating-car')}
                   />
@@ -182,8 +198,11 @@ export default function UploadProgress({
                 .map((step) => {
                   return (
                     <CardWrapper key={step.step}>
-                      <CardHeader status={step.status} title={getStepLabel(step.step)} />
-                      {step.status === 'in-progress' && <ProgressBar progress={step.progress} />}
+                      <CardHeader
+                        estimatedTime={getEstimatedTime(step.step)}
+                        status={step.status}
+                        title={getStepLabel(step.step)}
+                      />
                       {step.error && <div className="error-message text-red-400 mt-2">{step.error}</div>}
 
                       {/* Show transaction hash in the finalizing step */}

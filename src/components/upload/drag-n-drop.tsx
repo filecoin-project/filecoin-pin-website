@@ -1,8 +1,8 @@
 import { Root } from '@radix-ui/react-form'
-import { useContext, useState, useEffect } from 'react'
+import { useContext, useEffect, useState } from 'react'
+import { FilecoinPinContext } from '../../context/filecoin-pin-provider.tsx'
 import { FilePicker } from '../file-picker/index.tsx'
 import { ButtonBase as Button } from '../ui/button/button-base.tsx'
-import { FilecoinPinContext } from '../../context/filecoin-pin-provider.tsx'
 
 interface DragNDropProps {
   onFileSelected?: (file: File) => void

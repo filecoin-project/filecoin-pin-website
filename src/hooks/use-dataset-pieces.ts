@@ -29,7 +29,14 @@ export const useDatasetPieces = () => {
 
   const loadPieces = useCallback(async () => {
     if (!storageContext || !providerInfo || !synapse) {
-      console.debug('[DatasetPieces] Missing dependencies - storageContext:', !!storageContext, 'providerInfo:', !!providerInfo, 'synapse:', !!synapse)
+      console.debug(
+        '[DatasetPieces] Missing dependencies - storageContext:',
+        !!storageContext,
+        'providerInfo:',
+        !!providerInfo,
+        'synapse:',
+        !!synapse
+      )
       setPieces([])
       return
     }
@@ -61,7 +68,12 @@ export const useDatasetPieces = () => {
       console.debug('[DatasetPieces] Fetching pieces for dataSetId:', storageContext.dataSetId)
       const dataSetData = await pdpServer.getDataSet(storageContext.dataSetId)
 
-      console.debug('[DatasetPieces] Found', dataSetData.pieces.length, 'pieces in dataset id: ', storageContext.dataSetId)
+      console.debug(
+        '[DatasetPieces] Found',
+        dataSetData.pieces.length,
+        'pieces in dataset id: ',
+        storageContext.dataSetId
+      )
 
       if (dataSetData.pieces.length === 0) {
         setPieces([])
@@ -76,7 +88,12 @@ export const useDatasetPieces = () => {
             const pieceCid = piece.pieceCid.toString()
 
             // Fetch metadata for this piece
-            console.debug('[DatasetPieces] Fetching metadata for piece:', pieceId, 'from dataset:', storageContext.dataSetId)
+            console.debug(
+              '[DatasetPieces] Fetching metadata for piece:',
+              pieceId,
+              'from dataset:',
+              storageContext.dataSetId
+            )
             const metadata = await warmStorage.getPieceMetadata(storageContext.dataSetId, pieceId)
 
             // Extract relevant metadata
