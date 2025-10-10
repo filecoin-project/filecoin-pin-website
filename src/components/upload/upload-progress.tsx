@@ -118,7 +118,7 @@ export default function UploadProgress({ fileName, fileSize, progress }: UploadP
             </div>
             <div className="flex items-center gap-6">
               {getCombinedFirstStageStatus() === 'completed' ? (
-                <BadgeStatus status={'pinned'} />
+                <BadgeStatus status="pinned" />
               ) : (
                 <BadgeStatus status={getCombinedFirstStageStatus()} />
               )}
