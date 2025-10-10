@@ -3,7 +3,7 @@ import { useFilecoinUpload } from '../../hooks/use-filecoin-upload.ts'
 import DragNDrop from '../upload/drag-n-drop.tsx'
 import UploadProgress from '../upload/upload-progress.tsx'
 import './content.css'
-import PageTitle from '../ui/page-title.tsx'
+import { PageTitle } from '../ui/page-title.tsx'
 
 export default function Content() {
   const [uploadedFile, setUploadedFile] = useState<{ file: File; cid: string } | null>(null)
