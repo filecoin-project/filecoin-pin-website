@@ -4,7 +4,8 @@ import { useDatasetPieces } from '../../hooks/use-dataset-pieces.ts'
 import { useFilecoinUpload } from '../../hooks/use-filecoin-upload.ts'
 import { formatFileSize } from '../../utils/format-file-size.ts'
 import { LoadingState } from '../ui/loading-state.tsx'
-import PageTitle from '../ui/page-title.tsx'
+import { PageTitle } from '../ui/page-title.tsx'
+import { Heading } from '../ui/heading.tsx'
 import DragNDrop from '../upload/drag-n-drop.tsx'
 import type { UploadProgress as UploadProgressType } from '../upload/upload-progress.tsx'
 import UploadProgress from '../upload/upload-progress.tsx'
@@ -65,14 +66,7 @@ export default function Content() {
     )
   }
 
-  const handleUpload = (filesToUpload: File[]) => {
-    if (filesToUpload.length === 0) {
-      alert('Please select files to upload')
-      return
-    }
-
-    // For demo purposes, upload the first file
-    const file = filesToUpload[0]
+  const handleUpload = (file: File) => {
     // Set uploadedFile immediately to switch to progress view
     setUploadedFile({ file, cid: '' })
 
@@ -101,15 +95,13 @@ export default function Content() {
   }, [uploadState.isUploading, uploadState.progress, uploadState.currentCid, refreshPieces])
 
   return (
-    <div className="content">
+    <div className="space-y-10">
       <PageTitle />
 
       {/* Always show upload history when available */}
       {uploadHistory.length > 0 && (
-        <div className="upload-history-section">
-          <div className="upload-header">
-            <h2>Uploaded files</h2>
-          </div>
+        <div className="space-y-6">
+          <Heading tag="h2">Uploaded files</Heading>
           {uploadHistory.map((upload) => (
             <UploadProgress
               cid={upload.cid}
@@ -140,7 +132,8 @@ export default function Content() {
 
       {/* Show active upload progress */}
       {uploadedFile && (
-        <div className="upload-progress-section">
+        <div className="space-y-6">
+          <Heading tag="h2">Current upload</Heading>
           <UploadProgress
             cid={uploadState.currentCid}
             fileName={uploadedFile.file.name}
@@ -186,7 +179,8 @@ export default function Content() {
 
       {/* Show drag-n-drop only when not actively uploading */}
       {!uploadedFile && (
-        <div className="upload-section">
+        <div className="space-y-6">
+          <Heading tag="h2">Upload a file</Heading>
           {isInitializing && <LoadingState message={getLoadingMessage()} />}
           <DragNDrop isUploading={uploadState.isUploading} onUpload={handleUpload} />
         </div>

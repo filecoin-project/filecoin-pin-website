@@ -1,5 +1,8 @@
 import { useCallback } from 'react'
-import './upload-progress.css'
+import { CardHeader, CardWrapper } from '../ui/card.tsx'
+import { ProgressBar } from '../ui/progress-bar.tsx'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion.tsx'
+import { BadgeStatus } from '../ui/badge-status.tsx'
 
 export interface UploadProgress {
   step: 'creating-car' | 'uploading-car' | 'checking-readiness' | 'announcing-cids' | 'finalizing-transaction'
@@ -115,41 +118,6 @@ export default function UploadProgress({
     }
   }
 
-  const getStepIcon = (step: UploadProgress['step'], status: UploadProgress['status']) => {
-    // Show error icon for failed steps
-    if (status === 'error') {
-      return '×'
-    }
-    // Show checkmark for completed steps
-    if (status === 'completed') {
-      return '✓'
-    }
-    // Show step-specific icons for pending/in-progress
-    switch (step) {
-      case 'creating-car':
-      case 'checking-readiness':
-      case 'uploading-car':
-        return 'C'
-      case 'announcing-cids':
-        return 'I'
-      case 'finalizing-transaction':
-        return 'R'
-    }
-  }
-
-  const getStatusBadge = (status: UploadProgress['status']) => {
-    switch (status) {
-      case 'pending':
-        return <span className="status-badge pending">Pending</span>
-      case 'in-progress':
-        return <span className="status-badge in-progress">In progress</span>
-      case 'completed':
-        return <span className="status-badge completed">Completed</span>
-      case 'error':
-        return <span className="status-badge error">Error</span>
-    }
-  }
-
   // Check if all steps are completed AND we have a CID (upload actually finished)
   const isCompleted = progress.every((p) => p.status === 'completed') && !!cid
 
@@ -160,191 +128,182 @@ export default function UploadProgress({
     navigator.clipboard.writeText(text)
   }
 
+  // Determine the badge status for the file card header
+  const getBadgeStatus = () => {
+    if (isCompleted) return 'pinned'
+    if (hasError) return 'error'
+    return getCombinedFirstStageStatus()
+  }
+
   return (
-    <div className="upload-progress-container">
-      <div className="file-card">
-        <div className="file-card-header">
-          <div className="file-info">
-            <div className="file-name">{fileName}</div>
-            <div className="file-size">{fileSize}</div>
+    <Accordion
+      className="rounded-xl space-y-6 overflow-hidden border p-6 border-zinc-700"
+      collapsible
+      onValueChange={onToggleExpanded ? () => onToggleExpanded() : undefined}
+      type="single"
+      value={isExpanded ? 'file-card' : ''}
+    >
+      <AccordionItem value="file-card">
+        <div className="flex justify-between items-center">
+          <div className="flex flex-col gap-1">
+            <p className="text-white font-medium">{fileName}</p>
+            <p className="text-zinc-400">{fileSize}</p>
           </div>
-          <div className="file-card-actions">
-            {isCompleted ? (
-              <span className="status-badge completed">✓ Pinned</span>
-            ) : hasError ? (
-              <span className="status-badge error">Error</span>
-            ) : (
-              <span className="status-badge in-progress">In progress</span>
-            )}
-            {onToggleExpanded && (
-              <button className="expand-button" onClick={onToggleExpanded} type="button">
-                {isExpanded ? '⌄' : '⌃'}
-              </button>
-            )}
+          <div className="flex items-center gap-6">
+            <BadgeStatus status={getBadgeStatus()} />
+            <AccordionTrigger />
           </div>
         </div>
 
-        {isExpanded && !isCompleted && (
-          <div className="progress-steps">
-            {/* Combined first stage: creating-car + checking-readiness + uploading-car */}
-            {progress.find((p) => p.step === 'creating-car') && (
-              <div className={`progress-step ${getCombinedFirstStageStatus()}`} key="combined-upload">
-                <div className="step-icon">{getStepIcon('creating-car', getCombinedFirstStageStatus())}</div>
-                <div className="step-content">
-                  <div className="step-header">
-                    <span className="step-label">{getStepLabel('creating-car')}</span>
-                    {getStatusBadge(getCombinedFirstStageStatus())}
-                  </div>
+        <AccordionContent className="space-y-6 mt-6">
+          {/* Show progress steps only when not completed */}
+          {!isCompleted && (
+            <>
+              {/* Combined first stage: creating-car + checking-readiness + uploading-car */}
+              {progress.find((p) => p.step === 'creating-car') && (
+                <CardWrapper>
+                  <CardHeader
+                    estimatedTime={getCombinedFirstStageProgress()}
+                    status={getCombinedFirstStageStatus()}
+                    title={getStepLabel('creating-car')}
+                  />
                   {getCombinedFirstStageStatus() === 'in-progress' && (
-                    <div className="progress-bar-container">
-                      <div className="progress-bar">
-                        <div className="progress-fill" style={{ width: `${getCombinedFirstStageProgress()}%` }} />
-                      </div>
-                      <span className="progress-text">{getCombinedFirstStageProgress()}%</span>
-                    </div>
+                    <ProgressBar progress={getCombinedFirstStageProgress()} />
                   )}
-                </div>
-              </div>
-            )}
+                </CardWrapper>
+              )}
 
-            {/* Show remaining steps individually */}
-            {progress
-              .filter(
-                (step) =>
-                  step.step !== 'creating-car' && step.step !== 'checking-readiness' && step.step !== 'uploading-car'
-              )
-              .map((step) => (
-                <div className={`progress-step ${step.status}`} key={step.step}>
-                  <div className="step-icon">{getStepIcon(step.step, step.status)}</div>
-                  <div className="step-content">
-                    <div className="step-header">
-                      <span className="step-label">{getStepLabel(step.step)}</span>
-                      {getStatusBadge(step.status)}
-                    </div>
-                    {step.status === 'in-progress' && (
-                      <div className="progress-bar-container">
-                        <div className="progress-bar">
-                          <div className="progress-fill" style={{ width: `${step.progress}%` }} />
+              {/* Show remaining steps individually */}
+              {progress
+                .filter(
+                  (step) =>
+                    step.step !== 'creating-car' && step.step !== 'checking-readiness' && step.step !== 'uploading-car'
+                )
+                .map((step) => {
+                  return (
+                    <CardWrapper key={step.step}>
+                      <CardHeader status={step.status} title={getStepLabel(step.step)} />
+                      {step.status === 'in-progress' && <ProgressBar progress={step.progress} />}
+                      {step.error && <div className="error-message text-red-400 mt-2">{step.error}</div>}
+
+                      {/* Show transaction hash in the finalizing step */}
+                      {step.step === 'finalizing-transaction' && transactionHash && (
+                        <div className="mt-4 space-y-2">
+                          <p className="text-zinc-400 text-sm">Transaction hash</p>
+                          <div className="flex items-center gap-2">
+                            <a
+                              className="text-blue-400 hover:text-blue-300 underline break-all"
+                              href={`https://calibration.filfox.info/en/message/${transactionHash}`}
+                              rel="noopener noreferrer"
+                              target="_blank"
+                            >
+                              {transactionHash}
+                            </a>
+                            <button
+                              className="text-zinc-400 hover:text-white"
+                              onClick={() => copyToClipboard(transactionHash)}
+                              title="Copy to clipboard"
+                              type="button"
+                            >
+                              📋
+                            </button>
+                          </div>
                         </div>
-                        <span className="progress-text">{step.progress}%</span>
-                      </div>
-                    )}
-                    {step.error && <div className="error-message">{step.error}</div>}
+                      )}
+                    </CardWrapper>
+                  )
+                })}
+            </>
+          )}
 
-                    {/* Show transaction hash in the finalizing step */}
-                    {step.step === 'finalizing-transaction' && transactionHash && (
-                      <div className="transaction-hash-section">
-                        <div className="transaction-hash-label">Transaction hash</div>
-                        <div className="transaction-hash-value">
-                          <a
-                            className="transaction-hash-link"
-                            href={`https://calibration.filfox.info/en/message/${transactionHash}`}
-                            rel="noopener noreferrer"
-                            target="_blank"
-                          >
-                            {transactionHash}
-                          </a>
-                          <button
-                            className="copy-button"
-                            onClick={() => copyToClipboard(transactionHash)}
-                            title="Copy to clipboard"
-                            type="button"
-                          >
-                            📋
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-          </div>
-        )}
-
-        {/* Completed state - show CIDs and provider info */}
-        {isExpanded && isCompleted && cid && (
-          <div className="completed-details">
-            <div className="detail-section">
-              <div className="detail-label">IPFS Root CID</div>
-              <div className="detail-value">
-                <a
-                  className="cid-link"
-                  href={`https://dweb.link/ipfs/${cid}`}
-                  rel="noopener noreferrer"
-                  target="_blank"
-                >
-                  {cid}
-                </a>
-                <button
-                  className="copy-button"
-                  onClick={() => copyToClipboard(cid)}
-                  title="Copy to clipboard"
-                  type="button"
-                >
-                  📋
-                </button>
-                <a
-                  className="download-button"
-                  href={`https://dweb.link/ipfs/${cid}`}
-                  rel="noopener noreferrer"
-                  target="_blank"
-                  title="Download"
-                >
-                  ⬇️
-                </a>
-              </div>
-            </div>
-
-            {pieceCid && (
-              <div className="detail-section">
-                <div className="detail-label">Filecoin Piece CID</div>
-                <div className="detail-value">
-                  <span className="piece-cid">{pieceCid}</span>
+          {/* Completed state - show CIDs and provider info */}
+          {isCompleted && cid && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-zinc-400 text-sm">IPFS Root CID</p>
+                <div className="flex items-center gap-2">
+                  <a
+                    className="text-blue-400 hover:text-blue-300 underline break-all"
+                    href={`https://dweb.link/ipfs/${cid}`}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    {cid}
+                  </a>
                   <button
-                    className="copy-button"
-                    onClick={() => copyToClipboard(pieceCid)}
+                    className="text-zinc-400 hover:text-white"
+                    onClick={() => copyToClipboard(cid)}
                     title="Copy to clipboard"
                     type="button"
                   >
                     📋
                   </button>
                   <a
-                    className="download-button"
-                    href={`https://pdp.vxb.ai/${network || 'calibration'}/piece/${pieceCid}`}
+                    className="text-zinc-400 hover:text-white"
+                    href={`https://dweb.link/ipfs/${cid}`}
                     rel="noopener noreferrer"
                     target="_blank"
-                    title="View on PDP Explorer"
+                    title="Download"
                   >
                     ⬇️
                   </a>
                 </div>
               </div>
-            )}
 
-            {providerName && (
-              <div className="detail-section">
-                <div className="detail-label">Provider</div>
-                <div className="detail-value">
-                  <a
-                    className="provider-link"
-                    href={`https://filfox.info/en/address/${providerName}`}
-                    rel="noopener noreferrer"
-                    target="_blank"
-                  >
-                    {providerName}
-                  </a>
+              {pieceCid && (
+                <div className="space-y-2">
+                  <p className="text-zinc-400 text-sm">Filecoin Piece CID</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-white break-all">{pieceCid}</span>
+                    <button
+                      className="text-zinc-400 hover:text-white"
+                      onClick={() => copyToClipboard(pieceCid)}
+                      title="Copy to clipboard"
+                      type="button"
+                    >
+                      📋
+                    </button>
+                    <a
+                      className="text-zinc-400 hover:text-white"
+                      href={`https://pdp.vxb.ai/${network || 'calibration'}/piece/${pieceCid}`}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                      title="View on PDP Explorer"
+                    >
+                      ⬇️
+                    </a>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            <div className="completed-actions">
-              <button className="view-proofs-button" type="button">
-                View proofs
-              </button>
+              {providerName && (
+                <div className="space-y-2">
+                  <p className="text-zinc-400 text-sm">Provider</p>
+                  <div>
+                    <a
+                      className="text-blue-400 hover:text-blue-300 underline"
+                      href={`https://filfox.info/en/address/${providerName}`}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    >
+                      {providerName}
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-4">
+                <button
+                  className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded transition-colors"
+                  type="button"
+                >
+                  View proofs
+                </button>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
-    </div>
+          )}
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
   )
 }
