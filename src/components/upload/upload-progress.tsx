@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import './upload-progress.css'
 import { CardHeader, CardWrapper } from '../ui/card.tsx'
+import { ProgressBar } from '../ui/progress-bar.tsx'
 
 export interface UploadProgress {
   step: 'creating-car' | 'uploading-car' | 'checking-readiness' | 'announcing-cids' | 'finalizing-transaction'
@@ -133,17 +134,10 @@ export default function UploadProgress({
             {/* Combined first stage: creating-car + checking-readiness + uploading-car */}
             {progress.find((p) => p.step === 'creating-car') && (
               <CardWrapper>
-                <div className="step-content">
-                  <CardHeader status={getCombinedFirstStageStatus()} title={getStepLabel('creating-car')} />
-                  {getCombinedFirstStageStatus() === 'in-progress' && (
-                    <div className="progress-bar-container">
-                      <div className="progress-bar">
-                        <div className="progress-fill" style={{ width: `${getCombinedFirstStageProgress()}%` }} />
-                      </div>
-                      <span className="progress-text">{getCombinedFirstStageProgress()}%</span>
-                    </div>
-                  )}
-                </div>
+                <CardHeader status={getCombinedFirstStageStatus()} title={getStepLabel('creating-car')} />
+                {getCombinedFirstStageStatus() === 'in-progress' && (
+                  <ProgressBar progress={getCombinedFirstStageProgress()} />
+                )}
               </CardWrapper>
             )}
 
@@ -156,18 +150,9 @@ export default function UploadProgress({
               .map((step) => {
                 return (
                   <CardWrapper key={step.step}>
-                    <div className="step-content">
-                      <CardHeader status={step.status} title={getStepLabel(step.step)} />
-                      {step.status === 'in-progress' && (
-                        <div className="progress-bar-container">
-                          <div className="progress-bar">
-                            <div className="progress-fill" style={{ width: `${step.progress}%` }} />
-                          </div>
-                          <span className="progress-text">{step.progress}%</span>
-                        </div>
-                      )}
-                      {step.error && <div className="error-message">{step.error}</div>}
-                    </div>
+                    <CardHeader status={step.status} title={getStepLabel(step.step)} />
+                    {step.status === 'in-progress' && <ProgressBar progress={step.progress} />}
+                    {step.error && <div className="error-message">{step.error}</div>}
                   </CardWrapper>
                 )
               })}
