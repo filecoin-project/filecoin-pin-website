@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import './upload-progress.css'
+import { CardHeader, CardWrapper } from '../ui/card.tsx'
 
 export interface UploadProgress {
   step: 'creating-car' | 'uploading-car' | 'checking-readiness' | 'announcing-cids' | 'finalizing-transaction'
@@ -105,32 +106,6 @@ export default function UploadProgress({
     }
   }
 
-  const getStepIcon = (step: UploadProgress['step']) => {
-    switch (step) {
-      case 'creating-car':
-      case 'checking-readiness':
-      case 'uploading-car':
-        return 'C'
-      case 'announcing-cids':
-        return 'I'
-      case 'finalizing-transaction':
-        return 'R'
-    }
-  }
-
-  const getStatusBadge = (status: UploadProgress['status']) => {
-    switch (status) {
-      case 'pending':
-        return <span className="status-badge pending">Pending</span>
-      case 'in-progress':
-        return <span className="status-badge in-progress">In progress</span>
-      case 'completed':
-        return <span className="status-badge completed">Completed</span>
-      case 'error':
-        return <span className="status-badge error">Error</span>
-    }
-  }
-
   return (
     <div className="upload-progress-container">
       <div className="upload-header">
@@ -157,13 +132,9 @@ export default function UploadProgress({
           <div className="progress-steps">
             {/* Combined first stage: creating-car + checking-readiness + uploading-car */}
             {progress.find((p) => p.step === 'creating-car') && (
-              <div className={`progress-step ${getCombinedFirstStageStatus()}`} key="combined-upload">
-                <div className="step-icon">{getStepIcon('creating-car')}</div>
+              <CardWrapper>
                 <div className="step-content">
-                  <div className="step-header">
-                    <span className="step-label">{getStepLabel('creating-car')}</span>
-                    {getStatusBadge(getCombinedFirstStageStatus())}
-                  </div>
+                  <CardHeader status={getCombinedFirstStageStatus()} title={getStepLabel('creating-car')} />
                   {getCombinedFirstStageStatus() === 'in-progress' && (
                     <div className="progress-bar-container">
                       <div className="progress-bar">
@@ -173,7 +144,7 @@ export default function UploadProgress({
                     </div>
                   )}
                 </div>
-              </div>
+              </CardWrapper>
             )}
 
             {/* Show remaining steps individually */}
@@ -182,26 +153,24 @@ export default function UploadProgress({
                 (step) =>
                   step.step !== 'creating-car' && step.step !== 'checking-readiness' && step.step !== 'uploading-car'
               )
-              .map((step) => (
-                <div className={`progress-step ${step.status}`} key={step.step}>
-                  <div className="step-icon">{getStepIcon(step.step)}</div>
-                  <div className="step-content">
-                    <div className="step-header">
-                      <span className="step-label">{getStepLabel(step.step)}</span>
-                      {getStatusBadge(step.status)}
-                    </div>
-                    {step.status === 'in-progress' && (
-                      <div className="progress-bar-container">
-                        <div className="progress-bar">
-                          <div className="progress-fill" style={{ width: `${step.progress}%` }} />
+              .map((step) => {
+                return (
+                  <CardWrapper key={step.step}>
+                    <div className="step-content">
+                      <CardHeader status={step.status} title={getStepLabel(step.step)} />
+                      {step.status === 'in-progress' && (
+                        <div className="progress-bar-container">
+                          <div className="progress-bar">
+                            <div className="progress-fill" style={{ width: `${step.progress}%` }} />
+                          </div>
+                          <span className="progress-text">{step.progress}%</span>
                         </div>
-                        <span className="progress-text">{step.progress}%</span>
-                      </div>
-                    )}
-                    {step.error && <div className="error-message">{step.error}</div>}
-                  </div>
-                </div>
-              ))}
+                      )}
+                      {step.error && <div className="error-message">{step.error}</div>}
+                    </div>
+                  </CardWrapper>
+                )
+              })}
           </div>
         )}
       </div>
