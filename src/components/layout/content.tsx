@@ -35,7 +35,7 @@ export default function Content() {
   }
 
   return (
-    <div>
+    <div className="space-y-10">
       <PageTitle />
 
       {uploadedFile ? (
