@@ -76,3 +76,20 @@ export const getSynapseClient = async (config: Partial<SynapseSetupConfig>) => {
 export const resetSynapseClient = () => {
   synapsePromise = null
 }
+
+/**
+ * Disconnect wallet and clear synapse client
+ * Note: MetaMask doesn't provide a programmatic disconnect API.
+ * This clears our internal state. Users must manually disconnect in MetaMask
+ * if they want to fully revoke permissions.
+ */
+export const disconnectWallet = async () => {
+  logger.info('Disconnecting wallet and clearing Synapse client')
+
+  // Clear synapse client
+  resetSynapseClient()
+
+  // Note: There's no standard way to programmatically disconnect from MetaMask
+  // The user needs to disconnect manually in their wallet extension
+  logger.info('Wallet state cleared. To fully disconnect, please disconnect in your wallet extension.')
+}

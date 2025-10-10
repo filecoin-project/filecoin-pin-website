@@ -2,7 +2,9 @@ import { useContext, useEffect, useState } from 'react'
 import { FilecoinPinContext } from '../../context/filecoin-pin-provider.tsx'
 import { useDatasetPieces } from '../../hooks/use-dataset-pieces.ts'
 import { useFilecoinUpload } from '../../hooks/use-filecoin-upload.ts'
+import { useWallet } from '../../hooks/use-wallet.ts'
 import { formatFileSize } from '../../utils/format-file-size.ts'
+import { ButtonBase } from '../ui/button/button-base.tsx'
 import { Heading } from '../ui/heading.tsx'
 import { LoadingState } from '../ui/loading-state.tsx'
 import { PageTitle } from '../ui/page-title.tsx'
@@ -27,6 +29,7 @@ export default function Content() {
   const [dragDropKey, setDragDropKey] = useState(0) // Key to force DragNDrop remount
   const { uploadState, uploadFile, resetUpload } = useFilecoinUpload()
   const { pieces: uploadHistory, refreshPieces, isLoading: isLoadingPieces } = useDatasetPieces()
+  const { connect: connectWallet, isUsingWallet } = useWallet()
   const context = useContext(FilecoinPinContext)
   if (!context) {
     throw new Error('Content must be used within FilecoinPinProvider')
@@ -36,11 +39,11 @@ export default function Content() {
 
   // Determine if we're still initializing (wallet, synapse, provider)
   // Note: We don't block on isLoadingPieces - users can upload while history loads
-  const isInitializing = wallet.status === 'loading' || wallet.status === 'idle'
+  const isInitializing = wallet.status === 'loading'
 
   // Get loading message based on current state
   const getLoadingMessage = () => {
-    if (wallet.status === 'loading' || wallet.status === 'idle') {
+    if (wallet.status === 'loading') {
       return 'Connecting to Filecoin network...'
     }
     if (!synapse) {
@@ -50,18 +53,6 @@ export default function Content() {
       return 'Selecting storage provider...'
     }
     return 'Preparing upload interface...'
-  }
-
-  // If wallet failed to load, show error instead of spinner
-  if (wallet.status === 'error') {
-    return (
-      <div className="content">
-        <PageTitle />
-        <div className="error-message">
-          <p>Failed to connect to Filecoin network: {wallet.error}</p>
-        </div>
-      </div>
-    )
   }
 
   const handleUpload = (file: File) => {
@@ -110,6 +101,43 @@ export default function Content() {
       return () => clearTimeout(timer)
     }
   }, [uploadState.error, resetUpload])
+
+  // If wallet is disconnected (idle) and using wallet mode (no private key), show connect button
+  if (wallet.status === 'idle' && isUsingWallet) {
+    return (
+      <div className="content">
+        <PageTitle />
+        <div className="space-y-6 max-w-md mx-auto text-center">
+          <div className="space-y-2">
+            <Heading tag="h2">Connect Your Wallet</Heading>
+            <p className="text-zinc-400">Connect your wallet to start uploading files to Filecoin</p>
+          </div>
+          <ButtonBase onClick={connectWallet} variant="primary">
+            Connect Wallet
+          </ButtonBase>
+        </div>
+      </div>
+    )
+  }
+
+  // If wallet failed to load, show error instead of spinner
+  if (wallet.status === 'error') {
+    return (
+      <div className="content">
+        <PageTitle />
+        <div className="space-y-6 max-w-md mx-auto text-center">
+          <div className="p-4 rounded-lg bg-zinc-900 border border-zinc-700">
+            <p className="text-red-400">Failed to connect to Filecoin network: {wallet.error}</p>
+          </div>
+          {isUsingWallet && (
+            <ButtonBase onClick={connectWallet} variant="secondary">
+              Try Again
+            </ButtonBase>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-10">
