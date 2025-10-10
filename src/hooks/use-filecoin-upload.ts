@@ -84,7 +84,7 @@ export const useFilecoinUpload = () => {
       updateProgress('announcing-cids', {
         status: 'error',
         progress: 0,
-        error: 'CID not yet indexed by IPNI. The file is stored but may take time to be discoverable on the network.'
+        error: 'CID not yet indexed by IPNI. The file is stored but may take time to be discoverable on the network.',
       })
     },
   })
