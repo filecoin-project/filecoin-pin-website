@@ -45,21 +45,15 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
   })
 
   const refreshWallet = useCallback(async () => {
-    if (!config.privateKey) {
-      setWallet((prev) => ({
-        status: 'error',
-        error: 'Missing VITE_FILECOIN_PRIVATE_KEY environment variable. Wallet data unavailable.',
-        data: prev.data,
-      }))
-      return
-    }
-
     setWallet((prev) => ({
       status: 'loading',
       data: prev.status === 'ready' ? prev.data : undefined,
     }))
 
     try {
+      // getSynapseClient now handles the fallback logic:
+      // 1. Try private key if VITE_FILECOIN_PRIVATE_KEY is set
+      // 2. Otherwise, attempt to connect to browser wallet (MetaMask, etc.)
       const synapse = await getSynapseClient(config)
       synapseRef.current = synapse
       const snapshot = await fetchWalletSnapshot(synapse)
@@ -68,10 +62,11 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
         data: snapshot,
       })
     } catch (error) {
-      console.error('Failed to load wallet balances', error)
+      console.error('Failed to load wallet', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unable to load wallet. See console for details.'
       setWallet((prev) => ({
         status: 'error',
-        error: error instanceof Error ? error.message : 'Unable to load wallet balances. See console for details.',
+        error: errorMessage,
         data: prev.data,
       }))
     }
