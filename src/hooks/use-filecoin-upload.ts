@@ -73,7 +73,7 @@ export const useFilecoinUpload = () => {
   useIpniCheck({
     cid: uploadState.currentCid ?? null,
     isActive: isAnnouncingCids,
-    maxAttempts: 5,
+    maxAttempts: 10,
     onSuccess: () => {
       console.debug('[FilecoinUpload] IPNI check succeeded, marking announcing-cids as completed')
       updateProgress('announcing-cids', { status: 'completed', progress: 100 })

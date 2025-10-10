@@ -98,35 +98,12 @@ export default function Content() {
     <div className="space-y-10">
       <PageTitle />
 
-      {/* Always show upload history when available */}
-      {uploadHistory.length > 0 && (
+      {/* Show drag-n-drop only when not actively uploading */}
+      {!uploadedFile && (
         <div className="space-y-6">
-          <Heading tag="h2">Uploaded files</Heading>
-          {uploadHistory.map((upload) => (
-            <UploadProgress
-              cid={upload.cid}
-              fileName={upload.fileName}
-              fileSize={upload.fileSize}
-              isExpanded={expandedHistoryItems.has(upload.id)}
-              key={upload.id}
-              network={upload.network}
-              onToggleExpanded={() => {
-                setExpandedHistoryItems((prev) => {
-                  const next = new Set(prev)
-                  if (next.has(upload.id)) {
-                    next.delete(upload.id)
-                  } else {
-                    next.add(upload.id)
-                  }
-                  return next
-                })
-              }}
-              pieceCid={upload.pieceCid}
-              progress={COMPLETED_PROGRESS}
-              providerName={upload.providerName}
-              transactionHash={upload.transactionHash}
-            />
-          ))}
+          <Heading tag="h2">Upload a file</Heading>
+          {isInitializing && <LoadingState message={getLoadingMessage()} />}
+          <DragNDrop isUploading={uploadState.isUploading} onUpload={handleUpload} />
         </div>
       )}
 
@@ -177,12 +154,35 @@ export default function Content() {
         </div>
       )}
 
-      {/* Show drag-n-drop only when not actively uploading */}
-      {!uploadedFile && (
+      {/* Always show upload history when available */}
+      {uploadHistory.length > 0 && (
         <div className="space-y-6">
-          <Heading tag="h2">Upload a file</Heading>
-          {isInitializing && <LoadingState message={getLoadingMessage()} />}
-          <DragNDrop isUploading={uploadState.isUploading} onUpload={handleUpload} />
+          <Heading tag="h2">Uploaded files</Heading>
+          {uploadHistory.map((upload) => (
+            <UploadProgress
+              cid={upload.cid}
+              fileName={upload.fileName}
+              fileSize={upload.fileSize}
+              isExpanded={expandedHistoryItems.has(upload.id)}
+              key={upload.id}
+              network={upload.network}
+              onToggleExpanded={() => {
+                setExpandedHistoryItems((prev) => {
+                  const next = new Set(prev)
+                  if (next.has(upload.id)) {
+                    next.delete(upload.id)
+                  } else {
+                    next.add(upload.id)
+                  }
+                  return next
+                })
+              }}
+              pieceCid={upload.pieceCid}
+              progress={COMPLETED_PROGRESS}
+              providerName={upload.providerName}
+              transactionHash={upload.transactionHash}
+            />
+          ))}
         </div>
       )}
     </div>
