@@ -36,7 +36,7 @@ export default function Content() {
 
   // Determine if we're still initializing (wallet, synapse, provider)
   // Note: We don't block on isLoadingPieces - users can upload while history loads
-  const isInitializing = wallet.status === 'loading' || wallet.status === 'idle' || !synapse || !providerInfo
+  const isInitializing = wallet.status === 'loading' || wallet.status === 'idle'
 
   // Get loading message based on current state
   const getLoadingMessage = () => {
@@ -118,11 +118,7 @@ export default function Content() {
       {/* Show drag-n-drop - disabled when actively uploading */}
       <div className="space-y-6">
         <Heading tag="h2">Upload a file</Heading>
-        {isInitializing ? (
-          <LoadingState message={getLoadingMessage()} />
-        ) : (
-          <DragNDrop key={dragDropKey} isUploading={uploadState.isUploading} onUpload={handleUpload} />
-        )}
+        <DragNDrop key={dragDropKey} isUploading={uploadState.isUploading} onUpload={handleUpload} />
       </div>
 
       {/* Show active upload progress */}
@@ -144,6 +140,7 @@ export default function Content() {
         </div>
       )}
 
+      {(isLoadingPieces || isInitializing) && uploadHistory.length === 0 && <LoadingState message={getLoadingMessage()} />}
       {/* Always show upload history when available */}
       {uploadHistory.length > 0 && (
         <div className="space-y-6">
