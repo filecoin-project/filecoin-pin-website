@@ -109,25 +109,23 @@ export default function UploadProgress({ fileName, fileSize, progress }: UploadP
       defaultValue="file-card"
       type="single"
     >
-      <AccordionItem className="space-y-6" value="file-card">
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <div className="flex flex-col gap-1">
-              <div className="text-white">{fileName}</div>
-              <div className="text-zinc-400">{fileSize}</div>
-            </div>
-            <div className="flex items-center gap-6">
-              {getCombinedFirstStageStatus() === 'completed' ? (
-                <BadgeStatus status="pinned" />
-              ) : (
-                <BadgeStatus status={getCombinedFirstStageStatus()} />
-              )}
-              <AccordionTrigger />
-            </div>
+      <AccordionItem value="file-card">
+        <div className="flex justify-between items-center">
+          <div className="flex flex-col gap-1">
+            <p className="text-white font-medium">{fileName}</p>
+            <p className="text-zinc-400">{fileSize}</p>
+          </div>
+          <div className="flex items-center gap-6">
+            {getCombinedFirstStageStatus() === 'completed' ? (
+              <BadgeStatus status="pinned" />
+            ) : (
+              <BadgeStatus status={getCombinedFirstStageStatus()} />
+            )}
+            <AccordionTrigger />
           </div>
         </div>
 
-        <AccordionContent className="space-y-6">
+        <AccordionContent className="space-y-6 mt-6">
           {/* Combined first stage: creating-car + checking-readiness + uploading-car */}
           {progress.find((p) => p.step === 'creating-car') && (
             <CardWrapper>
