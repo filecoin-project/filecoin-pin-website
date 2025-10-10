@@ -86,7 +86,9 @@ export function useDataSetManager({ synapse, walletAddress }: UseDataSetManagerP
       }
 
       // Check localStorage first
+      console.debug('[DataSet] Checking localStorage for wallet:', walletAddress)
       const storedId = getStoredDataSetId(walletAddress)
+      console.debug('[DataSet] StoredId from localStorage:', storedId)
 
       // Need to create storage context (either for existing or new data set)
       setDataSet((prev) => ({ status: 'initializing', dataSetId: storedId ?? prev.dataSetId }))

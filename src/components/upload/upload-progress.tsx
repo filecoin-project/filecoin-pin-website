@@ -1,8 +1,8 @@
 import { useCallback } from 'react'
-import { CardHeader, CardWrapper } from '../ui/card.tsx'
-import { ProgressBar } from '../ui/progress-bar.tsx'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion.tsx'
 import { BadgeStatus } from '../ui/badge-status.tsx'
+import { CardHeader, CardWrapper } from '../ui/card.tsx'
+import { ProgressBar } from '../ui/progress-bar.tsx'
 
 export interface UploadProgress {
   step: 'creating-car' | 'uploading-car' | 'checking-readiness' | 'announcing-cids' | 'finalizing-transaction'
@@ -17,6 +17,11 @@ interface UploadProgressProps {
   progress: UploadProgress[]
   isExpanded?: boolean
   onToggleExpanded?: () => void
+  cid?: string
+  pieceCid?: string
+  providerName?: string
+  transactionHash?: string
+  network?: string
 }
 
 // simple type to help with searching for UploadProgress['step'] in the first step group
@@ -53,7 +58,18 @@ const createStepGroup = (progress: UploadProgress[]) => {
   )
 }
 
-export default function UploadProgress({ fileName, fileSize, progress }: UploadProgressProps) {
+export default function UploadProgress({
+  fileName,
+  fileSize,
+  progress,
+  isExpanded = true,
+  onToggleExpanded,
+  cid,
+  pieceCid,
+  providerName,
+  transactionHash,
+  network,
+}: UploadProgressProps) {
   // Calculate combined progress for the first stage (creating CAR + checking readiness + uploading)
   const getCombinedFirstStageProgress = useCallback(() => {
     const { creatingCar, checkingReadiness, uploadingCar } = createStepGroup(progress)
@@ -102,12 +118,46 @@ export default function UploadProgress({ fileName, fileSize, progress }: UploadP
     }
   }
 
+  const getEstimatedTime = (step: UploadProgress['step']) => {
+    switch (step) {
+      case 'creating-car':
+      case 'checking-readiness':
+      case 'uploading-car':
+        return 'Estimated time: ~30 seconds'
+      case 'announcing-cids':
+        return 'Estimated time: ~30 seconds'
+      case 'finalizing-transaction':
+        return 'Estimated time: ~30-60 seconds'
+    }
+  }
+
+  // Check if all steps are completed AND we have a CID (upload actually finished)
+  const isCompleted = progress.every((p) => p.status === 'completed') && !!cid
+
+  // Check if any step is in error
+  const hasError = progress.some((p) => p.status === 'error')
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text)
+  }
+
+  // Determine the badge status for the file card header
+  const getBadgeStatus = () => {
+    if (isCompleted) return 'pinned'
+    if (hasError) return 'error'
+    // Check if any step is in progress
+    if (progress.some((p) => p.status === 'in-progress')) return 'in-progress'
+    // If no steps are in progress but not all completed, must be pending
+    return 'pending'
+  }
+
   return (
     <Accordion
       className="rounded-xl space-y-6 overflow-hidden border p-6 border-zinc-700"
       collapsible
-      defaultValue="file-card"
+      onValueChange={onToggleExpanded ? () => onToggleExpanded() : undefined}
       type="single"
+      value={isExpanded ? 'file-card' : ''}
     >
       <AccordionItem value="file-card">
         <div className="flex justify-between items-center">
@@ -116,45 +166,161 @@ export default function UploadProgress({ fileName, fileSize, progress }: UploadP
             <p className="text-zinc-400">{fileSize}</p>
           </div>
           <div className="flex items-center gap-6">
-            {getCombinedFirstStageStatus() === 'completed' ? (
-              <BadgeStatus status="pinned" />
-            ) : (
-              <BadgeStatus status={getCombinedFirstStageStatus()} />
-            )}
+            <BadgeStatus status={getBadgeStatus()} />
             <AccordionTrigger />
           </div>
         </div>
 
         <AccordionContent className="space-y-6 mt-6">
-          {/* Combined first stage: creating-car + checking-readiness + uploading-car */}
-          {progress.find((p) => p.step === 'creating-car') && (
-            <CardWrapper>
-              <CardHeader
-                estimatedTime={getCombinedFirstStageProgress()}
-                status={getCombinedFirstStageStatus()}
-                title={getStepLabel('creating-car')}
-              />
-              {getCombinedFirstStageStatus() === 'in-progress' && (
-                <ProgressBar progress={getCombinedFirstStageProgress()} />
+          {/* Show progress steps only when not completed */}
+          {!isCompleted && (
+            <>
+              {/* Combined first stage: creating-car + checking-readiness + uploading-car */}
+              {progress.find((p) => p.step === 'creating-car') && (
+                <CardWrapper>
+                  <CardHeader
+                    estimatedTime={getEstimatedTime('creating-car')}
+                    status={getCombinedFirstStageStatus()}
+                    title={getStepLabel('creating-car')}
+                  />
+                  {getCombinedFirstStageStatus() === 'in-progress' && (
+                    <ProgressBar progress={getCombinedFirstStageProgress()} />
+                  )}
+                </CardWrapper>
               )}
-            </CardWrapper>
+
+              {/* Show remaining steps individually */}
+              {progress
+                .filter(
+                  (step) =>
+                    step.step !== 'creating-car' && step.step !== 'checking-readiness' && step.step !== 'uploading-car'
+                )
+                .map((step) => {
+                  return (
+                    <CardWrapper key={step.step}>
+                      <CardHeader
+                        estimatedTime={getEstimatedTime(step.step)}
+                        status={step.status}
+                        title={getStepLabel(step.step)}
+                      />
+                      {step.error && <div className="error-message text-red-400 mt-2">{step.error}</div>}
+
+                      {/* Show transaction hash in the finalizing step */}
+                      {step.step === 'finalizing-transaction' && transactionHash && (
+                        <div className="mt-4 space-y-2">
+                          <p className="text-zinc-400 text-sm">Transaction hash</p>
+                          <div className="flex items-center gap-2">
+                            <a
+                              className="text-blue-400 hover:text-blue-300 underline break-all"
+                              href={`https://calibration.filfox.info/en/message/${transactionHash}`}
+                              rel="noopener noreferrer"
+                              target="_blank"
+                            >
+                              {transactionHash}
+                            </a>
+                            <button
+                              className="text-zinc-400 hover:text-white"
+                              onClick={() => copyToClipboard(transactionHash)}
+                              title="Copy to clipboard"
+                              type="button"
+                            >
+                              📋
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </CardWrapper>
+                  )
+                })}
+            </>
           )}
 
-          {/* Show remaining steps individually */}
-          {progress
-            .filter(
-              (step) =>
-                step.step !== 'creating-car' && step.step !== 'checking-readiness' && step.step !== 'uploading-car'
-            )
-            .map((step) => {
-              return (
-                <CardWrapper key={step.step}>
-                  <CardHeader status={step.status} title={getStepLabel(step.step)} />
-                  {step.status === 'in-progress' && <ProgressBar progress={step.progress} />}
-                  {step.error && <div className="error-message">{step.error}</div>}
-                </CardWrapper>
-              )
-            })}
+          {/* Completed state - show CIDs and provider info */}
+          {isCompleted && cid && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-zinc-400 text-sm">IPFS Root CID</p>
+                <div className="flex items-center gap-2">
+                  <a
+                    className="text-blue-400 hover:text-blue-300 underline break-all"
+                    href={`https://dweb.link/ipfs/${cid}`}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    {cid}
+                  </a>
+                  <button
+                    className="text-zinc-400 hover:text-white"
+                    onClick={() => copyToClipboard(cid)}
+                    title="Copy to clipboard"
+                    type="button"
+                  >
+                    📋
+                  </button>
+                  <a
+                    className="text-zinc-400 hover:text-white"
+                    href={`https://dweb.link/ipfs/${cid}`}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                    title="Download"
+                  >
+                    ⬇️
+                  </a>
+                </div>
+              </div>
+
+              {pieceCid && (
+                <div className="space-y-2">
+                  <p className="text-zinc-400 text-sm">Filecoin Piece CID</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-white break-all">{pieceCid}</span>
+                    <button
+                      className="text-zinc-400 hover:text-white"
+                      onClick={() => copyToClipboard(pieceCid)}
+                      title="Copy to clipboard"
+                      type="button"
+                    >
+                      📋
+                    </button>
+                    <a
+                      className="text-zinc-400 hover:text-white"
+                      href={`https://pdp.vxb.ai/${network || 'calibration'}/piece/${pieceCid}`}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                      title="View on PDP Explorer"
+                    >
+                      ⬇️
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {providerName && (
+                <div className="space-y-2">
+                  <p className="text-zinc-400 text-sm">Provider</p>
+                  <div>
+                    <a
+                      className="text-blue-400 hover:text-blue-300 underline"
+                      href={`https://filfox.info/en/address/${providerName}`}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    >
+                      {providerName}
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-4">
+                <button
+                  className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded transition-colors"
+                  type="button"
+                >
+                  View proofs
+                </button>
+              </div>
+            </div>
+          )}
         </AccordionContent>
       </AccordionItem>
     </Accordion>

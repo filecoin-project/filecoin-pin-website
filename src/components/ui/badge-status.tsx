@@ -1,5 +1,5 @@
-import { CircleCheck, LoaderCircle } from 'lucide-react'
 import { cva, type VariantProps } from 'class-variance-authority'
+import { CircleCheck, LoaderCircle } from 'lucide-react'
 import { cn } from '../../utils/cn.ts'
 import type { UploadProgress } from '../upload/upload-progress.tsx'
 

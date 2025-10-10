@@ -39,9 +39,13 @@ export const useIpniCheck = ({
   const checkIpni = useCallback(async (currentCid: string): Promise<boolean> => {
     try {
       const response = await fetch(`https://cid.contact/cid/${currentCid}`)
-      // Consider 200 or 404 as successful responses (CID is indexed)
-      // 404 might mean it's indexed but has no providers yet
-      return response.ok && response.status !== 404
+      console.debug(`[IpniCheck] Response for ${currentCid}:`, response.status, response.statusText)
+
+      // Only consider 200 as successful (CID is actually indexed and available)
+      // 404 means it's not indexed yet
+      const isAvailable = response.ok && response.status === 200
+      console.debug(`[IpniCheck] CID ${currentCid} available:`, isAvailable)
+      return isAvailable
     } catch (error) {
       console.error('[IpniCheck] Error checking IPNI:', error)
       // Network errors, continue retrying
@@ -96,7 +100,9 @@ export const useIpniCheck = ({
 
   // Start polling when isActive becomes true
   useEffect(() => {
+    console.debug('[IpniCheck] useEffect triggered:', { isActive, cid, hasCid: !!cid })
     if (isActive && cid) {
+      console.debug('[IpniCheck] Starting polling for CID:', cid)
       pollWithBackoff()
     }
 
