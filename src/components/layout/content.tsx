@@ -80,7 +80,7 @@ export default function Content() {
         </div>
       ) : (
         <div className="space-y-6">
-          <Heading tag="h2">Upload files</Heading>
+          <Heading tag="h2">Upload a file</Heading>
           <DragNDrop isUploading={uploadState.isUploading} onUpload={handleUpload} />
         </div>
       )}
