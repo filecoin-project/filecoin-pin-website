@@ -130,7 +130,8 @@ export default function UploadProgress({ fileName, fileSize, progress }: UploadP
           {progress.find((p) => p.step === 'creating-car') && (
             <CardWrapper>
               <CardHeader
-                estimatedTime={getCombinedFirstStageProgress()}
+                estimatedTime={`${getCombinedFirstStageProgress()}%`}
+                hideSpinner
                 status={getCombinedFirstStageStatus()}
                 title={getStepLabel('creating-car')}
               />
@@ -147,10 +148,16 @@ export default function UploadProgress({ fileName, fileSize, progress }: UploadP
                 step.step !== 'creating-car' && step.step !== 'checking-readiness' && step.step !== 'uploading-car'
             )
             .map((step) => {
+              const estimatedTime =
+                step.step === 'announcing-cids'
+                  ? 'Estimated time: ~ 30 seconds'
+                  : step.step === 'finalizing-transaction'
+                    ? 'Estimated time: ~ 30-60 seconds'
+                    : undefined
+
               return (
                 <CardWrapper key={step.step}>
-                  <CardHeader status={step.status} title={getStepLabel(step.step)} />
-                  {step.status === 'in-progress' && <ProgressBar progress={step.progress} />}
+                  <CardHeader estimatedTime={estimatedTime} status={step.status} title={getStepLabel(step.step)} />
                   {step.error && <div className="error-message">{step.error}</div>}
                 </CardWrapper>
               )

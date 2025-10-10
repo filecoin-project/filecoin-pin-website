@@ -1,5 +1,6 @@
 import type { UploadProgress } from '../upload/upload-progress.tsx'
 import { BadgeStatus } from './badge-status.tsx'
+import { Spinner } from './spinner.tsx'
 
 type CardWrapperProps = {
   children: React.ReactNode
@@ -8,7 +9,8 @@ type CardWrapperProps = {
 type CardHeaderProps = {
   title: string
   status: UploadProgress['status']
-  estimatedTime?: number
+  hideSpinner?: true
+  estimatedTime?: string
 }
 
 type CardContentProps = {
@@ -19,11 +21,14 @@ function CardWrapper({ children }: CardWrapperProps) {
   return <div className="bg-zinc-900 p-6 rounded-lg space-y-6">{children}</div>
 }
 
-function CardHeader({ title, status, estimatedTime }: CardHeaderProps) {
+function CardHeader({ title, status, hideSpinner, estimatedTime }: CardHeaderProps) {
   return (
     <div className="flex items-center justify-between">
-      <h3 className="font-medium">{title}</h3>
-      {status === 'in-progress' && estimatedTime && <span className="text-sm text-zinc-400">{estimatedTime}%</span>}
+      <div className="flex items-center gap-3">
+        {status === 'in-progress' && !hideSpinner && <Spinner className="text-brand-700" />}
+        <h3 className="font-medium">{title}</h3>
+      </div>
+      {status === 'in-progress' && <span className="text-sm text-right text-zinc-400">{estimatedTime}</span>}
       {status !== 'in-progress' && <BadgeStatus status={status} />}
     </div>
   )
