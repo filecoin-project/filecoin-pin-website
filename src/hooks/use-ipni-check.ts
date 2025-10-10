@@ -11,7 +11,7 @@ interface UseIpniCheckOptions {
 }
 
 /**
- * Hook to poll IPNI (cid.contact) with exponential backoff to verify CID availability
+ * Hook to poll IPNI (filecoinpin.contact) with exponential backoff to verify CID availability
  */
 export const useIpniCheck = ({
   cid,
@@ -38,7 +38,7 @@ export const useIpniCheck = ({
 
   const checkIpni = useCallback(async (currentCid: string): Promise<boolean> => {
     try {
-      const response = await fetch(`https://cid.contact/cid/${currentCid}`)
+      const response = await fetch(`https://filecoinpin.contact/cid/${currentCid}`)
       console.debug(`[IpniCheck] Response for ${currentCid}:`, response.status, response.statusText)
 
       // Only consider 200 as successful (CID is actually indexed and available)
