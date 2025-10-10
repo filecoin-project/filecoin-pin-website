@@ -1,5 +1,4 @@
 import { useCallback } from 'react'
-import './upload-progress.css'
 import { CardHeader, CardWrapper } from '../ui/card.tsx'
 import { ProgressBar } from '../ui/progress-bar.tsx'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion.tsx'
