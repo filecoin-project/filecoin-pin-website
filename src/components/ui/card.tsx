@@ -1,5 +1,5 @@
 import type { UploadProgress } from '../upload/upload-progress.tsx'
-import { BadgeStatus } from './badge.tsx'
+import { BadgeStatus } from './badge-status.tsx'
 
 type CardWrapperProps = {
   children: React.ReactNode
@@ -16,14 +16,14 @@ type CardContentProps = {
 }
 
 function CardWrapper({ children }: CardWrapperProps) {
-  return <div className="bg-zinc-900 p-6 rounded-md">{children}</div>
+  return <div className="bg-zinc-900 p-6 rounded-lg">{children}</div>
 }
 
 function CardHeader({ title, status }: CardHeaderProps) {
   return (
     <div className="flex items-center justify-between">
       <h3 className="font-medium">{title}</h3>
-      {status !== 'in-progress' && <BadgeStatus mode={status} />}
+      {status !== 'in-progress' && <BadgeStatus status={status} />}
     </div>
   )
 }
