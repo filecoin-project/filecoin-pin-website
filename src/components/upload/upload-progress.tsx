@@ -212,7 +212,7 @@ export default function UploadProgress({
                           <div className="flex items-center gap-2">
                             <a
                               className="text-blue-400 hover:text-blue-300 underline break-all"
-                              href={`https://calibration.filfox.info/en/message/${transactionHash}`}
+                              href={`https://filecoin-testnet.blockscout.com/tx/${transactionHash}`}
                               rel="noopener noreferrer"
                               target="_blank"
                             >
