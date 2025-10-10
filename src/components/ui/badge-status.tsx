@@ -13,8 +13,8 @@ const badgeVariants = cva('inline-flex items-center gap-1 pl-1.5 pr-2 py-0.5 rou
   variants: {
     status: {
       'in-progress': 'bg-badge-in-progress text-badge-in-progress-text border border-badge-in-progress-border',
-      completed: 'bg-badge-success text-brand-50 border border-badge-success-border',
-      pinned: 'bg-badge-success text-brand-50 border border-badge-success-border',
+      completed: 'bg-badge-success text-brand-700 border border-badge-success-border',
+      pinned: 'bg-badge-success text-brand-700 border border-badge-success-border',
       error: null,
       pending: 'bg-zinc-800 border border-zinc-700 text-zinc-300',
     },
