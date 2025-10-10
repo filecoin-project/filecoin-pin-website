@@ -3,10 +3,10 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '../../utils/cn.ts'
 import type { UploadProgress } from '../upload/upload-progress.tsx'
 
-type BadgeStatus = UploadProgress['status'] | 'pinned'
+type Status = UploadProgress['status'] | 'pinned'
 
 type BadgeStatusProps = VariantProps<typeof badgeVariants> & {
-  mode: BadgeStatus
+  status: Status
 }
 
 const badgeVariants = cva('inline-flex items-center gap-1 pl-1.5 pr-2 py-0.5 rounded-full text-sm font-medium', {
@@ -24,7 +24,7 @@ const badgeVariants = cva('inline-flex items-center gap-1 pl-1.5 pr-2 py-0.5 rou
   },
 })
 
-const statusIcons: Record<BadgeStatus, React.ReactNode> = {
+const statusIcons: Record<Status, React.ReactNode> = {
   'in-progress': <LoaderCircle size={12} />,
   completed: <CircleCheck size={12} />,
   pinned: <CircleCheck size={12} />,
@@ -32,7 +32,7 @@ const statusIcons: Record<BadgeStatus, React.ReactNode> = {
   pending: null,
 }
 
-const statusLabels: Record<BadgeStatus, string | null> = {
+const statusLabels: Record<Status, string | null> = {
   'in-progress': 'In progress',
   completed: 'Complete',
   pinned: 'Pinned',
@@ -40,10 +40,10 @@ const statusLabels: Record<BadgeStatus, string | null> = {
   pending: 'Pending',
 }
 
-function BadgeStatus({ mode }: BadgeStatusProps) {
+function BadgeStatus({ status }: BadgeStatusProps) {
   return (
-    <span className={cn(badgeVariants({ status: mode }))}>
-      {statusIcons[mode]} {statusLabels[mode]}
+    <span className={cn(badgeVariants({ status }))}>
+      {statusIcons[status]} {statusLabels[status]}
     </span>
   )
 }
