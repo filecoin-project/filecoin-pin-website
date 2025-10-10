@@ -153,10 +153,6 @@ export default function UploadProgress({
 
   return (
     <div className="upload-progress-container">
-      <div className="upload-header">
-        <h2>Uploaded files</h2>
-      </div>
-
       <div className="file-card">
         <div className="file-card-header">
           <div className="file-info">

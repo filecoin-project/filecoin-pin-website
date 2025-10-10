@@ -104,8 +104,8 @@ export default function Content() {
     <div className="content">
       <PageTitle />
 
-      {/* Show upload history if no active upload */}
-      {!uploadedFile && uploadHistory.length > 0 && (
+      {/* Always show upload history when available */}
+      {uploadHistory.length > 0 && (
         <div className="upload-history-section">
           <div className="upload-header">
             <h2>Uploaded files</h2>
@@ -138,8 +138,8 @@ export default function Content() {
         </div>
       )}
 
-      {/* Show upload progress if uploading */}
-      {uploadedFile ? (
+      {/* Show active upload progress */}
+      {uploadedFile && (
         <div className="upload-progress-section">
           <UploadProgress
             cid={uploadState.currentCid}
@@ -182,7 +182,10 @@ export default function Content() {
             </div>
           )}
         </div>
-      ) : (
+      )}
+
+      {/* Show drag-n-drop only when not actively uploading */}
+      {!uploadedFile && (
         <div className="upload-section">
           {isInitializing && <LoadingState message={getLoadingMessage()} />}
           <DragNDrop isUploading={uploadState.isUploading} onUpload={handleUpload} />
