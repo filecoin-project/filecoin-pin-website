@@ -232,18 +232,18 @@ export default function UploadProgress({
                         <div className="transaction-hash-label">Transaction hash</div>
                         <div className="transaction-hash-value">
                           <a
-                            href={`https://calibration.filfox.info/en/message/${transactionHash}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
                             className="transaction-hash-link"
+                            href={`https://calibration.filfox.info/en/message/${transactionHash}`}
+                            rel="noopener noreferrer"
+                            target="_blank"
                           >
                             {transactionHash}
                           </a>
                           <button
                             className="copy-button"
                             onClick={() => copyToClipboard(transactionHash)}
-                            type="button"
                             title="Copy to clipboard"
+                            type="button"
                           >
                             📋
                           </button>
@@ -263,26 +263,26 @@ export default function UploadProgress({
               <div className="detail-label">IPFS Root CID</div>
               <div className="detail-value">
                 <a
-                  href={`https://dweb.link/ipfs/${cid}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="cid-link"
+                  href={`https://dweb.link/ipfs/${cid}`}
+                  rel="noopener noreferrer"
+                  target="_blank"
                 >
                   {cid}
                 </a>
                 <button
                   className="copy-button"
                   onClick={() => copyToClipboard(cid)}
-                  type="button"
                   title="Copy to clipboard"
+                  type="button"
                 >
                   📋
                 </button>
                 <a
-                  href={`https://dweb.link/ipfs/${cid}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="download-button"
+                  href={`https://dweb.link/ipfs/${cid}`}
+                  rel="noopener noreferrer"
+                  target="_blank"
                   title="Download"
                 >
                   ⬇️
@@ -298,20 +298,20 @@ export default function UploadProgress({
                   <button
                     className="copy-button"
                     onClick={() => copyToClipboard(pieceCid)}
-                    type="button"
                     title="Copy to clipboard"
+                    type="button"
                   >
                     📋
                   </button>
-                    <a
-                      href={`https://pdp.vxb.ai/${network || 'calibration'}/piece/${pieceCid}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="download-button"
-                      title="View on PDP Explorer"
-                    >
-                      ⬇️
-                    </a>
+                  <a
+                    className="download-button"
+                    href={`https://pdp.vxb.ai/${network || 'calibration'}/piece/${pieceCid}`}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                    title="View on PDP Explorer"
+                  >
+                    ⬇️
+                  </a>
                 </div>
               </div>
             )}
@@ -321,17 +321,16 @@ export default function UploadProgress({
                 <div className="detail-label">Provider</div>
                 <div className="detail-value">
                   <a
-                    href={`https://filfox.info/en/address/${providerName}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
                     className="provider-link"
+                    href={`https://filfox.info/en/address/${providerName}`}
+                    rel="noopener noreferrer"
+                    target="_blank"
                   >
                     {providerName}
                   </a>
                 </div>
               </div>
             )}
-
 
             <div className="completed-actions">
               <button className="view-proofs-button" type="button">
