@@ -16,7 +16,7 @@ type CardContentProps = {
 }
 
 function CardWrapper({ children }: CardWrapperProps) {
-  return <div className="bg-zinc-900 p-6 rounded-lg">{children}</div>
+  return <div className="bg-zinc-900 p-6 rounded-lg space-y-6">{children}</div>
 }
 
 function CardHeader({ title, status }: CardHeaderProps) {
