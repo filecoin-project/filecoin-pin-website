@@ -22,14 +22,24 @@ function CardWrapper({ children }: CardWrapperProps) {
 }
 
 function CardHeader({ title, status, hideSpinner, estimatedTime }: CardHeaderProps) {
+  const isInProgress = status === 'in-progress'
+
+  const showSpinner = isInProgress && !hideSpinner
+
   return (
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-3">
-        {status === 'in-progress' && !hideSpinner && <Spinner className="text-brand-700" />}
+        {showSpinner && <Spinner className="text-brand-700" />}
         <h3 className="font-medium">{title}</h3>
       </div>
-      {status === 'in-progress' && <span className="text-sm text-right text-zinc-400">{estimatedTime}</span>}
-      {status !== 'in-progress' && <BadgeStatus status={status} />}
+
+      <span aria-live="polite" className="text-sm text-right text-zinc-400" hidden={!isInProgress}>
+        {estimatedTime}
+      </span>
+
+      <div hidden={isInProgress}>
+        <BadgeStatus status={status} />
+      </div>
     </div>
   )
 }
