@@ -2,11 +2,22 @@ import { useContext, useEffect, useState } from 'react'
 import { FilecoinPinContext } from '../../context/filecoin-pin-provider.tsx'
 import { useDatasetPieces } from '../../hooks/use-dataset-pieces.ts'
 import { useFilecoinUpload } from '../../hooks/use-filecoin-upload.ts'
+import { formatFileSize } from '../../utils/format-file-size.ts'
+import { LoadingState } from '../ui/loading-state.tsx'
+import PageTitle from '../ui/page-title.tsx'
 import DragNDrop from '../upload/drag-n-drop.tsx'
+import type { UploadProgress as UploadProgressType } from '../upload/upload-progress.tsx'
 import UploadProgress from '../upload/upload-progress.tsx'
 import './content.css'
-import { formatFileSize } from '../../utils/format-file-size.ts'
-import PageTitle from '../ui/page-title.tsx'
+
+// Completed state for displaying upload history
+const COMPLETED_PROGRESS: UploadProgressType[] = [
+  { step: 'creating-car', status: 'completed', progress: 100 },
+  { step: 'checking-readiness', status: 'completed', progress: 100 },
+  { step: 'uploading-car', status: 'completed', progress: 100 },
+  { step: 'announcing-cids', status: 'completed', progress: 100 },
+  { step: 'finalizing-transaction', status: 'completed', progress: 100 },
+]
 
 export default function Content() {
   const [uploadedFile, setUploadedFile] = useState<{ file: File; cid: string } | null>(null)
@@ -119,13 +130,7 @@ export default function Content() {
                 })
               }}
               pieceCid={upload.pieceCid}
-              progress={[
-                { step: 'creating-car', status: 'completed', progress: 100 },
-                { step: 'checking-readiness', status: 'completed', progress: 100 },
-                { step: 'uploading-car', status: 'completed', progress: 100 },
-                { step: 'announcing-cids', status: 'completed', progress: 100 },
-                { step: 'finalizing-transaction', status: 'completed', progress: 100 },
-              ]}
+              progress={COMPLETED_PROGRESS}
               providerName={upload.providerName}
               transactionHash={upload.transactionHash}
             />
@@ -179,12 +184,7 @@ export default function Content() {
         </div>
       ) : (
         <div className="upload-section">
-          {isInitializing && (
-            <div className="loading-pieces">
-              <div className="loading-spinner"></div>
-              <p>{getLoadingMessage()}</p>
-            </div>
-          )}
+          {isInitializing && <LoadingState message={getLoadingMessage()} />}
           <DragNDrop isUploading={uploadState.isUploading} onUpload={handleUpload} />
         </div>
       )}
