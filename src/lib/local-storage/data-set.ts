@@ -31,6 +31,7 @@ export const getStoredDataSetId = (walletAddress: string): number | null => {
   try {
     const key = `${DATA_SET_ID_KEY}-${walletAddress}`
     const storedId = localStorage.getItem(key)
+    console.debug('[DataSetStorage] Reading from key:', key, '→', storedId || 'not found')
     return storedId ? Number.parseInt(storedId, 10) : null
   } catch (error) {
     console.warn('[DataSetStorage] Failed to read data set ID from localStorage:', error)
@@ -48,6 +49,7 @@ export const storeDataSetId = (walletAddress: string, dataSetId: number): void =
   try {
     const key = `${DATA_SET_ID_KEY}-${walletAddress}`
     localStorage.setItem(key, dataSetId.toString())
+    console.debug('[DataSetStorage] Stored dataSetId:', dataSetId, 'to key:', key)
   } catch (error) {
     console.warn('[DataSetStorage] Failed to store data set ID in localStorage:', error)
   }
