@@ -1,4 +1,4 @@
-.upload-progress-container {
+/* .upload-progress-container {
   max-width: 800px;
   margin: 0 auto;
 }
@@ -14,12 +14,6 @@
   margin: 0;
 }
 
-.file-card {
-  background: #2a2a2a;
-  border-radius: 12px;
-  padding: 20px;
-  border: 1px solid #3a3a3a;
-}
 
 .file-card-header {
   display: flex;
@@ -198,4 +192,4 @@
   color: #f44336;
   font-size: 12px;
   margin-top: 8px;
-}
+} */
