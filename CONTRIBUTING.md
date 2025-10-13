@@ -7,10 +7,18 @@ Thanks for helping build the Filecoin Pin demo! This document captures the prefe
 1. Install dependencies with `npm install`.
 2. Run `npm run dev` and open `http://localhost:5173` to iterate locally.
 3. Use `npm run lint` before opening a PR.
-4. Provide a Vite-friendly `.env` file with:
-   - `VITE_FILECOIN_PRIVATE_KEY` – required for Synapse wallet queries (use calibration test keys for local work).
-   - `VITE_FILECOIN_RPC_URL` – optional override for the Filecoin RPC endpoint.
-   - `VITE_WARM_STORAGE_ADDRESS` – optional warm storage contract override.
+4. Provide a Vite-friendly `.env` file with authentication (choose one method):
+
+   **Option 1: Private Key (local development only)**
+   - `VITE_FILECOIN_PRIVATE_KEY` – Your wallet's private key (use calibration test keys for local work).
+
+   **Option 2: Session Key (recommended for deployments)**
+   - `VITE_WALLET_ADDRESS` – The wallet address that created the session key.
+   - `VITE_SESSION_KEY` – A session key authorized for this wallet.
+
+   **Optional environment variables:**
+   - `VITE_FILECOIN_RPC_URL` – Optional override for the Filecoin RPC endpoint.
+   - `VITE_WARM_STORAGE_ADDRESS` – Optional warm storage contract override.
 
 ## Source Layout
 
@@ -23,20 +31,25 @@ The main logic demonstrating `filecoin-pin` usage:
 - **`src/hooks/use-filecoin-upload.ts`** – Core upload hook showing how to use `filecoin-pin` to upload files to Filecoin with progress tracking.
 - **`src/context/filecoin-pin-provider.tsx`** – React context that initializes and exposes the Synapse client, manages wallet state.
 - `src/lib/filecoin-pin/` – Configuration and Synapse client singleton.
-  - `config.ts` – Reads environment variables for Synapse configuration.
+  - `config.ts` – Reads environment variables for Synapse configuration (supports both private key and session key auth).
   - `synapse.ts` – Singleton pattern for Synapse client initialization.
   - `wallet.ts` – Helper functions for fetching and formatting wallet data.
+- `src/lib/local-storage/` – Browser localStorage utilities.
+  - `data-set.ts` – Stores and retrieves data set IDs scoped by wallet address.
 
 ### Supporting Hooks
 
+- `src/hooks/use-data-set-manager.ts` – Manages data set lifecycle (creation, localStorage persistence, storage context).
 - `src/hooks/use-wallet.ts` – Selector hook for wallet data (address, balances) used in the header.
 - `src/hooks/use-ipni-check.ts` – Polls IPNI to verify CID announcements after upload.
+- `src/hooks/use-dataset-pieces.ts` – Fetches and displays uploaded pieces from a data set.
 
 ### UI Components
 
 - `src/components/upload/` – Drag-and-drop zone and progress display UI.
 - `src/components/layout/` – Header, sidebar, and content layout scaffolding.
-- `src/components/common/` – Reusable UI components like buttons.
+- `src/components/file-picker/` – File selection UI with drag-and-drop support.
+- `src/components/ui/` – Reusable UI components (buttons, cards, badges, etc.).
 - `src/app.tsx` – Top-level shell.
 - `src/main.tsx` – React entry point and provider registration.
 
