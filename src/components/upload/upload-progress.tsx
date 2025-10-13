@@ -4,9 +4,9 @@ import { ButtonLink } from '../ui/button/button-link.tsx'
 import { Card } from '../ui/card.tsx'
 import { DownloadButton } from '../ui/download-button.tsx'
 import { FileInfo } from '../ui/file-info.tsx'
+import { Link } from '../ui/link.tsx'
 import { ProgressBar } from '../ui/progress-bar.tsx'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
-
 export interface UploadProgress {
   step: 'creating-car' | 'uploading-car' | 'checking-readiness' | 'announcing-cids' | 'finalizing-transaction'
   progress: number // 0-100
@@ -227,36 +227,17 @@ export default function UploadProgress({
 
               {pieceCid && (
                 <Card.Wrapper>
-                  <Card.InfoRow
-                    subtitle={
-                      <TextWithCopyToClipboard
-                        href={`https://pdp.vxb.ai/${network || 'calibration'}/piece/${pieceCid}`}
-                        text={pieceCid}
-                      />
-                    }
-                    title="Filecoin Piece CID"
-                  >
+                  <Card.InfoRow subtitle={<TextWithCopyToClipboard text={pieceCid} />} title="Filecoin Piece CID">
                     <DownloadButton href={`https://pdp.vxb.ai/${network || 'calibration'}/piece/${pieceCid}`} />
                   </Card.InfoRow>
-                </Card.Wrapper>
-              )}
-              {providerName && (
-                <Card.Wrapper>
-                  <Card.InfoRow
-                    subtitle={
-                      <a
-                        className="text-brand-500"
-                        href={`https://filfox.info/en/address/${providerName}`}
-                        rel="noopener noreferrer"
-                        target="_blank"
-                      >
-                        {providerName}
-                      </a>
-                    }
-                    title="Provider"
-                  >
-                    <ButtonLink href={'#'}>View proofs</ButtonLink>
-                  </Card.InfoRow>
+                  {providerName && (
+                    <Card.InfoRow
+                      subtitle={<Link href={`https://filfox.info/en/address/${providerName}`}>{providerName}</Link>}
+                      title="Provider"
+                    >
+                      <ButtonLink href={'#'}>View proofs</ButtonLink>
+                    </Card.InfoRow>
+                  )}
                 </Card.Wrapper>
               )}
             </>

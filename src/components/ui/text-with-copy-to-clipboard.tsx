@@ -1,4 +1,5 @@
 import { Copy } from 'lucide-react'
+import { Link } from './link.tsx'
 
 type TextWithCopyToClipboardProps = {
   text: string
@@ -16,14 +17,7 @@ function TextWithCopyToClipboard({ text, href }: TextWithCopyToClipboardProps) {
 
   return (
     <div className="flex items-center gap-2">
-      {href ? (
-        <a className="text-brand-500" href={href} rel="noopener noreferrer" target="_blank">
-          {text}
-        </a>
-      ) : (
-        <span className="text-zinc-400 break-all">{text}</span>
-      )}
-
+      {href ? <Link href={href}>{text}</Link> : <span className="text-zinc-400">{text}</span>}
       <button
         className="cursor-pointer text-zinc-400 p-2 -m-2 hover:text-white"
         onClick={handleCopyToClipboard}
