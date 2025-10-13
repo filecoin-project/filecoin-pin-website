@@ -1,12 +1,3 @@
-@import "./vars.css";
-
-#root {
-  min-height: 100vh;
-  min-width: 100vw;
-  background-color: var(--color-background);
-  color: var(--color-text-primary);
-}
-
 .card {
   padding: var(--spacing-lg);
 }
