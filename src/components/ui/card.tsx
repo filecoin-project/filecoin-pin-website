@@ -35,7 +35,7 @@ function CardHeader({ title, status, estimatedTime, hideSpinner }: CardHeaderPro
   return (
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-3">
-        {showSpinner && <Spinner />}
+        {showSpinner && <Spinner size="sm" />}
         <Heading tag="h4">{title}</Heading>
       </div>
 
