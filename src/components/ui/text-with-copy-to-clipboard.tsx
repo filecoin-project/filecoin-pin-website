@@ -3,10 +3,9 @@ import { Copy } from 'lucide-react'
 type TextWithCopyToClipboardProps = {
   text: string
   href?: string
-  hideCopyToClipboard?: boolean
 }
 
-function TextWithCopyToClipboard({ text, href, hideCopyToClipboard = false }: TextWithCopyToClipboardProps) {
+function TextWithCopyToClipboard({ text, href }: TextWithCopyToClipboardProps) {
   const handleCopyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(text)
@@ -25,16 +24,14 @@ function TextWithCopyToClipboard({ text, href, hideCopyToClipboard = false }: Te
         <span className="text-zinc-400 break-all">{text}</span>
       )}
 
-      {!hideCopyToClipboard && (
-        <button
-          className="cursor-pointer text-zinc-400 p-2 -m-2 hover:text-white"
-          onClick={handleCopyToClipboard}
-          title="Copy to clipboard"
-          type="button"
-        >
-          <Copy size={16} />
-        </button>
-      )}
+      <button
+        className="cursor-pointer text-zinc-400 p-2 -m-2 hover:text-white"
+        onClick={handleCopyToClipboard}
+        title="Copy to clipboard"
+        type="button"
+      >
+        <Copy size={16} />
+      </button>
     </div>
   )
 }

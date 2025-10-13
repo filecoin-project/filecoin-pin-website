@@ -242,11 +242,14 @@ export default function UploadProgress({
                 <Card.Wrapper>
                   <Card.InfoRow
                     subtitle={
-                      <TextWithCopyToClipboard
-                        hideCopyToClipboard
+                      <a
+                        className="text-brand-500"
                         href={`https://filfox.info/en/address/${providerName}`}
-                        text={providerName}
-                      />
+                        rel="noopener noreferrer"
+                        target="_blank"
+                      >
+                        {providerName}
+                      </a>
                     }
                     title="Provider"
                   >
