@@ -45,10 +45,13 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
   })
 
   const refreshWallet = useCallback(async () => {
-    if (!config.privateKey) {
+    const hasStandardAuth = config.privateKey != null
+    const hasSessionKeyAuth = config.walletAddress != null && config.sessionKey != null
+
+    if (!hasStandardAuth && !hasSessionKeyAuth) {
       setWallet((prev) => ({
         status: 'error',
-        error: 'Missing VITE_FILECOIN_PRIVATE_KEY environment variable. Wallet data unavailable.',
+        error: 'Missing authentication: provide either VITE_FILECOIN_PRIVATE_KEY or (VITE_WALLET_ADDRESS + VITE_SESSION_KEY)',
         data: prev.data,
       }))
       return
