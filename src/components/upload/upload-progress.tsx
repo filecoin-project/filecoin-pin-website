@@ -172,6 +172,7 @@ export default function UploadProgress({
                 <Card.Wrapper>
                   <Card.Header
                     estimatedTime={getEstimatedTime('creating-car')}
+                    hideSpinner={true}
                     status={getCombinedFirstStageStatus()}
                     title={getStepLabel('creating-car')}
                   />
