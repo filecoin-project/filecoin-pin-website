@@ -3,7 +3,7 @@ import SidebarSteps from './sidebar-steps.tsx'
 
 export default function Sidebar() {
   return (
-    <div className="flex flex-col justify-between min-h-full">
+    <div className="sticky top-10 flex flex-col gap-40 justify-between">
       <SidebarSteps />
       <SidebarLinks />
     </div>
