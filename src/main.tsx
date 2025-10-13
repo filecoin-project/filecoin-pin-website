@@ -1,9 +1,9 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import { Toaster } from 'sonner'
 import App from './app.tsx'
 import { FilecoinPinProvider } from './context/filecoin-pin-provider.tsx'
-import { Toaster } from 'sonner'
 
 const root = document.getElementById('root')
 

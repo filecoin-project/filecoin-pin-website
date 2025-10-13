@@ -1,5 +1,5 @@
 import { clsx } from 'clsx'
-import { CircleCheck, AlertTriangle, CircleAlert } from 'lucide-react'
+import { AlertTriangle, CircleAlert, CircleCheck } from 'lucide-react'
 
 const variantConfig = {
   success: {
