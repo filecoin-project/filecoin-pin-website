@@ -2,7 +2,7 @@ import type { SynapseService } from 'filecoin-pin/core/synapse'
 import { createContext, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { type DataSetState, useDataSetManager } from '../hooks/use-data-set-manager.ts'
 import { filecoinPinConfig } from '../lib/filecoin-pin/config.ts'
-import { getSynapseClient } from '../lib/filecoin-pin/synapse.ts'
+import { disconnectWallet as disconnectSynapseWallet, getSynapseClient } from '../lib/filecoin-pin/synapse.ts'
 import { fetchWalletSnapshot, type WalletSnapshot } from '../lib/filecoin-pin/wallet.ts'
 
 type ProviderInfo = NonNullable<ReturnType<typeof useDataSetManager>['providerInfo']>
@@ -17,6 +17,9 @@ type WalletState =
 export interface FilecoinPinContextValue {
   wallet: WalletState
   refreshWallet: () => Promise<void>
+  connectWallet: () => Promise<void>
+  disconnectWallet: () => void
+  isUsingWallet: boolean // true if using browser wallet, false if using private key
   synapse: SynapseService['synapse'] | null
   dataSet: DataSetState
   ensureDataSet: () => Promise<number | null>
@@ -38,44 +41,64 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
   const synapseRef = useRef<SynapseService['synapse'] | null>(null)
   const config = filecoinPinConfig
 
+  // Check if using wallet connection (no private key) vs private key
+  const isUsingWallet = !config.privateKey
+
   // Use the data set manager hook
   const { dataSet, ensureDataSet, storageContext, providerInfo } = useDataSetManager({
     synapse: synapseRef.current,
     walletAddress: wallet.status === 'ready' ? wallet.data.address : null,
   })
 
-  const refreshWallet = useCallback(async () => {
-    if (!config.privateKey) {
-      setWallet((prev) => ({
-        status: 'error',
-        error: 'Missing VITE_FILECOIN_PRIVATE_KEY environment variable. Wallet data unavailable.',
-        data: prev.data,
-      }))
-      return
-    }
-
+  const connectWallet = useCallback(async () => {
     setWallet((prev) => ({
       status: 'loading',
       data: prev.status === 'ready' ? prev.data : undefined,
     }))
 
     try {
+      // getSynapseClient now handles the fallback logic:
+      // 1. Try private key if VITE_FILECOIN_PRIVATE_KEY is set
+      // 2. Otherwise, attempt to connect to browser wallet (MetaMask, etc.)
       const synapse = await getSynapseClient(config)
       synapseRef.current = synapse
       const snapshot = await fetchWalletSnapshot(synapse)
+
       setWallet({
         status: 'ready',
         data: snapshot,
       })
     } catch (error) {
-      console.error('Failed to load wallet balances', error)
+      console.error('Failed to load wallet', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unable to load wallet. See console for details.'
       setWallet((prev) => ({
         status: 'error',
-        error: error instanceof Error ? error.message : 'Unable to load wallet balances. See console for details.',
+        error: errorMessage,
         data: prev.data,
       }))
     }
   }, [config])
+
+  const refreshWallet = useCallback(async () => {
+    // Only auto-connect if using private key
+    // For wallet mode, user must explicitly click "Connect Wallet"
+    if (isUsingWallet) {
+      console.info('Wallet mode detected, waiting for user to click Connect Wallet button')
+      setWallet({
+        status: 'idle',
+      })
+      return
+    }
+
+    // Auto-connect with private key
+    await connectWallet()
+  }, [connectWallet, isUsingWallet])
+
+  const disconnectWallet = useCallback(async () => {
+    await disconnectSynapseWallet()
+    synapseRef.current = null
+    setWallet({ status: 'idle' })
+  }, [])
 
   useEffect(() => {
     void refreshWallet()
@@ -104,13 +127,26 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
     () => ({
       wallet,
       refreshWallet,
+      connectWallet,
+      disconnectWallet,
+      isUsingWallet,
       synapse: synapseRef.current,
       dataSet,
       ensureDataSet,
       storageContext,
       providerInfo,
     }),
-    [wallet, refreshWallet, dataSet, ensureDataSet, storageContext, providerInfo]
+    [
+      wallet,
+      refreshWallet,
+      connectWallet,
+      disconnectWallet,
+      isUsingWallet,
+      dataSet,
+      ensureDataSet,
+      storageContext,
+      providerInfo,
+    ]
   )
 
   return <FilecoinPinContext.Provider value={value}>{children}</FilecoinPinContext.Provider>

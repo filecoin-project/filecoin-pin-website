@@ -12,7 +12,7 @@ import { PillBalance } from '../ui/pill/pill-balance.tsx'
 import { PillWallet } from '../ui/pill/pill-wallet.tsx'
 
 export default function Header() {
-  const { status, balances, address, network } = useWallet()
+  const { status, balances, address, network, disconnect, isUsingWallet } = useWallet()
 
   const isCalibration = network === 'calibration'
   const filLabel: FilLabel = isCalibration ? CALIBRATION_LABEL_FIL : MAINNET_LABEL_FIL
@@ -45,7 +45,11 @@ export default function Header() {
             ]}
           />
         )}
-        <PillWallet address={addressDisplay} href={`https://filscan.io/en/address/${address}`} />
+        <PillWallet
+          address={addressDisplay}
+          href={`https://filscan.io/en/address/${address}`}
+          onDisconnect={isUsingWallet ? disconnect : undefined}
+        />
       </div>
     </header>
   )

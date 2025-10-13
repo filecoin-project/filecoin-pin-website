@@ -7,7 +7,7 @@ export const useWallet = () => {
     throw new Error('useWallet must be used within FilecoinPinProvider')
   }
 
-  const { wallet, refreshWallet } = context
+  const { wallet, refreshWallet, connectWallet, disconnectWallet, isUsingWallet } = context
 
   return useMemo(
     () => ({
@@ -18,7 +18,10 @@ export const useWallet = () => {
       raw: wallet.data?.raw,
       error: wallet.status === 'error' ? wallet.error : undefined,
       refresh: refreshWallet,
+      connect: connectWallet,
+      disconnect: disconnectWallet,
+      isUsingWallet, // true if using browser wallet, false if using private key
     }),
-    [wallet, refreshWallet]
+    [wallet, refreshWallet, connectWallet, disconnectWallet, isUsingWallet]
   )
 }
