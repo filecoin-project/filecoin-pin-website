@@ -9,7 +9,6 @@ import { PageTitle } from '../ui/page-title.tsx'
 import DragNDrop from '../upload/drag-n-drop.tsx'
 import type { UploadProgress as UploadProgressType } from '../upload/upload-progress.tsx'
 import UploadProgress from '../upload/upload-progress.tsx'
-import './content.css'
 import { Alert } from '../ui/alert.tsx'
 
 // Completed state for displaying upload history
@@ -56,11 +55,9 @@ export default function Content() {
   // If wallet failed to load, show error instead of spinner
   if (wallet.status === 'error') {
     return (
-      <div className="content">
+      <div className="space-y-10">
         <PageTitle />
-        <div className="error-message">
-          <p>Failed to connect to Filecoin network: {wallet.error}</p>
-        </div>
+        <Alert message={`Failed to connect to Filecoin network: ${wallet.error}`} variant="error" />
       </div>
     )
   }
@@ -115,7 +112,6 @@ export default function Content() {
   return (
     <div className="space-y-10">
       <PageTitle />
-
       <Alert
         message="This demo runs on Filecoin Calibration testnet, where data isn't permanent and infrastructure resets regularly."
         variant="neutral"
