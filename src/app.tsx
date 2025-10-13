@@ -7,9 +7,7 @@ import { SidebarLayout } from './components/layout/sidebar-layout.tsx'
 function App() {
   return (
     <SidebarLayout header={<Header />} sidebar={<Sidebar />}>
-      <div className="main-content">
-        <Content />
-      </div>
+      <Content />
     </SidebarLayout>
   )
 }

@@ -33,7 +33,7 @@ export default function Header() {
   const addressDisplay = address ? shortenAddress(address) : renderValue()?.value
 
   return (
-    <header className="flex items-center justify-between">
+    <header className="flex items-center justify-between w-full">
       <Logo />
 
       <div className="flex items-center gap-4">

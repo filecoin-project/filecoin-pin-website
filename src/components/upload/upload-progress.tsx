@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { Alert } from '@/components/ui/alert.tsx'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion.tsx'
 import { ButtonLink } from '../ui/button/button-link.tsx'
 import { Card } from '../ui/card.tsx'
@@ -196,7 +197,8 @@ export default function UploadProgress({
                         title={getStepLabel(step.step)}
                         withSpinner
                       />
-                      {step.error && <div className="error-message text-red-400 mt-2">{step.error}</div>}
+
+                      {step.error && <Alert message={step.error} variant="error" />}
 
                       {/* Show transaction hash in the finalizing step */}
                       {step.step === 'finalizing-transaction' && transactionHash && (

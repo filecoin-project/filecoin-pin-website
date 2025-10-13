@@ -1,5 +1,6 @@
 import { Copy } from 'lucide-react'
 import { Link } from './link.tsx'
+import { toast } from '@/utils/toast.tsx'
 
 type TextWithCopyToClipboardProps = {
   text: string
@@ -10,8 +11,10 @@ function TextWithCopyToClipboard({ text, href }: TextWithCopyToClipboardProps) {
   const handleCopyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(text)
+      toast.info('Copied to clipboard!')
     } catch (error) {
       console.error('Failed to copy text:', error)
+      toast.error('Failed to copy to clipboard')
     }
   }
 
