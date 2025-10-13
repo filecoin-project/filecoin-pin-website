@@ -172,7 +172,6 @@ export default function UploadProgress({
                 <Card.Wrapper>
                   <Card.Header
                     estimatedTime={getEstimatedTime('creating-car')}
-                    hideSpinner={true}
                     status={getCombinedFirstStageStatus()}
                     title={getStepLabel('creating-car')}
                   />
@@ -195,6 +194,7 @@ export default function UploadProgress({
                         estimatedTime={getEstimatedTime(step.step)}
                         status={step.status}
                         title={getStepLabel(step.step)}
+                        withSpinner
                       />
                       {step.error && <div className="error-message text-red-400 mt-2">{step.error}</div>}
 
