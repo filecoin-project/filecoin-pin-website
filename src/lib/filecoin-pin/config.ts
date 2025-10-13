@@ -14,11 +14,15 @@ const hasStandardAuth = privateKey != null
 const hasSessionKeyAuth = walletAddress != null && sessionKey != null
 
 if (!hasStandardAuth && !hasSessionKeyAuth) {
-  throw new Error('Authentication required: provide either VITE_FILECOIN_PRIVATE_KEY or (VITE_WALLET_ADDRESS + VITE_SESSION_KEY)')
+  throw new Error(
+    'Authentication required: provide either VITE_FILECOIN_PRIVATE_KEY or (VITE_WALLET_ADDRESS + VITE_SESSION_KEY)'
+  )
 }
 
 if (hasStandardAuth && hasSessionKeyAuth) {
-  throw new Error('Conflicting authentication: provide either VITE_FILECOIN_PRIVATE_KEY or (VITE_WALLET_ADDRESS + VITE_SESSION_KEY), not both')
+  throw new Error(
+    'Conflicting authentication: provide either VITE_FILECOIN_PRIVATE_KEY or (VITE_WALLET_ADDRESS + VITE_SESSION_KEY), not both'
+  )
 }
 
 export const filecoinPinConfig: SynapseSetupConfig = {

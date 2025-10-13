@@ -51,7 +51,8 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
     if (!hasStandardAuth && !hasSessionKeyAuth) {
       setWallet((prev) => ({
         status: 'error',
-        error: 'Missing authentication: provide either VITE_FILECOIN_PRIVATE_KEY or (VITE_WALLET_ADDRESS + VITE_SESSION_KEY)',
+        error:
+          'Missing authentication: provide either VITE_FILECOIN_PRIVATE_KEY or (VITE_WALLET_ADDRESS + VITE_SESSION_KEY)',
         data: prev.data,
       }))
       return

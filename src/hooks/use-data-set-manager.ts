@@ -111,7 +111,6 @@ export function useDataSetManager({ synapse, walletAddress }: UseDataSetManagerP
     isEnsuringDataSetRef.current = true
 
     try {
-
       // Check localStorage first
       console.debug('[DataSet] Checking localStorage for wallet:', walletAddress)
       const storedId = getStoredDataSetId(walletAddress)
