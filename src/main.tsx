@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './app.tsx'
 import { FilecoinPinProvider } from './context/filecoin-pin-provider.tsx'
+import { Toaster } from 'sonner'
 
 const root = document.getElementById('root')
 
@@ -13,6 +14,7 @@ if (!root) {
 createRoot(root).render(
   <StrictMode>
     <FilecoinPinProvider>
+      <Toaster duration={Infinity} position="bottom-center" />
       <App />
     </FilecoinPinProvider>
   </StrictMode>
