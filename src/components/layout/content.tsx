@@ -1,4 +1,5 @@
 import { useContext, useEffect, useState } from 'react'
+import { Alert } from '@/components/ui/alert.tsx'
 import { FilecoinPinContext } from '../../context/filecoin-pin-provider.tsx'
 import { useDatasetPieces } from '../../hooks/use-dataset-pieces.ts'
 import { useFilecoinUpload } from '../../hooks/use-filecoin-upload.ts'
@@ -9,7 +10,6 @@ import { PageTitle } from '../ui/page-title.tsx'
 import DragNDrop from '../upload/drag-n-drop.tsx'
 import type { UploadProgress as UploadProgressType } from '../upload/upload-progress.tsx'
 import UploadProgress from '../upload/upload-progress.tsx'
-import { Alert } from '../ui/alert.tsx'
 
 // Completed state for displaying upload history
 const COMPLETED_PROGRESS: UploadProgressType[] = [
