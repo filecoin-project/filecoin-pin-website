@@ -7,7 +7,7 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary: 'bg-brand-800 text-zinc-100 border border-transparent disabled:bg-button-brand-disabled',
-        secondary: 'bg-transparent text-zinc-100 border border-zinc-800',
+        secondary: 'bg-transparent text-zinc-100 border border-zinc-800 hover:bg-zinc-800',
       },
       loading: {
         true: 'cursor-wait',

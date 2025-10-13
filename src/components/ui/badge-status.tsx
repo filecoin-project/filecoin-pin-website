@@ -3,7 +3,7 @@ import { CircleCheck, LoaderCircle } from 'lucide-react'
 import { cn } from '../../utils/cn.ts'
 import type { UploadProgress } from '../upload/upload-progress.tsx'
 
-type Status = UploadProgress['status'] | 'pinned'
+export type Status = UploadProgress['status'] | 'pinned'
 
 type BadgeStatusProps = VariantProps<typeof badgeVariants> & {
   status: Status
