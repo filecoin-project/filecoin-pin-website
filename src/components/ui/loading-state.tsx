@@ -1,4 +1,4 @@
-import { Spinner } from './spinner.tsx'
+import { Spinner } from '@/components/ui/spinner'
 
 interface LoadingStateProps {
   message: string

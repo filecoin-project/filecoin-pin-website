@@ -1,5 +1,5 @@
-import SidebarLinks from './sidebar-links.tsx'
-import SidebarSteps from './sidebar-steps.tsx'
+import SidebarLinks from './sidebar-links'
+import SidebarSteps from './sidebar-steps'
 
 export default function Sidebar() {
   return (

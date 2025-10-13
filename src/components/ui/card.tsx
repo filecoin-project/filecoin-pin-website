@@ -1,7 +1,7 @@
-import type { UploadProgress } from '../upload/upload-progress.tsx'
-import { BadgeStatus } from './badge-status.tsx'
-import { Heading } from './heading.tsx'
-import { Spinner } from './spinner.tsx'
+import { BadgeStatus } from '@/components/ui/badge-status'
+import { Heading } from '@/components/ui/heading'
+import { Spinner } from '@/components/ui/spinner'
+import type { UploadProgress } from '@/components/upload/upload-progress'
 
 type CardWrapperProps = {
   children: React.ReactNode

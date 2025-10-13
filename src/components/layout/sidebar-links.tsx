@@ -1,6 +1,6 @@
 import { GitBranchIcon, Github, Terminal } from 'lucide-react'
-import { LinkIcon } from '../ui/link-icon.tsx'
-import { LinkIconContainer } from '../ui/link-icon-container.tsx'
+import { LinkIcon } from '@/components/ui/link-icon'
+import { LinkIconContainer } from '@/components/ui/link-icon-container'
 
 export default function SidebarLinks() {
   return (

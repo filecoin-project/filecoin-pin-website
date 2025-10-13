@@ -1,6 +1,6 @@
 import { Loader2Icon, type LucideProps } from 'lucide-react'
 
-import { cn } from '../../utils/cn.ts'
+import { cn } from '@/utils/cn'
 
 const sizes = {
   xs: 16,

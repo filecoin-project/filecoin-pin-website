@@ -1,11 +1,11 @@
 import { useCallback } from 'react'
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion.tsx'
-import { ButtonLink } from '../ui/button/button-link.tsx'
-import { Card } from '../ui/card.tsx'
-import { DownloadButton } from '../ui/download-button.tsx'
-import { FileInfo } from '../ui/file-info.tsx'
-import { ProgressBar } from '../ui/progress-bar.tsx'
-import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
+import { ButtonLink } from '@/components/ui/button/button-link'
+import { Card } from '@/components/ui/card'
+import { DownloadButton } from '@/components/ui/download-button'
+import { FileInfo } from '@/components/ui/file-info'
+import { ProgressBar } from '@/components/ui/progress-bar'
+import { TextWithCopyToClipboard } from '@/components/ui/text-with-copy-to-clipboard'
 
 export interface UploadProgress {
   step: 'creating-car' | 'uploading-car' | 'checking-readiness' | 'announcing-cids' | 'finalizing-transaction'

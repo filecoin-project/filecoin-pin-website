@@ -1,5 +1,5 @@
-import { BadgeStatus, type Status } from './badge-status.tsx'
-import { Heading } from './heading.tsx'
+import { BadgeStatus, type Status } from '@/components/ui/badge-status'
+import { Heading } from '@/components/ui/heading'
 
 type FileInfoProps = {
   fileName: string

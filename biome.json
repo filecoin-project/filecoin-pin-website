@@ -75,12 +75,7 @@
       "correctness": {
         "noUnusedVariables": "warn",
         "noInvalidBuiltinInstantiation": "error",
-        "useImportExtensions": {
-          "level": "error",
-          "options": {
-            "forceJsExtensions": false
-          }
-        }
+        "useImportExtensions": "off"
       },
       "style": {
         "noNamespace": "error",

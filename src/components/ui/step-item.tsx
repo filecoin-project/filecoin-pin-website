@@ -1,4 +1,4 @@
-import { BadgeNumber } from './badge-number.tsx'
+import { BadgeNumber } from '@/components/ui/badge-number'
 
 type StepItemProps = {
   step: number

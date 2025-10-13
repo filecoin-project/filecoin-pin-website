@@ -1,5 +1,5 @@
 import { cva, type VariantProps } from 'class-variance-authority'
-import { cn } from '../../utils/cn.ts'
+import { cn } from '@/utils/cn'
 
 export type HeadingProps = VariantProps<typeof headingVariants> & {
   tag: 'h1' | 'h2' | 'h3' | 'h4'

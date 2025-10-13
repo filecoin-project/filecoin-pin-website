@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from 'class-variance-authority'
 import { CircleCheck, LoaderCircle } from 'lucide-react'
-import { cn } from '../../utils/cn.ts'
-import type { UploadProgress } from '../upload/upload-progress.tsx'
+import type { UploadProgress } from '@/components/upload/upload-progress'
+import { cn } from '@/utils/cn'
 
 export type Status = UploadProgress['status'] | 'pinned'
 

@@ -1,6 +1,6 @@
-import { ButtonLink } from '../ui/button/button-link.tsx'
-import { StepItem } from '../ui/step-item.tsx'
-import { StepItemContainer } from '../ui/step-item-container.tsx'
+import { ButtonLink } from '@/components/ui/button/button-link'
+import { StepItem } from '@/components/ui/step-item'
+import { StepItemContainer } from '@/components/ui/step-item-container'
 
 export default function SidebarSteps() {
   return (
