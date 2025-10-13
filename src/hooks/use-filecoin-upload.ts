@@ -62,13 +62,6 @@ export const useFilecoinUpload = () => {
     return announcingStep?.status === 'in-progress'
   }, [uploadState.progress])
 
-  // Debug logging for IPNI check
-  console.debug('[FilecoinUpload] IPNI check state:', {
-    currentCid: uploadState.currentCid,
-    isAnnouncingCids,
-    announcingStep: uploadState.progress.find((p) => p.step === 'announcing-cids'),
-  })
-
   // Use IPNI check hook to poll for CID availability
   useIpniCheck({
     cid: uploadState.currentCid ?? null,
