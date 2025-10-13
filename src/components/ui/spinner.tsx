@@ -1,31 +1,31 @@
-interface SpinnerProps {
-  size?: 'sm' | 'md' | 'lg'
-  className?: string
+import { Loader2Icon, type LucideProps } from 'lucide-react'
+
+import { cn } from '../../utils/cn.ts'
+
+const sizes = {
+  xs: 16,
+  sm: 20,
+  md: 24,
+  lg: 28,
+  xl: 32,
+} as const
+
+type SpinnerProps = Omit<LucideProps, 'size'> & {
+  size?: keyof typeof sizes
 }
 
-const sizeMap = {
-  sm: '1rem',
-  md: '1.5rem',
-  lg: '2rem',
-}
-
-export function Spinner({ size = 'md', className = '' }: SpinnerProps) {
-  const spinnerSize = sizeMap[size]
+function Spinner({ className, size = 'md', ...props }: SpinnerProps) {
+  const sizeValue = sizes[size]
 
   return (
-    <output
+    <Loader2Icon
       aria-label="Loading"
-      aria-live="polite"
-      className={`spinner ${className}`}
-      style={{
-        display: 'inline-block',
-        width: spinnerSize,
-        height: spinnerSize,
-        border: '2px solid transparent',
-        borderTop: '2px solid currentColor',
-        borderRadius: '50%',
-        animation: 'button-spin 1s linear infinite',
-      }}
+      role="status"
+      size={sizeValue}
+      {...props}
+      className={cn('text-brand-700 animate-spin', className)}
     />
   )
 }
+
+export { Spinner }
