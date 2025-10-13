@@ -2,7 +2,7 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '../../utils/cn.ts'
 
 export type HeadingProps = VariantProps<typeof headingVariants> & {
-  tag: 'h1' | 'h2' | 'h3'
+  tag: 'h1' | 'h2' | 'h3' | 'h4'
   children: string
 }
 
@@ -12,6 +12,7 @@ const headingVariants = cva('text-balance', {
       h1: 'font-medium text-3xl leading-tight tracking-tight',
       h2: 'text-xl font-medium leading-tight tracking-tight',
       h3: 'text-lg font-medium leading-tight tracking-tight',
+      h4: 'text-base font-medium leading-tight tracking-tight',
     },
   },
   defaultVariants: {
