@@ -10,6 +10,7 @@ import DragNDrop from '../upload/drag-n-drop.tsx'
 import type { UploadProgress as UploadProgressType } from '../upload/upload-progress.tsx'
 import UploadProgress from '../upload/upload-progress.tsx'
 import './content.css'
+import { Alert } from '../ui/alert.tsx'
 
 // Completed state for displaying upload history
 const COMPLETED_PROGRESS: UploadProgressType[] = [
@@ -116,14 +117,17 @@ export default function Content() {
       <PageTitle />
 
       {/* Show drag-n-drop - disabled when actively uploading */}
-      <div className="space-y-6">
-        <Heading tag="h2">Upload a file</Heading>
-        <DragNDrop isUploading={uploadState.isUploading} key={dragDropKey} onUpload={handleUpload} />
+      <div className="space-y-10">
+        <Alert description="This demo runs on Filecoin Calibration testnet, where data isn't permanent and infrastructure resets regularly." />
+        <div className="space-y-6">
+          <Heading tag="h2">Upload a file</Heading>
+          <DragNDrop isUploading={uploadState.isUploading} key={dragDropKey} onUpload={handleUpload} />
+        </div>
       </div>
 
       {/* Show active upload progress */}
       {uploadedFile && (
-        <div className="space-y-6">
+        <div className="space-y-10">
           <Heading tag="h2">Current upload</Heading>
           <UploadProgress
             cid={uploadState.currentCid}
