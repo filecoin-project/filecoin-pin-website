@@ -6,6 +6,7 @@ import { DownloadButton } from '../ui/download-button.tsx'
 import { FileInfo } from '../ui/file-info.tsx'
 import { ProgressBar } from '../ui/progress-bar.tsx'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
+
 export interface UploadProgress {
   step: 'creating-car' | 'uploading-car' | 'checking-readiness' | 'announcing-cids' | 'finalizing-transaction'
   progress: number // 0-100
