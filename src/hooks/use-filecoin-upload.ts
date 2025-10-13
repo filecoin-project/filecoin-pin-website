@@ -42,7 +42,7 @@ export const useFilecoinUpload = () => {
   if (!context) {
     throw new Error('useFilecoinUpload must be used within FilecoinPinProvider')
   }
-  const { synapse, storageContext, providerInfo, wallet } = context
+  const { synapse, storageContext, providerInfo } = context
 
   const [uploadState, setUploadState] = useState<UploadState>({
     isUploading: false,
@@ -224,7 +224,7 @@ export const useFilecoinUpload = () => {
         }))
       }
     },
-    [updateProgress, synapse, storageContext, providerInfo, wallet, uploadState.pieceCid, uploadState.transactionHash]
+    [updateProgress, synapse, storageContext, providerInfo]
   )
 
   const resetUpload = useCallback(() => {

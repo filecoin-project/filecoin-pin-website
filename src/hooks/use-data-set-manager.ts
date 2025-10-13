@@ -56,34 +56,61 @@ export function useDataSetManager({ synapse, walletAddress }: UseDataSetManagerP
     // Guard against duplicate concurrent calls (before state updates)
     if (isEnsuringDataSetRef.current) {
       console.debug('[DataSet] Already ensuring data set (guarded by ref), skipping duplicate call')
-      return dataSet.dataSetId ?? null
+      // Return current dataSetId from state
+      return new Promise<number | null>((resolve) => {
+        setDataSet((current) => {
+          resolve(current.dataSetId ?? null)
+          return current
+        })
+      })
     }
 
-    // Set the ref guard
+    // Check if wallet is ready
+    if (!walletAddress) {
+      console.debug('[DataSet] Wallet not ready yet, will retry when ready')
+      return null
+    }
+
+    if (!synapse) {
+      console.debug('[DataSet] Synapse not initialized yet, will retry when ready')
+      return null
+    }
+
+    // Check current state before setting the guard
+    const shouldProceed = await new Promise<boolean>((resolve) => {
+      setDataSet((current) => {
+        // If we already have a data set ready, don't proceed
+        if (current.status === 'ready' && current.dataSetId) {
+          resolve(false)
+          return current
+        }
+
+        // If already initializing (state-based check), don't proceed
+        if (current.status === 'initializing') {
+          console.debug('[DataSet] Already initializing (status check), skipping duplicate request')
+          resolve(false)
+          return current
+        }
+
+        resolve(true)
+        return current
+      })
+    })
+
+    if (!shouldProceed) {
+      // Return current dataSetId
+      return new Promise<number | null>((resolve) => {
+        setDataSet((current) => {
+          resolve(current.dataSetId ?? null)
+          return current
+        })
+      })
+    }
+
+    // Set the ref guard only after checking we should proceed
     isEnsuringDataSetRef.current = true
 
     try {
-      // Check if wallet is ready
-      if (!walletAddress) {
-        console.debug('[DataSet] Wallet not ready yet, will retry when ready')
-        return null
-      }
-
-      if (!synapse) {
-        console.debug('[DataSet] Synapse not initialized yet, will retry when ready')
-        return null
-      }
-
-      // If we already have a data set ready, return it immediately
-      if (dataSet.status === 'ready' && dataSet.dataSetId) {
-        return dataSet.dataSetId
-      }
-
-      // If already initializing (state-based check), wait for it
-      if (dataSet.status === 'initializing') {
-        console.debug('[DataSet] Already initializing (status check), skipping duplicate request')
-        return dataSet.dataSetId ?? null
-      }
 
       // Check localStorage first
       console.debug('[DataSet] Checking localStorage for wallet:', walletAddress)
@@ -157,7 +184,7 @@ export function useDataSetManager({ synapse, walletAddress }: UseDataSetManagerP
       // Always release the guard, even on early returns
       isEnsuringDataSetRef.current = false
     }
-  }, [walletAddress, synapse, dataSet])
+  }, [walletAddress, synapse])
 
   return {
     dataSet,

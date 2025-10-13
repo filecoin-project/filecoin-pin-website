@@ -13,10 +13,6 @@ import type { SynapseSetupConfig } from 'filecoin-pin/core/synapse'
 let synapsePromise: Promise<SynapseService['synapse']> | null = null
 
 export const getSynapseClient = (config: SynapseSetupConfig) => {
-  if (!config.privateKey) {
-    return Promise.reject(new Error('Missing VITE_FILECOIN_PRIVATE_KEY; unable to initialize Synapse'))
-  }
-
   if (!synapsePromise) {
     synapsePromise = initializeSynapse(config, logger)
   }
