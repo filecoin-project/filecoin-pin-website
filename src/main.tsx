@@ -14,7 +14,7 @@ if (!root) {
 createRoot(root).render(
   <StrictMode>
     <FilecoinPinProvider>
-      <Toaster duration={Infinity} position="bottom-center" />
+      <Toaster mobileOffset={0} offset={0} position="bottom-right" />
       <App />
     </FilecoinPinProvider>
   </StrictMode>
