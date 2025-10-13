@@ -10,6 +10,7 @@ import DragNDrop from '../upload/drag-n-drop.tsx'
 import type { UploadProgress as UploadProgressType } from '../upload/upload-progress.tsx'
 import UploadProgress from '../upload/upload-progress.tsx'
 import './content.css'
+import { Alert } from '../ui/alert.tsx'
 
 // Completed state for displaying upload history
 const COMPLETED_PROGRESS: UploadProgressType[] = [
@@ -114,6 +115,11 @@ export default function Content() {
   return (
     <div className="space-y-10">
       <PageTitle />
+
+      <Alert
+        message="This demo runs on Filecoin Calibration testnet, where data isn't permanent and infrastructure resets regularly."
+        variant="neutral"
+      />
 
       {/* Show drag-n-drop - disabled when actively uploading */}
       <div className="space-y-6">
