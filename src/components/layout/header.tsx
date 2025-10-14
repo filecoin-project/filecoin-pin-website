@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import {
   CALIBRATION_LABEL_FIL,
   CALIBRATION_LABEL_USDFC,
@@ -11,22 +12,25 @@ import { Logo } from '../ui/logo.tsx'
 import { PillBalance } from '../ui/pill/pill-balance.tsx'
 import { PillWallet } from '../ui/pill/pill-wallet.tsx'
 
-export default function Header() {
+function Header() {
   const { status, balances, address, network } = useWallet()
 
   const isCalibration = network === 'calibration'
   const filLabel: FilLabel = isCalibration ? CALIBRATION_LABEL_FIL : MAINNET_LABEL_FIL
   const usdfcLabel: UsdfcLabel = isCalibration ? CALIBRATION_LABEL_USDFC : MAINNET_LABEL_USDFC
 
-  const renderValue = (value?: string, label?: FilLabel | UsdfcLabel) => {
-    if (value && value.trim().length > 0) {
-      const numericValue = value.replace(` ${label}`, '').trim()
-      return { value: numericValue, label }
-    }
-    if (status === 'loading') return { value: 'Loading...', label }
-    if (status === 'error') return { value: 'Unavailable', label }
-    return { value: '--', label }
-  }
+  const renderValue = useCallback(
+    (value?: string, label?: FilLabel | UsdfcLabel) => {
+      if (value && value.trim().length > 0) {
+        const numericValue = value.replace(` ${label}`, '').trim()
+        return { value: numericValue, label }
+      }
+      if (status === 'loading') return { value: 'Loading...', label }
+      if (status === 'error') return { value: 'Unavailable', label }
+      return { value: '--', label }
+    },
+    [status]
+  )
 
   const filDisplay = renderValue(balances?.fil, filLabel)
   const usdfcDisplay = renderValue(balances?.usdfc, usdfcLabel)
@@ -50,3 +54,5 @@ export default function Header() {
     </header>
   )
 }
+
+export { Header }

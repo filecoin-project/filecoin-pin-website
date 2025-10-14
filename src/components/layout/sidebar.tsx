@@ -1,7 +1,7 @@
 import SidebarLinks from './sidebar-links.tsx'
 import SidebarSteps from './sidebar-steps.tsx'
 
-export default function Sidebar() {
+function Sidebar() {
   return (
     <div className="flex flex-col justify-between h-full">
       <SidebarSteps />
@@ -9,3 +9,5 @@ export default function Sidebar() {
     </div>
   )
 }
+
+export { Sidebar }
