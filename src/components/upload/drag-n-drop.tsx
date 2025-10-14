@@ -19,16 +19,14 @@ export default function DragNDrop({ onFileSelected, onUpload, isUploading }: Dra
     throw new Error('DragNDrop must be used within FilecoinPinProvider')
   }
 
-  const { dataSet, storageContext } = context
-
   const fileIsSelected = Boolean(file)
-  const buttonIsDisabled = !fileIsSelected || isUploading || !storageContext
-  const isLoading = dataSet.status === 'initializing' || isUploading
+  const buttonIsDisabled = !fileIsSelected || isUploading
 
   function uploadFile(e: React.MouseEvent) {
     e.preventDefault() // Prevent form submission
     if (file) {
       onUpload(file)
+      setFile(null)
     }
   }
 
@@ -55,7 +53,7 @@ export default function DragNDrop({ onFileSelected, onUpload, isUploading }: Dra
           <Button disabled={buttonIsDisabled} onClick={clearFile} type="button" variant="secondary">
             Cancel
           </Button>
-          <Button disabled={buttonIsDisabled} loading={isLoading} onClick={uploadFile} type="button" variant="primary">
+          <Button disabled={buttonIsDisabled} loading={isUploading} onClick={uploadFile} variant="primary">
             Upload
           </Button>
         </div>
