@@ -129,7 +129,9 @@ export default function Content() {
     if (idsToExpand.length > 0) {
       setExpandedHistoryItems((prev) => {
         const next = new Set(prev)
-        idsToExpand.forEach((id) => next.add(id))
+        idsToExpand.forEach((id) => {
+          next.add(id)
+        })
         return next
       })
     }
