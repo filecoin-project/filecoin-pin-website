@@ -4,13 +4,13 @@ import { ProgressCard } from './progress-card.tsx'
 import { ProgressCardCombined } from './progress-card-combined.tsx'
 
 interface UploadProgressProps {
-  progress: Progress[]
+  progresses: Array<Progress>
   transactionHash?: string
   getCombinedFirstStageStatus: () => Progress['status']
   getCombinedFirstStageProgress: () => number
 }
 function UploadProgress({
-  progress,
+  progresses,
   transactionHash,
   getCombinedFirstStageStatus,
   getCombinedFirstStageProgress,
@@ -20,13 +20,13 @@ function UploadProgress({
       <ProgressCardCombined
         getCombinedFirstStageProgress={getCombinedFirstStageProgress}
         getCombinedFirstStageStatus={getCombinedFirstStageStatus}
-        progress={progress}
+        progresses={progresses}
       />
 
-      {progress
-        .filter((step) => !COMBINED_STEPS.includes(step.step))
-        .map((step) => (
-          <ProgressCard key={step.step} step={step} transactionHash={transactionHash} />
+      {progresses
+        .filter((progress) => !COMBINED_STEPS.includes(progress.step))
+        .map((progress) => (
+          <ProgressCard key={progress.step} progress={progress} transactionHash={transactionHash} />
         ))}
     </>
   )

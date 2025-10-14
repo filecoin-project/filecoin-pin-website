@@ -37,6 +37,9 @@ const initialProgress: Progress[] = [
   { step: 'finalizing-transaction', progress: 0, status: 'pending' },
 ]
 
+export const INPI_ERROR_MESSAGE =
+  "CID not yet indexed by IPNI. It's stored on Filecoin and fetchable now, but may take time to appear on IPFS."
+
 export const useFilecoinUpload = () => {
   const context = useContext(FilecoinPinContext)
   if (!context) {
@@ -77,7 +80,7 @@ export const useFilecoinUpload = () => {
       updateProgress('announcing-cids', {
         status: 'error',
         progress: 0,
-        error: 'CID not yet indexed by IPNI. The file is stored but may take time to be discoverable on the network.',
+        error: INPI_ERROR_MESSAGE,
       })
     },
   })
