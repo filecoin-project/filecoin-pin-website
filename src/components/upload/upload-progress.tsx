@@ -1,5 +1,5 @@
-import { COMBINED_STEPS } from '@/constants/upload-progress.tsx'
-import type { Progress } from '@/types/upload-progress.ts'
+import { COMBINED_STEPS } from '../../constants/upload-status.tsx'
+import type { Progress } from '../../types/upload-progress.ts'
 import { ProgressCard } from './progress-card.tsx'
 import { ProgressCardCombined } from './progress-card-combined.tsx'
 
