@@ -3,7 +3,7 @@ import type {
   CALIBRATION_LABEL_USDFC,
   MAINNET_LABEL_FIL,
   MAINNET_LABEL_USDFC,
-} from '../constants/network.tsx'
+} from '../constants/network.ts'
 
 export type NetworkType = 'calibration' | 'mainnet'
 
