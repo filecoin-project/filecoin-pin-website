@@ -19,7 +19,7 @@ function TextWithCopyToClipboard({ text, href }: TextWithCopyToClipboardProps) {
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <span className="flex items-center gap-2">
       {href ? <TextLink href={href}>{text}</TextLink> : <span className="text-zinc-400">{text}</span>}
       <button
         className="cursor-pointer text-zinc-400 p-2 -m-2 hover:text-white"
@@ -29,7 +29,7 @@ function TextWithCopyToClipboard({ text, href }: TextWithCopyToClipboardProps) {
       >
         <Copy size={16} />
       </button>
-    </div>
+    </span>
   )
 }
 

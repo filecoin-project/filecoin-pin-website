@@ -1,4 +1,4 @@
-import type { UploadProgress } from '../upload/upload-progress.tsx'
+import type { UploadProgress } from '../upload/upload-status.tsx'
 import { BadgeStatus } from './badge-status.tsx'
 import { Heading } from './heading.tsx'
 import { Spinner } from './spinner.tsx'
