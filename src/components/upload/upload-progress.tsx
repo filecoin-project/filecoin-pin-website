@@ -24,7 +24,7 @@ function UploadProgress({
       />
 
       {progress
-        .filter((step) => !COMBINED_STEPS.includes(step.step as any))
+        .filter((step) => !COMBINED_STEPS.includes(step.step))
         .map((step) => (
           <ProgressCard key={step.step} step={step} transactionHash={transactionHash} />
         ))}

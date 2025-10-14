@@ -73,7 +73,7 @@ function UploadStatus({
   const hasError = progress.some((p) => p.status === 'error')
 
   // Determine the badge status for the file card header
-  const getBadgeStatus = () => {
+  function getBadgeStatus() {
     if (isCompleted) return 'pinned'
     if (hasError) return 'error'
     // Check if any step is in progress
@@ -96,7 +96,7 @@ function UploadStatus({
         </FileInfo>
 
         <AccordionContent className="space-y-6 mt-6">
-          {isCompleted ? (
+          {isCompleted && cid ? (
             <UploadCompleted cid={cid} network={network} pieceCid={pieceCid} providerName={providerName} />
           ) : (
             <UploadProgress

@@ -1,16 +1,18 @@
 import type { Progress } from '@/types/upload-progress.ts'
 
-// simple type to help with searching for UploadProgress['step'] in the first step group
-export const firstStepGroup: Record<
+type FirstSteoGroupRecord = Record<
   'creatingCar' | 'checkingReadiness' | 'uploadingCar',
   { progress: number; status: Progress['status'] }
-> = {
+>
+
+// simple type to help with searching for UploadProgress['step'] in the first step group
+export const firstStepGroup: FirstSteoGroupRecord = {
   creatingCar: { progress: 0, status: 'pending' },
   checkingReadiness: { progress: 0, status: 'pending' },
   uploadingCar: { progress: 0, status: 'pending' },
-} as const
+}
 
-export const createStepGroup = (progress: Progress[]) => {
+export function createStepGroup(progress: Progress[]) {
   // Map kebab-case step names to camelCase keys
   const stepMap: Record<string, keyof typeof firstStepGroup> = {
     'creating-car': 'creatingCar',
@@ -34,7 +36,7 @@ export const createStepGroup = (progress: Progress[]) => {
   )
 }
 
-export const getStepLabel = (step: Progress['step']) => {
+export function getStepLabel(step: Progress['step']) {
   switch (step) {
     case 'creating-car':
     case 'checking-readiness':
@@ -47,7 +49,7 @@ export const getStepLabel = (step: Progress['step']) => {
   }
 }
 
-export const getEstimatedTime = (step: Progress['step']) => {
+export function getEstimatedTime(step: Progress['step']) {
   switch (step) {
     case 'creating-car':
     case 'checking-readiness':

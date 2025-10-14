@@ -5,15 +5,13 @@ import { TextLink } from '../ui/link.tsx'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
 
 interface UploadCompletedProps {
-  cid?: string
+  cid: string
   pieceCid?: string
   providerName?: string
   network?: string
 }
 
 function UploadCompleted({ cid, pieceCid, providerName, network }: UploadCompletedProps) {
-  if (!cid) return null
-
   return (
     <>
       <Card.Wrapper>

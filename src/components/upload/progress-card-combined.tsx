@@ -16,16 +16,19 @@ function ProgressCardCombined({
 }: ProgressCardCombinedProps) {
   const hasCreatingCarStep = progress.find((p) => p.step === 'creating-car')
 
+  const firstStagestatus = getCombinedFirstStageStatus()
+  const firstStageProgress = getCombinedFirstStageProgress()
+
   if (!hasCreatingCarStep) return null
 
   return (
     <Card.Wrapper>
       <Card.Header
         estimatedTime={getEstimatedTime('creating-car')}
-        status={getCombinedFirstStageStatus()}
+        status={firstStagestatus}
         title={getStepLabel('creating-car')}
       />
-      {getCombinedFirstStageStatus() === 'in-progress' && <ProgressBar progress={getCombinedFirstStageProgress()} />}
+      {firstStagestatus === 'in-progress' && <ProgressBar progress={firstStageProgress} />}
     </Card.Wrapper>
   )
 }
