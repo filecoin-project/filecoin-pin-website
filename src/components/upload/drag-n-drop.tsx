@@ -19,7 +19,6 @@ export default function DragNDrop({ onFileSelected, onUpload, isUploading }: Dra
     throw new Error('DragNDrop must be used within FilecoinPinProvider')
   }
 
-
   const fileIsSelected = Boolean(file)
   const buttonIsDisabled = !fileIsSelected || isUploading
 

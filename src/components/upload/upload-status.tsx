@@ -36,6 +36,7 @@ function UploadStatus({
   providerId,
   serviceURL,
   transactionHash,
+  network,
 }: UploadStatusProps) {
   // Calculate combined progress for the first stage (creating CAR + checking readiness + uploading)
   const getCombinedFirstStageProgress = useCallback(() => {
@@ -71,6 +72,8 @@ function UploadStatus({
     // Otherwise pending
     return 'pending'
   }, [progresses])
+
+  const hasIpniFailure = progresses.find((p) => p.step === 'announcing-cids')?.status === 'error'
 
   // Check if all steps are completed AND we have a CID (upload actually finished)
   // BUT treat IPNI failures as still "completed" since file is stored on Filecoin
@@ -112,6 +115,7 @@ function UploadStatus({
               cid={cid}
               datasetId={datasetId}
               fileName={fileName}
+              key={`${network}-${providerName}-${cid}-${pieceCid}`}
               pieceCid={pieceCid}
               providerId={providerId}
               providerName={providerName}
@@ -119,8 +123,10 @@ function UploadStatus({
             />
           ) : (
             <UploadProgress
+              cid={cid}
               getCombinedFirstStageProgress={getCombinedFirstStageProgress}
               getCombinedFirstStageStatus={getCombinedFirstStageStatus}
+              hasIpniFailure={hasIpniFailure}
               progresses={progresses}
               transactionHash={transactionHash}
             />

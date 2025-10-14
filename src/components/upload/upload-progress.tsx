@@ -1,7 +1,6 @@
-import { COMBINED_STEPS } from '../../constants/upload-status.tsx'
 import type { Progress } from '../../types/upload-progress.ts'
+import { CarUploadAndIpniCard } from './car-upload-and-ipni-card.tsx'
 import { ProgressCard } from './progress-card.tsx'
-import { ProgressCardCombined } from './progress-card-combined.tsx'
 import type { UploadStatusProps } from './upload-status.tsx'
 
 interface UploadProgressProps {
@@ -9,26 +8,28 @@ interface UploadProgressProps {
   transactionHash?: UploadStatusProps['transactionHash']
   getCombinedFirstStageStatus: () => Progress['status']
   getCombinedFirstStageProgress: () => number
+  cid?: string
+  hasIpniFailure?: boolean
 }
 function UploadProgress({
   progresses,
   transactionHash,
   getCombinedFirstStageStatus,
   getCombinedFirstStageProgress,
+  cid,
+  hasIpniFailure,
 }: UploadProgressProps) {
+  const finalizingStep = progresses.find((p) => p.step === 'finalizing-transaction')
   return (
     <>
-      <ProgressCardCombined
+      <CarUploadAndIpniCard
+        cid={cid}
         getCombinedFirstStageProgress={getCombinedFirstStageProgress}
         getCombinedFirstStageStatus={getCombinedFirstStageStatus}
+        hasIpniFailure={hasIpniFailure}
         progresses={progresses}
       />
-
-      {progresses
-        .filter((progress) => !COMBINED_STEPS.includes(progress.step))
-        .map((progress) => (
-          <ProgressCard key={progress.step} progress={progress} transactionHash={transactionHash} />
-        ))}
+      {finalizingStep && <ProgressCard progress={finalizingStep} transactionHash={transactionHash} />}
     </>
   )
 }
