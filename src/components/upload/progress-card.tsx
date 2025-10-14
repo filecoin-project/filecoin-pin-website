@@ -1,5 +1,5 @@
 import type { Progress } from '@/types/upload-progress.ts'
-import { getEstimatedTime, getStepLabel } from '../../utils/upload-progress.ts'
+import { getEstimatedTime, getStepLabel } from '../../utils/upload-status.ts'
 import { Alert } from '../ui/alert.tsx'
 import { Card } from '../ui/card.tsx'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'

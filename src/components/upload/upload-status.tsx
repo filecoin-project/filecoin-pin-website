@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import type { Progress } from '../../types/upload-progress.ts'
-import { createStepGroup } from '../../utils/upload-progress.ts'
+import { createStepGroup } from '../../utils/upload-status.ts'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion.tsx'
 import { FileInfo } from '../ui/file-info.tsx'
 import { UploadCompleted } from './upload-completed.tsx'

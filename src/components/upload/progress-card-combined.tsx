@@ -1,5 +1,5 @@
 import type { Progress } from '../../types/upload-progress.ts'
-import { getEstimatedTime, getStepLabel } from '../../utils/upload-progress.ts'
+import { getEstimatedTime, getStepLabel } from '../../utils/upload-status.ts'
 import { Card } from '../ui/card.tsx'
 import { ProgressBar } from '../ui/progress-bar.tsx'
 
