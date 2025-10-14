@@ -1,4 +1,4 @@
-import type { Progress } from '@/types/upload-progress.ts';
+import type { Progress } from '@/types/upload-progress.ts'
 
 type FirstSteoGroupRecord = Record<
   'creatingCar' | 'checkingReadiness' | 'uploadingCar',
