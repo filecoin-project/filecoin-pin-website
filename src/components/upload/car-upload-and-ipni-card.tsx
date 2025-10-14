@@ -1,3 +1,4 @@
+import { getIpfsGatewayDownloadLink, getIpfsGatewayRenderLink } from '@/utils/links.ts'
 import { COMBINED_STEPS } from '../../constants/upload-status.tsx'
 import { INPI_ERROR_MESSAGE } from '../../hooks/use-filecoin-upload.ts'
 import type { Progress } from '../../types/upload-progress.ts'
@@ -7,7 +8,6 @@ import { DownloadButton } from '../ui/download-button.tsx'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
 import { ProgressCard } from './progress-card.tsx'
 import { ProgressCardCombined } from './progress-card-combined.tsx'
-import { getIpfsGatewayDownloadLink, getIpfsGatewayRenderLink } from '@/utils/links'
 
 interface CarUploadAndIpniCardProps {
   progresses: Progress[]
@@ -45,7 +45,10 @@ export const CarUploadAndIpniCard = ({
         {hasIpniFailure && <Alert message={INPI_ERROR_MESSAGE} variant="warning" />}
         <Card.InfoRow
           subtitle={
-            <TextWithCopyToClipboard text={cid} {...(!hasIpniFailure && { href: getIpfsGatewayRenderLink(cid, fileName) })} />
+            <TextWithCopyToClipboard
+              text={cid}
+              {...(!hasIpniFailure && { href: getIpfsGatewayRenderLink(cid, fileName) })}
+            />
           }
           title="IPFS Root CID"
         >

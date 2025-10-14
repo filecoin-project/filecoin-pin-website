@@ -1,6 +1,14 @@
 import { useState } from 'react'
 // import { UPLOAD_COMPLETED_LINKS } from '@/constants/upload-completed-links.ts'
 import { INPI_ERROR_MESSAGE } from '@/hooks/use-filecoin-upload.ts'
+import {
+  getDatasetExplorerLink,
+  getIpfsGatewayDownloadLink,
+  getIpfsGatewayRenderLink,
+  getPieceExplorerLink,
+  getProviderExplorerLink,
+  getSpCarDownloadLink,
+} from '@/utils/links.ts'
 import { useIpniCheck } from '../../hooks/use-ipni-check.ts'
 import { Alert } from '../ui/alert.tsx'
 import { ButtonLink } from '../ui/button/button-link.tsx'
@@ -9,7 +17,6 @@ import { DownloadButton } from '../ui/download-button.tsx'
 import { TextLink } from '../ui/link.tsx'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
 import type { UploadStatusProps } from './upload-status.tsx'
-import { getDatasetExplorerLink, getIpfsGatewayDownloadLink, getIpfsGatewayRenderLink, getPieceExplorerLink, getProviderExplorerLink, getSpCarDownloadLink } from '@/utils/links'
 
 interface UploadCompletedProps {
   cid: UploadStatusProps['cid']
