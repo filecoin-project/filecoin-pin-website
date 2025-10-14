@@ -27,7 +27,7 @@ const badgeVariants = cva('inline-flex items-center gap-1 pl-1.5 pr-2 py-0.5 rou
 const statusIcons: Record<Status, React.ReactNode> = {
   'in-progress': <LoaderCircle className="animate-spin" size={12} />,
   completed: <CircleCheck size={12} />,
-  publishing: <CircleCheck size={12} />,
+  publishing: null,
   error: null,
   pending: null,
 }
