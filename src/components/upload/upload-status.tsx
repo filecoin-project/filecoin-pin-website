@@ -77,8 +77,6 @@ function UploadStatus({
   // Check if any step is in error (excluding IPNI failures)
   const hasError = progresses.some((p) => p.status === 'error' && p.step !== 'announcing-cids')
 
-  const hasIpniFailure = progresses.some((p) => p.step === 'announcing-cids' && p.status === 'error')
-
   // Determine the badge status for the file card header
   function getBadgeStatus() {
     if (isCompleted) return 'pinned'
@@ -104,13 +102,7 @@ function UploadStatus({
 
         <AccordionContent className="space-y-6 mt-6">
           {isCompleted && cid ? (
-            <UploadCompleted
-              cid={cid}
-              hasIpniFailure={hasIpniFailure}
-              network={network}
-              pieceCid={pieceCid}
-              providerName={providerName}
-            />
+            <UploadCompleted cid={cid} network={network} pieceCid={pieceCid} providerName={providerName} />
           ) : (
             <UploadProgress
               getCombinedFirstStageProgress={getCombinedFirstStageProgress}
