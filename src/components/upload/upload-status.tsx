@@ -124,6 +124,7 @@ function UploadStatus({
           ) : (
             <UploadProgress
               cid={cid}
+              fileName={fileName}
               getCombinedFirstStageProgress={getCombinedFirstStageProgress}
               getCombinedFirstStageStatus={getCombinedFirstStageStatus}
               hasIpniFailure={hasIpniFailure}

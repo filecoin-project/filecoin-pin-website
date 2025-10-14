@@ -14,6 +14,7 @@ interface CarUploadAndIpniCardProps {
   getCombinedFirstStageStatus: () => Progress['status']
   getCombinedFirstStageProgress: () => number
   cid?: string
+  fileName: string
   hasIpniFailure?: boolean
 }
 
@@ -28,6 +29,7 @@ export const CarUploadAndIpniCard = ({
   getCombinedFirstStageStatus,
   getCombinedFirstStageProgress,
   cid,
+  fileName,
   hasIpniFailure,
 }: CarUploadAndIpniCardProps) => {
   const uploadingStep = progresses.find((p) => p.step === 'uploading-car')
@@ -38,7 +40,6 @@ export const CarUploadAndIpniCard = ({
     (announcingStep?.status === 'completed' || announcingStep?.status === 'error') &&
     cid
 
-  // TODO: get filename
   if (shouldShowCidCard) {
     return (
       <Card.Wrapper>

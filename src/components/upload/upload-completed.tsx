@@ -53,6 +53,12 @@ function UploadCompleted({
       setHasIpniFailure(true)
     },
   })
+  const fileNameOrDefault = fileName || 'file'
+  const cidOrDefault = cid || ''
+  const providerIdOrDefault = providerId || ''
+  const datasetIdOrDefault = datasetId || ''
+  const serviceUrlOrDefault = serviceURL || { serviceUrl: '' }
+
   return (
     <>
       <Card.Wrapper>
@@ -60,14 +66,17 @@ function UploadCompleted({
         <Card.InfoRow
           subtitle={
             hasIpniFailure ? (
-              <TextWithCopyToClipboard text={cid || ''} />
+              <TextWithCopyToClipboard text={cidOrDefault} />
             ) : (
-              <TextWithCopyToClipboard href={getIpfsGatewayRenderLink(cid, fileName)} text={cid || ''} />
+              <TextWithCopyToClipboard
+                href={getIpfsGatewayRenderLink(cidOrDefault, fileNameOrDefault)}
+                text={cidOrDefault}
+              />
             )
           }
           title="IPFS Root CID"
         >
-          {!hasIpniFailure && <DownloadButton href={getIpfsGatewayDownloadLink(cid, fileName)} />}
+          {!hasIpniFailure && <DownloadButton href={getIpfsGatewayDownloadLink(cidOrDefault, fileNameOrDefault)} />}
         </Card.InfoRow>
       </Card.Wrapper>
 
@@ -77,7 +86,7 @@ function UploadCompleted({
             subtitle={<TextWithCopyToClipboard href={getPieceExplorerLink(pieceCid)} text={pieceCid} />}
             title="Filecoin Piece CID"
           >
-            <DownloadButton href={getSpCarDownloadLink(cid, serviceURL)} />
+            <DownloadButton href={getSpCarDownloadLink(cidOrDefault, serviceUrlOrDefault)} />
           </Card.InfoRow>
         </Card.Wrapper>
       )}
@@ -85,10 +94,10 @@ function UploadCompleted({
       {providerName && (
         <Card.Wrapper>
           <Card.InfoRow
-            subtitle={<TextLink href={getProviderExplorerLink(providerId)}>{providerName}</TextLink>}
+            subtitle={<TextLink href={getProviderExplorerLink(providerIdOrDefault)}>{providerName}</TextLink>}
             title="Provider"
           >
-            <ButtonLink href={getDatasetExplorerLink(datasetId)}>View proofs</ButtonLink>
+            <ButtonLink href={getDatasetExplorerLink(datasetIdOrDefault)}>View proofs</ButtonLink>
           </Card.InfoRow>
         </Card.Wrapper>
       )}
