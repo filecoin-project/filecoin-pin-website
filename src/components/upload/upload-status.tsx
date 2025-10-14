@@ -85,7 +85,7 @@ function UploadStatus({
 
   // Determine the badge status for the file card header
   function getBadgeStatus() {
-    if (isCompleted) return 'pinned'
+    if (isCompleted) return 'publishing'
     if (hasError) return 'error'
     // Check if any step is in progress
     if (progresses.some((p) => p.status === 'in-progress')) return 'in-progress'
