@@ -2,10 +2,11 @@ import { COMBINED_STEPS } from '../../constants/upload-status.tsx'
 import type { Progress } from '../../types/upload-progress.ts'
 import { ProgressCard } from './progress-card.tsx'
 import { ProgressCardCombined } from './progress-card-combined.tsx'
+import type { UploadStatusProps } from './upload-status.tsx'
 
 interface UploadProgressProps {
   progresses: Array<Progress>
-  transactionHash?: string
+  transactionHash?: UploadStatusProps['transactionHash']
   getCombinedFirstStageStatus: () => Progress['status']
   getCombinedFirstStageProgress: () => number
 }

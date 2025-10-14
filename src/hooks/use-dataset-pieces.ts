@@ -9,6 +9,9 @@ export interface DatasetPiece {
   cid: string
   pieceCid: string
   providerName?: string
+  datasetId: string
+  providerId?: string
+  serviceURL?: string
   transactionHash?: string
   network?: string
   uploadedAt: number // timestamp
@@ -108,6 +111,9 @@ export const useDatasetPieces = () => {
               cid: ipfsRootCid,
               pieceCid,
               providerName: providerInfo.name || (providerInfo.id ? String(providerInfo.id) : undefined),
+              datasetId: String(storageContext.dataSetId),
+              providerId: providerInfo.id ? String(providerInfo.id) : undefined,
+              serviceURL: providerInfo.products?.PDP?.data?.serviceURL,
               network: wallet?.status === 'ready' ? wallet.data.network : undefined,
               uploadedAt: metadata.uploadedAt ? Number(metadata.uploadedAt) : Date.now(),
               pieceId,
@@ -122,6 +128,9 @@ export const useDatasetPieces = () => {
               cid: '',
               pieceCid: piece.pieceCid.toString(),
               providerName: providerInfo.name || (providerInfo.id ? String(providerInfo.id) : undefined),
+              datasetId: String(storageContext.dataSetId),
+              providerId: providerInfo.id ? String(providerInfo.id) : undefined,
+              serviceURL: providerInfo.products?.PDP?.data?.serviceURL,
               network: wallet?.status === 'ready' ? wallet.data.network : undefined,
               uploadedAt: Date.now(),
               pieceId: piece.pieceId,
