@@ -66,6 +66,8 @@ function UploadStatus({
     return 'pending'
   }, [progresses])
 
+  const hasIpniFailure = progresses.find((p) => p.step === 'announcing-cids')?.status === 'error'
+
   // Check if all steps are completed AND we have a CID (upload actually finished)
   // BUT treat IPNI failures as still "completed" since file is stored on Filecoin
   const isCompleted =
@@ -102,11 +104,19 @@ function UploadStatus({
 
         <AccordionContent className="space-y-6 mt-6">
           {isCompleted && cid ? (
-            <UploadCompleted cid={cid} network={network} pieceCid={pieceCid} providerName={providerName} />
+            <UploadCompleted
+              cid={cid}
+              key={`${network}-${providerName}-${cid}-${pieceCid}`}
+              network={network}
+              pieceCid={pieceCid}
+              providerName={providerName}
+            />
           ) : (
             <UploadProgress
+              cid={cid}
               getCombinedFirstStageProgress={getCombinedFirstStageProgress}
               getCombinedFirstStageStatus={getCombinedFirstStageStatus}
+              hasIpniFailure={hasIpniFailure}
               progresses={progresses}
               transactionHash={transactionHash}
             />
