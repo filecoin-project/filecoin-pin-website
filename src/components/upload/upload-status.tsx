@@ -31,7 +31,6 @@ function UploadStatus({
   onToggleExpanded,
   cid,
   datasetId,
-  network,
   pieceCid,
   providerName,
   providerId,

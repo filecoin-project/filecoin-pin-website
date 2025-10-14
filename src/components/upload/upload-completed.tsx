@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { UPLOAD_COMPLETED_LINKS } from '@/constants/upload-completed-links.ts'
-import { useIpniCheck } from '../../hooks/use-ipni-check.ts'
 import { INPI_ERROR_MESSAGE } from '@/hooks/use-filecoin-upload.ts'
+import { useIpniCheck } from '../../hooks/use-ipni-check.ts'
 import { Alert } from '../ui/alert.tsx'
 import { ButtonLink } from '../ui/button/button-link.tsx'
 import { Card } from '../ui/card.tsx'
@@ -65,7 +65,10 @@ function UploadCompleted({
 
       {pieceCid && (
         <Card.Wrapper>
-          <Card.InfoRow subtitle={<TextWithCopyToClipboard href={`${providerBaseUrl}piece/${pieceCid}`} text={pieceCid} />} title="Filecoin Piece CID">
+          <Card.InfoRow
+            subtitle={<TextWithCopyToClipboard href={`${providerBaseUrl}piece/${pieceCid}`} text={pieceCid} />}
+            title="Filecoin Piece CID"
+          >
             <DownloadButton href={`${serviceURL}piece/${pieceCid}`} />
           </Card.InfoRow>
         </Card.Wrapper>
