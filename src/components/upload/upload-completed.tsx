@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { UPLOAD_COMPLETED_LINKS } from '@/constants/upload-completed-links.ts'
+// import { UPLOAD_COMPLETED_LINKS } from '@/constants/upload-completed-links.ts'
 import { INPI_ERROR_MESSAGE } from '@/hooks/use-filecoin-upload.ts'
 import { useIpniCheck } from '../../hooks/use-ipni-check.ts'
 import { Alert } from '../ui/alert.tsx'
@@ -9,6 +9,7 @@ import { DownloadButton } from '../ui/download-button.tsx'
 import { TextLink } from '../ui/link.tsx'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
 import type { UploadStatusProps } from './upload-status.tsx'
+import { getDatasetExplorerLink, getIpfsGatewayDownloadLink, getIpfsGatewayRenderLink, getPieceExplorerLink, getProviderExplorerLink, getSpCarDownloadLink } from '@/utils/links'
 
 interface UploadCompletedProps {
   cid: UploadStatusProps['cid']
@@ -29,7 +30,7 @@ function UploadCompleted({
   providerId,
   serviceURL,
 }: UploadCompletedProps) {
-  const { ipfsBaseUrl, providerBaseUrl } = UPLOAD_COMPLETED_LINKS
+  // const { ipfsGatewayBaseUrl, providerBaseUrl } = UPLOAD_COMPLETED_LINKS
   const [hasIpniFailure, setHasIpniFailure] = useState(false)
 
   /**
@@ -54,22 +55,22 @@ function UploadCompleted({
             hasIpniFailure ? (
               <TextWithCopyToClipboard text={cid || ''} />
             ) : (
-              <TextWithCopyToClipboard href={`${ipfsBaseUrl}${cid}`} text={cid || ''} />
+              <TextWithCopyToClipboard href={getIpfsGatewayRenderLink(cid, fileName)} text={cid || ''} />
             )
           }
           title="IPFS Root CID"
         >
-          {!hasIpniFailure && <DownloadButton href={`${ipfsBaseUrl}${cid}?download=true&filename=${fileName}`} />}
+          {!hasIpniFailure && <DownloadButton href={getIpfsGatewayDownloadLink(cid, fileName)} />}
         </Card.InfoRow>
       </Card.Wrapper>
 
       {pieceCid && (
         <Card.Wrapper>
           <Card.InfoRow
-            subtitle={<TextWithCopyToClipboard href={`${providerBaseUrl}piece/${pieceCid}`} text={pieceCid} />}
+            subtitle={<TextWithCopyToClipboard href={getPieceExplorerLink(pieceCid)} text={pieceCid} />}
             title="Filecoin Piece CID"
           >
-            <DownloadButton href={`${serviceURL}piece/${pieceCid}`} />
+            <DownloadButton href={getSpCarDownloadLink(cid, serviceURL)} />
           </Card.InfoRow>
         </Card.Wrapper>
       )}
@@ -77,10 +78,10 @@ function UploadCompleted({
       {providerName && (
         <Card.Wrapper>
           <Card.InfoRow
-            subtitle={<TextLink href={`${providerBaseUrl}providers/${providerId}`}>{providerName}</TextLink>}
+            subtitle={<TextLink href={getProviderExplorerLink(providerId)}>{providerName}</TextLink>}
             title="Provider"
           >
-            <ButtonLink href={`${providerBaseUrl}dataset/${datasetId}`}>View proofs</ButtonLink>
+            <ButtonLink href={getDatasetExplorerLink(datasetId)}>View proofs</ButtonLink>
           </Card.InfoRow>
         </Card.Wrapper>
       )}

@@ -7,6 +7,7 @@ import { DownloadButton } from '../ui/download-button.tsx'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
 import { ProgressCard } from './progress-card.tsx'
 import { ProgressCardCombined } from './progress-card-combined.tsx'
+import { getIpfsGatewayDownloadLink, getIpfsGatewayRenderLink } from '@/utils/links'
 
 interface CarUploadAndIpniCardProps {
   progresses: Progress[]
@@ -37,17 +38,18 @@ export const CarUploadAndIpniCard = ({
     (announcingStep?.status === 'completed' || announcingStep?.status === 'error') &&
     cid
 
+  // TODO: get filename
   if (shouldShowCidCard) {
     return (
       <Card.Wrapper>
         {hasIpniFailure && <Alert message={INPI_ERROR_MESSAGE} variant="warning" />}
         <Card.InfoRow
           subtitle={
-            <TextWithCopyToClipboard text={cid} {...(!hasIpniFailure && { href: `https://dweb.link/ipfs/${cid}` })} />
+            <TextWithCopyToClipboard text={cid} {...(!hasIpniFailure && { href: getIpfsGatewayRenderLink(cid, fileName) })} />
           }
           title="IPFS Root CID"
         >
-          {!hasIpniFailure && <DownloadButton href={`https://dweb.link/ipfs/${cid}`} />}
+          {!hasIpniFailure && <DownloadButton href={getIpfsGatewayDownloadLink(cid, fileName)} />}
         </Card.InfoRow>
       </Card.Wrapper>
     )
