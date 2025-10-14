@@ -1,7 +1,12 @@
 import { createStorageContext, type SynapseService } from 'filecoin-pin/core/synapse'
 import pino from 'pino'
 import { useCallback, useRef, useState } from 'react'
-import { getStoredDataSetId, storeDataSetId } from '../lib/local-storage/data-set.ts'
+import {
+  getStoredDataSetId,
+  getStoredDataSetIdForProvider,
+  storeDataSetId,
+  storeDataSetIdForProvider,
+} from '../lib/local-storage/data-set.ts'
 
 type ProviderInfo = NonNullable<Awaited<ReturnType<typeof createStorageContext>>['providerInfo']>
 type StorageContext = NonNullable<Awaited<ReturnType<typeof createStorageContext>>['storage']>
@@ -15,6 +20,14 @@ export type DataSetState =
 interface UseDataSetManagerProps {
   synapse: SynapseService['synapse'] | null
   walletAddress: string | null
+  /**
+   * Optional debug/test parameters (typically from URL)
+   * These override default behavior for testing/debugging.
+   */
+  debugParams?: {
+    providerId?: number | null
+    dataSetId?: number | null
+  }
 }
 
 interface UseDataSetManagerReturn {
@@ -32,8 +45,13 @@ interface UseDataSetManagerReturn {
  * - Reconnecting to existing data sets via localStorage
  * - Managing storage context creation and caching
  * - Preventing duplicate concurrent initialization attempts
+ * - Debug/test overrides via URL parameters (dataSetId, providerId)
  */
-export function useDataSetManager({ synapse, walletAddress }: UseDataSetManagerProps): UseDataSetManagerReturn {
+export function useDataSetManager({
+  synapse,
+  walletAddress,
+  debugParams,
+}: UseDataSetManagerProps): UseDataSetManagerReturn {
   const [dataSet, setDataSet] = useState<DataSetState>({ status: 'idle' })
   const isEnsuringDataSetRef = useRef<boolean>(false)
 
@@ -111,13 +129,24 @@ export function useDataSetManager({ synapse, walletAddress }: UseDataSetManagerP
     isEnsuringDataSetRef.current = true
 
     try {
-      // Check localStorage first
+      // Check for debug/test parameters from URL
+      const urlDataSetId = debugParams?.dataSetId
+      const urlProviderId = debugParams?.providerId
+
+      // Check localStorage with priority:
+      // 1. If providerId specified, check provider-specific key
+      // 2. Otherwise, check default wallet-only key (existing behavior)
       console.debug('[DataSet] Checking localStorage for wallet:', walletAddress)
-      const storedId = getStoredDataSetId(walletAddress)
+      const storedId = urlProviderId
+        ? getStoredDataSetIdForProvider(walletAddress, urlProviderId)
+        : getStoredDataSetId(walletAddress)
       console.debug('[DataSet] StoredId from localStorage:', storedId)
 
+      // Determine which data set ID to use (URL > localStorage)
+      const dataSetId = urlDataSetId ?? storedId
+
       // Need to create storage context (either for existing or new data set)
-      setDataSet((prev) => ({ status: 'initializing', dataSetId: storedId ?? prev.dataSetId }))
+      setDataSet((prev) => ({ status: 'initializing', dataSetId: dataSetId ?? prev.dataSetId }))
 
       try {
         const logger = pino({
@@ -127,27 +156,39 @@ export function useDataSetManager({ synapse, walletAddress }: UseDataSetManagerP
           },
         })
 
-        if (storedId) {
-          console.debug('[DataSet] Found existing data set ID in localStorage, creating storage context:', storedId)
+        // Build provider options for debug/test mode
+        const providerOptions: { providerId?: number } = {}
+        if (urlProviderId) {
+          providerOptions.providerId = urlProviderId
+        }
+
+        if (dataSetId) {
+          console.debug(
+            '[DataSet] Found existing data set ID, creating storage context:',
+            dataSetId,
+            urlDataSetId ? '(from URL)' : '(from localStorage)'
+          )
 
           const result = await createStorageContext(synapse, logger, {
+            ...providerOptions,
             dataset: {
-              useExisting: storedId,
+              useExisting: dataSetId,
             },
           })
 
           setDataSet({
             status: 'ready',
-            dataSetId: storedId,
+            dataSetId: dataSetId,
             storageContext: result.storage,
             providerInfo: result.providerInfo,
           })
-          return storedId
+          return dataSetId
         }
 
         console.debug('[DataSet] Creating new data set for wallet:', walletAddress)
 
         const result = await createStorageContext(synapse, logger, {
+          ...providerOptions,
           dataset: {
             createNew: true,
           },
@@ -158,9 +199,23 @@ export function useDataSetManager({ synapse, walletAddress }: UseDataSetManagerP
           throw new Error('Data set ID not returned from storage context creation')
         }
 
-        // Store for future use
-        storeDataSetId(walletAddress, newDataSetId)
-        console.debug('[DataSet] Created and stored new data set ID:', newDataSetId)
+        // Store for future use (unless we're in debug mode with URL dataSetId override)
+        if (urlDataSetId) {
+          console.debug('[DataSet] Created new data set ID (not storing due to URL override):', newDataSetId)
+        } else if (urlProviderId) {
+          // If providerId was specified, store with provider-specific key
+          // Otherwise use default wallet-only key (existing behavior)
+          storeDataSetIdForProvider(walletAddress, urlProviderId, newDataSetId)
+          console.debug(
+            '[DataSet] Created and stored new data set ID with provider:',
+            newDataSetId,
+            'provider:',
+            urlProviderId
+          )
+        } else {
+          storeDataSetId(walletAddress, newDataSetId)
+          console.debug('[DataSet] Created and stored new data set ID:', newDataSetId)
+        }
 
         setDataSet({
           status: 'ready',
@@ -183,7 +238,7 @@ export function useDataSetManager({ synapse, walletAddress }: UseDataSetManagerP
       // Always release the guard, even on early returns
       isEnsuringDataSetRef.current = false
     }
-  }, [walletAddress, synapse])
+  }, [walletAddress, synapse, debugParams])
 
   return {
     dataSet,
