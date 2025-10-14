@@ -113,7 +113,6 @@ function UploadStatus({
               cid={cid}
               datasetId={datasetId}
               fileName={fileName}
-              network={network}
               pieceCid={pieceCid}
               providerId={providerId}
               providerName={providerName}

@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { INPI_ERROR_MESSAGE } from '@/hooks/use-filecoin-upload.ts'
-import { useIpniCheck } from '../../hooks/use-ipni-check.ts'
 import { UPLOAD_COMPLETED_LINKS } from '@/constants/upload-completed-links.ts'
+import { useIpniCheck } from '../../hooks/use-ipni-check.ts'
+import { INPI_ERROR_MESSAGE } from '@/hooks/use-filecoin-upload.ts'
 import { Alert } from '../ui/alert.tsx'
 import { ButtonLink } from '../ui/button/button-link.tsx'
 import { Card } from '../ui/card.tsx'
@@ -18,7 +18,6 @@ interface UploadCompletedProps {
   providerId?: UploadStatusProps['providerId']
   serviceURL?: UploadStatusProps['serviceURL']
   datasetId?: UploadStatusProps['datasetId']
-  network?: string
 }
 
 function UploadCompleted({
@@ -29,7 +28,6 @@ function UploadCompleted({
   datasetId,
   providerId,
   serviceURL,
-  network,
 }: UploadCompletedProps) {
   const { ipfsBaseUrl, providerBaseUrl } = UPLOAD_COMPLETED_LINKS
   const [hasIpniFailure, setHasIpniFailure] = useState(false)
@@ -38,7 +36,7 @@ function UploadCompleted({
    * Get the status of the IPNI check to change how we render the completed state.
    */
   useIpniCheck({
-    cid,
+    cid: cid || null,
     isActive: true,
     onSuccess: () => setHasIpniFailure(false),
     maxAttempts: 1,
@@ -67,8 +65,8 @@ function UploadCompleted({
 
       {pieceCid && (
         <Card.Wrapper>
-          <Card.InfoRow subtitle={<TextWithCopyToClipboard text={pieceCid} />} title="Filecoin Piece CID">
-            <DownloadButton href={`${serviceURL}/piece/${pieceCid}`} />
+          <Card.InfoRow subtitle={<TextWithCopyToClipboard href={`${providerBaseUrl}piece/${pieceCid}`} text={pieceCid} />} title="Filecoin Piece CID">
+            <DownloadButton href={`${serviceURL}piece/${pieceCid}`} />
           </Card.InfoRow>
         </Card.Wrapper>
       )}
@@ -76,10 +74,10 @@ function UploadCompleted({
       {providerName && (
         <Card.Wrapper>
           <Card.InfoRow
-            subtitle={<TextLink href={`${providerBaseUrl}/providers/${providerId}`}>{providerName}</TextLink>}
+            subtitle={<TextLink href={`${providerBaseUrl}providers/${providerId}`}>{providerName}</TextLink>}
             title="Provider"
           >
-            <ButtonLink href={`${providerBaseUrl}/dataset/${datasetId}`}>View proofs</ButtonLink>
+            <ButtonLink href={`${providerBaseUrl}dataset/${datasetId}`}>View proofs</ButtonLink>
           </Card.InfoRow>
         </Card.Wrapper>
       )}
