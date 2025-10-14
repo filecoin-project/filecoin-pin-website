@@ -1,15 +1,22 @@
+import { SIDEBAR_CONFIG } from '@/constants/sidebar.tsx'
 import { ButtonLink } from '../ui/button/button-link.tsx'
+import { TextLink } from '../ui/link.tsx'
 import { StepItem } from '../ui/step-item.tsx'
 import { StepItemContainer } from '../ui/step-item-container.tsx'
 
 export default function SidebarSteps() {
+  const { car, ipni } = SIDEBAR_CONFIG.documentation
+
   return (
     <StepItemContainer>
       <StepItem step={1}>
         <p>A FIL wallet, a funded Filecoin Pay Account, and Warm Storage Service have been set up automatically.</p>
       </StepItem>
       <StepItem step={2}>
-        <p>Select a file to pin and it will be packed into a CAR directly in the browser.</p>
+        <p>
+          Select a file to pin and it will be packed into a <TextLink href={car}>CAR </TextLink>
+          directly in the browser.
+        </p>
       </StepItem>
       <StepItem step={3}>
         <p>
@@ -18,7 +25,10 @@ export default function SidebarSteps() {
         </p>
       </StepItem>
       <StepItem step={4}>
-        <p>The Filecoin SP indexes your file and announces it to IPNI, making it discoverable by other IPFS nodes.</p>
+        <p>
+          The Filecoin SP indexes your file and announces it to <TextLink href={ipni}>IPNI</TextLink>, making it
+          discoverable by other IPFS nodes.
+        </p>
       </StepItem>
       <StepItem step={5}>
         <p>
