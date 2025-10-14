@@ -1,6 +1,6 @@
 import { Copy } from 'lucide-react'
-import { TextLink } from './link.tsx'
 import { toast } from '@/utils/toast.tsx'
+import { TextLink } from './link.tsx'
 
 type TextWithCopyToClipboardProps = {
   text: string

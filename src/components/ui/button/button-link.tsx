@@ -1,5 +1,5 @@
-import { ButtonBase, type ButtonBaseProps } from './button-base.tsx'
 import { ExternalLink } from '../link.tsx'
+import { ButtonBase, type ButtonBaseProps } from './button-base.tsx'
 
 type ButtonLinkProps = Omit<ButtonBaseProps, 'onClick'> & {
   href: string
