@@ -5,6 +5,7 @@ import { LinkIconContainer } from '../ui/link-icon-container.tsx'
 
 export default function SidebarLinks() {
   const { githubAction, cli, cloneDemo } = SIDEBAR_CONFIG.github
+
   return (
     <LinkIconContainer>
       <LinkIcon href={githubAction} icon={Github} text="GitHub Action" />
