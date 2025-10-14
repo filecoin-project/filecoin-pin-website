@@ -4,6 +4,7 @@ import { type DataSetState, useDataSetManager } from '../hooks/use-data-set-mana
 import { filecoinPinConfig } from '../lib/filecoin-pin/config.ts'
 import { getSynapseClient } from '../lib/filecoin-pin/synapse.ts'
 import { fetchWalletSnapshot, type WalletSnapshot } from '../lib/filecoin-pin/wallet.ts'
+import { getDebugParams, logDebugParams } from '../utils/debug-params.ts'
 
 type ProviderInfo = NonNullable<ReturnType<typeof useDataSetManager>['providerInfo']>
 type StorageContext = NonNullable<ReturnType<typeof useDataSetManager>['storageContext']>
@@ -38,10 +39,14 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
   const synapseRef = useRef<SynapseService['synapse'] | null>(null)
   const config = filecoinPinConfig
 
+  // Parse debug parameters from URL (for testing/debugging)
+  const debugParams = useMemo(() => getDebugParams(), [])
+
   // Use the data set manager hook
   const { dataSet, ensureDataSet, storageContext, providerInfo } = useDataSetManager({
     synapse: synapseRef.current,
     walletAddress: wallet.status === 'ready' ? wallet.data.address : null,
+    debugParams,
   })
 
   const refreshWallet = useCallback(async () => {
@@ -84,6 +89,11 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     void refreshWallet()
   }, [refreshWallet])
+
+  // Log debug parameters if any are set
+  useEffect(() => {
+    logDebugParams()
+  }, [])
 
   /**
    * Proactively ensure data set when wallet and synapse are ready
