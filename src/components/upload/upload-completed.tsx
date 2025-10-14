@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { INPI_ERROR_MESSAGE } from '@/hooks/use-filecoin-upload.ts'
+import { useIpniCheck } from '../../hooks/use-ipni-check.ts'
 import { Alert } from '../ui/alert.tsx'
 import { ButtonLink } from '../ui/button/button-link.tsx'
 import { Card } from '../ui/card.tsx'
@@ -11,10 +13,25 @@ interface UploadCompletedProps {
   pieceCid?: string
   providerName?: string
   network?: string
-  hasIpniFailure?: boolean // New prop
 }
 
-function UploadCompleted({ cid, pieceCid, providerName, network, hasIpniFailure }: UploadCompletedProps) {
+function UploadCompleted({ cid, pieceCid, providerName, network }: UploadCompletedProps) {
+  const [hasIpniFailure, setHasIpniFailure] = useState(false)
+
+  /**
+   * Get the status of the IPNI check to change how we render the completed state.
+   */
+  useIpniCheck({
+    cid,
+    isActive: true,
+    onSuccess: () => setHasIpniFailure(false),
+    maxAttempts: 1,
+    onError: (error) => {
+      console.error('[UploadCompleted] IPNI check failed:', error)
+      setHasIpniFailure(true)
+    },
+  })
+
   return (
     <>
       <Card.Wrapper>
