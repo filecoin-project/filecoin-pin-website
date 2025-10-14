@@ -1,5 +1,6 @@
 import { useContext, useEffect, useState } from 'react'
 import { Alert } from '@/components/ui/alert.tsx'
+import type { Progress } from '@/types/upload-progress.ts'
 import { FilecoinPinContext } from '../../context/filecoin-pin-provider.tsx'
 import { useDatasetPieces } from '../../hooks/use-dataset-pieces.ts'
 import { useFilecoinUpload } from '../../hooks/use-filecoin-upload.ts'
@@ -8,11 +9,10 @@ import { Heading } from '../ui/heading.tsx'
 import { LoadingState } from '../ui/loading-state.tsx'
 import { PageTitle } from '../ui/page-title.tsx'
 import DragNDrop from '../upload/drag-n-drop.tsx'
-import type { UploadProgress as UploadProgressType } from '../upload/upload-progress.tsx'
-import UploadProgress from '../upload/upload-progress.tsx'
+import { UploadStatus } from '../upload/upload-status.tsx'
 
 // Completed state for displaying upload history
-const COMPLETED_PROGRESS: UploadProgressType[] = [
+const COMPLETED_PROGRESS: Progress[] = [
   { step: 'creating-car', status: 'completed', progress: 100 },
   { step: 'checking-readiness', status: 'completed', progress: 100 },
   { step: 'uploading-car', status: 'completed', progress: 100 },
@@ -127,7 +127,7 @@ export default function Content() {
       {uploadedFile && (
         <div className="space-y-6">
           <Heading tag="h2">Current upload</Heading>
-          <UploadProgress
+          <UploadStatus
             cid={uploadState.currentCid}
             fileName={uploadedFile.file.name}
             fileSize={formatFileSize(uploadedFile.file.size)}
@@ -150,7 +150,7 @@ export default function Content() {
         <div className="space-y-6">
           <Heading tag="h2">Uploaded files</Heading>
           {uploadHistory.map((upload) => (
-            <UploadProgress
+            <UploadStatus
               cid={upload.cid}
               fileName={upload.fileName}
               fileSize={upload.fileSize}

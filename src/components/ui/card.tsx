@@ -1,4 +1,4 @@
-import type { UploadProgress } from '../upload/upload-progress.tsx'
+import type { Progress } from '../../types/upload-progress.ts'
 import { BadgeStatus } from './badge-status.tsx'
 import { Heading } from './heading.tsx'
 import { Spinner } from './spinner.tsx'
@@ -9,7 +9,7 @@ type CardWrapperProps = {
 
 type CardHeaderProps = {
   title: string
-  status: UploadProgress['status']
+  status: Progress['status']
   estimatedTime?: string
   withSpinner?: boolean
 }
