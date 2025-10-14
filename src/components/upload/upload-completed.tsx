@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { UPLOAD_COMPLETED_LINKS } from '@/constants/upload-completed-links.ts'
 import { INPI_ERROR_MESSAGE } from '@/hooks/use-filecoin-upload.ts'
 import { useIpniCheck } from '../../hooks/use-ipni-check.ts'
 import { Alert } from '../ui/alert.tsx'
@@ -7,22 +8,35 @@ import { Card } from '../ui/card.tsx'
 import { DownloadButton } from '../ui/download-button.tsx'
 import { TextLink } from '../ui/link.tsx'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
+import type { UploadStatusProps } from './upload-status.tsx'
 
 interface UploadCompletedProps {
-  cid: string
-  pieceCid?: string
-  providerName?: string
-  network?: string
+  cid: UploadStatusProps['cid']
+  fileName: UploadStatusProps['fileName']
+  pieceCid?: UploadStatusProps['pieceCid']
+  providerName?: UploadStatusProps['providerName']
+  providerId?: UploadStatusProps['providerId']
+  serviceURL?: UploadStatusProps['serviceURL']
+  datasetId?: UploadStatusProps['datasetId']
 }
 
-function UploadCompleted({ cid, pieceCid, providerName, network }: UploadCompletedProps) {
+function UploadCompleted({
+  cid,
+  fileName,
+  pieceCid,
+  providerName,
+  datasetId,
+  providerId,
+  serviceURL,
+}: UploadCompletedProps) {
+  const { ipfsBaseUrl, providerBaseUrl } = UPLOAD_COMPLETED_LINKS
   const [hasIpniFailure, setHasIpniFailure] = useState(false)
 
   /**
    * Get the status of the IPNI check to change how we render the completed state.
    */
   useIpniCheck({
-    cid,
+    cid: cid || null,
     isActive: true,
     onSuccess: () => setHasIpniFailure(false),
     maxAttempts: 1,
@@ -31,7 +45,6 @@ function UploadCompleted({ cid, pieceCid, providerName, network }: UploadComplet
       setHasIpniFailure(true)
     },
   })
-
   return (
     <>
       <Card.Wrapper>
@@ -39,21 +52,24 @@ function UploadCompleted({ cid, pieceCid, providerName, network }: UploadComplet
         <Card.InfoRow
           subtitle={
             hasIpniFailure ? (
-              <TextWithCopyToClipboard text={cid} />
+              <TextWithCopyToClipboard text={cid || ''} />
             ) : (
-              <TextWithCopyToClipboard href={`https://dweb.link/ipfs/${cid}`} text={cid} />
+              <TextWithCopyToClipboard href={`${ipfsBaseUrl}${cid}`} text={cid || ''} />
             )
           }
           title="IPFS Root CID"
         >
-          {!hasIpniFailure && <DownloadButton href={`https://dweb.link/ipfs/${cid}`} />}
+          {!hasIpniFailure && <DownloadButton href={`${ipfsBaseUrl}${cid}?download=true&filename=${fileName}`} />}
         </Card.InfoRow>
       </Card.Wrapper>
 
       {pieceCid && (
         <Card.Wrapper>
-          <Card.InfoRow subtitle={<TextWithCopyToClipboard text={pieceCid} />} title="Filecoin Piece CID">
-            <DownloadButton href={`https://pdp.vxb.ai/${network || 'calibration'}/piece/${pieceCid}`} />
+          <Card.InfoRow
+            subtitle={<TextWithCopyToClipboard href={`${providerBaseUrl}piece/${pieceCid}`} text={pieceCid} />}
+            title="Filecoin Piece CID"
+          >
+            <DownloadButton href={`${serviceURL}piece/${pieceCid}`} />
           </Card.InfoRow>
         </Card.Wrapper>
       )}
@@ -61,10 +77,10 @@ function UploadCompleted({ cid, pieceCid, providerName, network }: UploadComplet
       {providerName && (
         <Card.Wrapper>
           <Card.InfoRow
-            subtitle={<TextLink href={`https://filfox.info/en/address/${providerName}`}>{providerName}</TextLink>}
+            subtitle={<TextLink href={`${providerBaseUrl}providers/${providerId}`}>{providerName}</TextLink>}
             title="Provider"
           >
-            <ButtonLink href={'#'}>View proofs</ButtonLink>
+            <ButtonLink href={`${providerBaseUrl}dataset/${datasetId}`}>View proofs</ButtonLink>
           </Card.InfoRow>
         </Card.Wrapper>
       )}

@@ -132,7 +132,6 @@ export default function Content() {
             fileName={uploadedFile.file.name}
             fileSize={formatFileSize(uploadedFile.file.size)}
             isExpanded={isExpanded}
-            network={wallet.status === 'ready' ? wallet.data.network : undefined}
             onToggleExpanded={() => setIsExpanded(!isExpanded)}
             pieceCid={uploadState.pieceCid}
             progresses={uploadState.progress}
@@ -152,11 +151,11 @@ export default function Content() {
           {uploadHistory.map((upload) => (
             <UploadStatus
               cid={upload.cid}
+              datasetId={upload.datasetId}
               fileName={upload.fileName}
               fileSize={upload.fileSize}
               isExpanded={expandedHistoryItems.has(upload.id)}
               key={upload.id}
-              network={upload.network}
               onToggleExpanded={() => {
                 setExpandedHistoryItems((prev) => {
                   const next = new Set(prev)
@@ -170,7 +169,9 @@ export default function Content() {
               }}
               pieceCid={upload.pieceCid}
               progresses={COMPLETED_PROGRESS}
+              providerId={upload.providerId}
               providerName={upload.providerName}
+              serviceURL={upload.serviceURL}
               transactionHash={upload.transactionHash}
             />
           ))}

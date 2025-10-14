@@ -1,10 +1,11 @@
 import type { Progress } from '../../types/upload-progress.ts'
 import { CarUploadAndIpniCard } from './car-upload-and-ipni-card.tsx'
 import { ProgressCard } from './progress-card.tsx'
+import type { UploadStatusProps } from './upload-status.tsx'
 
 interface UploadProgressProps {
   progresses: Array<Progress>
-  transactionHash?: string
+  transactionHash?: UploadStatusProps['transactionHash']
   getCombinedFirstStageStatus: () => Progress['status']
   getCombinedFirstStageProgress: () => number
   cid?: string

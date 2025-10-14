@@ -1,7 +1,7 @@
 function Logo() {
   return (
-    <div className="flex items-center gap-4">
-      <span className="text-xl font-medium text-white">Filecoin Pin | IPFS</span>
+    <div className="flex gap-4 items-center">
+      <img alt="Filecoin Pin Logo" className="h-8 w-auto" src="/logo.svg" />
       <DemoBadge />
     </div>
   )
@@ -9,7 +9,7 @@ function Logo() {
 
 function DemoBadge() {
   return (
-    <span className="uppercase px-2 py-0.5 rounded-sm text-brand-500 border bg-brand-950 text-sm font-mono border-brand-900">
+    <span className="uppercase px-2 py-0.5 rounded-sm text-brand-500 border bg-brand-950 text-xs font-mono border-brand-900">
       Demo
     </span>
   )
