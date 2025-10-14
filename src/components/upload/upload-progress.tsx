@@ -5,7 +5,7 @@ import { ButtonLink } from '../ui/button/button-link.tsx'
 import { Card } from '../ui/card.tsx'
 import { DownloadButton } from '../ui/download-button.tsx'
 import { FileInfo } from '../ui/file-info.tsx'
-import { Link } from '../ui/link.tsx'
+import { TextLink } from '../ui/link.tsx'
 import { ProgressBar } from '../ui/progress-bar.tsx'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
 export interface UploadProgress {
@@ -234,7 +234,9 @@ export default function UploadProgress({
                   </Card.InfoRow>
                   {providerName && (
                     <Card.InfoRow
-                      subtitle={<Link href={`https://filfox.info/en/address/${providerName}`}>{providerName}</Link>}
+                      subtitle={
+                        <TextLink href={`https://filfox.info/en/address/${providerName}`}>{providerName}</TextLink>
+                      }
                       title="Provider"
                     >
                       <ButtonLink href={'#'}>View proofs</ButtonLink>

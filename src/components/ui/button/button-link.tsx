@@ -1,4 +1,5 @@
 import { ButtonBase, type ButtonBaseProps } from './button-base.tsx'
+import { ExternalLink } from '../link.tsx'
 
 type ButtonLinkProps = Omit<ButtonBaseProps, 'onClick'> & {
   href: string
@@ -6,11 +7,11 @@ type ButtonLinkProps = Omit<ButtonBaseProps, 'onClick'> & {
 
 function ButtonLink({ href, children, disabled, variant = 'secondary', ...props }: ButtonLinkProps) {
   return (
-    <a href={href} rel="noopener noreferrer" target="_blank">
+    <ExternalLink href={href}>
       <ButtonBase disabled={disabled} variant={variant} {...props}>
         {children}
       </ButtonBase>
-    </a>
+    </ExternalLink>
   )
 }
 

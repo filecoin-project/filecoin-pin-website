@@ -1,14 +1,16 @@
-type LinkProps = {
+type TextLinkProps = {
   href: string
   children: React.ReactNode
 }
 
-function Link({ href, children }: LinkProps) {
-  return (
-    <a className="text-brand-500 underline" href={href} rel="noopener noreferrer" target="_blank">
-      {children}
-    </a>
-  )
+function TextLink(props: TextLinkProps) {
+  return <ExternalLink {...props} className="text-brand-500 underline" />
 }
 
-export { Link }
+type ExternalLinkProps = Omit<React.ComponentProps<'a'>, 'rel' | 'target'>
+
+function ExternalLink(props: ExternalLinkProps) {
+  return <a {...props} rel="noopener noreferrer" target="_blank" />
+}
+
+export { TextLink, ExternalLink }
