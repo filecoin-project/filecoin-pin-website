@@ -41,7 +41,7 @@ export function getStepLabel(step: Progress['step']) {
     case 'creating-car':
     case 'checking-readiness':
     case 'uploading-car':
-      return 'Creating CAR and uploading to the Filecoin SP'
+      return 'Preparing service, creating CAR file, and uploading to the Filecoin SP'
     case 'announcing-cids':
       return 'Announcing IPFS CIDs to IPNI'
     case 'finalizing-transaction':
