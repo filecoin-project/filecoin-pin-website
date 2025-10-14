@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import { Alert } from '@/components/ui/alert.tsx'
 import type { Progress } from '@/types/upload-progress.ts'
 import { FilecoinPinContext } from '../../context/filecoin-pin-provider.tsx'
@@ -24,6 +24,7 @@ export default function Content() {
   const [uploadedFile, setUploadedFile] = useState<{ file: File; cid: string } | null>(null)
   const [isExpanded, setIsExpanded] = useState(true)
   const [expandedHistoryItems, setExpandedHistoryItems] = useState<Set<string>>(new Set())
+  const pendingAutoExpandCidsRef = useRef<Set<string>>(new Set()) // CIDs waiting to be auto-expanded when they appear in history
   const [dragDropKey, setDragDropKey] = useState(0) // Key to force DragNDrop remount
   const { uploadState, uploadFile, resetUpload } = useFilecoinUpload()
   const { pieces: uploadHistory, refreshPieces, isLoading: isLoadingPieces } = useDatasetPieces()
@@ -80,9 +81,20 @@ export default function Content() {
 
   // Refresh pieces list when upload completes
   useEffect(() => {
-    const isUploadComplete = !uploadState.isUploading && uploadState.progress.every((p) => p.status === 'completed')
+    // Check if upload is complete - treat IPNI failures as complete since file is stored on Filecoin
+    const isUploadComplete =
+      !uploadState.isUploading &&
+      uploadState.currentCid &&
+      uploadState.progress.every((p) => {
+        return p.status === 'completed' || (p.step === 'announcing-cids' && p.status === 'error')
+      })
+
     if (isUploadComplete && uploadState.currentCid) {
       console.debug('[Content] Upload completed, refreshing pieces list')
+
+      // Mark this CID to be auto-expanded when it appears in history
+      pendingAutoExpandCidsRef.current = new Set(pendingAutoExpandCidsRef.current).add(uploadState.currentCid)
+
       // Add a small delay to ensure the piece is indexed
       setTimeout(() => {
         refreshPieces()
@@ -94,6 +106,36 @@ export default function Content() {
       }, 2000)
     }
   }, [uploadState.isUploading, uploadState.progress, uploadState.currentCid, refreshPieces, resetUpload])
+
+  // Auto-expand items when they appear in history (only once per upload)
+  useEffect(() => {
+    if (uploadHistory.length === 0) return
+
+    const pending = pendingAutoExpandCidsRef.current
+    if (pending.size === 0) return
+
+    const nextPending = new Set<string>()
+    const idsToExpand: string[] = []
+
+    pending.forEach((cid) => {
+      const piece = uploadHistory.find((p) => p.cid === cid)
+      if (piece) {
+        idsToExpand.push(piece.id)
+      } else {
+        nextPending.add(cid)
+      }
+    })
+
+    if (idsToExpand.length > 0) {
+      setExpandedHistoryItems((prev) => {
+        const next = new Set(prev)
+        idsToExpand.forEach((id) => next.add(id))
+        return next
+      })
+    }
+
+    pendingAutoExpandCidsRef.current = nextPending
+  }, [uploadHistory])
 
   // Auto-clear upload state on error
   useEffect(() => {
