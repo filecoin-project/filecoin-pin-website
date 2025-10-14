@@ -42,7 +42,7 @@ export const useFilecoinUpload = () => {
   if (!context) {
     throw new Error('useFilecoinUpload must be used within FilecoinPinProvider')
   }
-  const { synapse, storageContext, providerInfo, wallet } = context
+  const { synapse, storageContext, providerInfo } = context
 
   const [uploadState, setUploadState] = useState<UploadState>({
     isUploading: false,
@@ -61,13 +61,6 @@ export const useFilecoinUpload = () => {
     const announcingStep = uploadState.progress.find((p) => p.step === 'announcing-cids')
     return announcingStep?.status === 'in-progress'
   }, [uploadState.progress])
-
-  // Debug logging for IPNI check
-  console.debug('[FilecoinUpload] IPNI check state:', {
-    currentCid: uploadState.currentCid,
-    isAnnouncingCids,
-    announcingStep: uploadState.progress.find((p) => p.step === 'announcing-cids'),
-  })
 
   // Use IPNI check hook to poll for CID availability
   useIpniCheck({
@@ -224,7 +217,7 @@ export const useFilecoinUpload = () => {
         }))
       }
     },
-    [updateProgress, synapse, storageContext, providerInfo, wallet, uploadState.pieceCid, uploadState.transactionHash]
+    [updateProgress, synapse, storageContext, providerInfo]
   )
 
   const resetUpload = useCallback(() => {

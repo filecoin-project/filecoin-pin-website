@@ -1,5 +1,5 @@
 import { Root } from '@radix-ui/react-form'
-import { useContext, useEffect, useState } from 'react'
+import { useContext, useState } from 'react'
 import { FilecoinPinContext } from '../../context/filecoin-pin-provider.tsx'
 import { FilePicker } from '../file-picker/index.tsx'
 import { ButtonBase as Button } from '../ui/button/button-base.tsx'
@@ -19,7 +19,7 @@ export default function DragNDrop({ onFileSelected, onUpload, isUploading }: Dra
     throw new Error('DragNDrop must be used within FilecoinPinProvider')
   }
 
-  const { dataSet, ensureDataSet, storageContext } = context
+  const { dataSet, storageContext } = context
 
   const fileIsSelected = Boolean(file)
   const buttonIsDisabled = !fileIsSelected || isUploading || !storageContext
@@ -34,11 +34,6 @@ export default function DragNDrop({ onFileSelected, onUpload, isUploading }: Dra
   function clearFile() {
     setFile(null)
   }
-
-  useEffect(() => {
-    // Trigger data set initialization on mount
-    void ensureDataSet()
-  }, [ensureDataSet])
 
   return (
     <Root className="space-y-6">

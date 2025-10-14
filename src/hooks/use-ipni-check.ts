@@ -100,7 +100,6 @@ export const useIpniCheck = ({
 
   // Start polling when isActive becomes true
   useEffect(() => {
-    console.debug('[IpniCheck] useEffect triggered:', { isActive, cid, hasCid: !!cid })
     if (isActive && cid) {
       console.debug('[IpniCheck] Starting polling for CID:', cid)
       pollWithBackoff()
