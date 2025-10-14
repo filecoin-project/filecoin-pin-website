@@ -22,19 +22,21 @@ export default function DragNDrop({ onFileSelected, onUpload, isUploading }: Dra
   const fileIsSelected = Boolean(file)
   const buttonIsDisabled = !fileIsSelected || isUploading
 
-  function uploadFile() {
+  function uploadFile(e: React.MouseEvent) {
+    e.preventDefault() // Prevent form submission
     if (file) {
       onUpload(file)
       setFile(null)
     }
   }
 
-  function clearFile() {
+  function clearFile(e: React.MouseEvent) {
+    e.preventDefault() // Prevent form submission
     setFile(null)
   }
 
   return (
-    <Root className="space-y-6">
+    <Root className="space-y-6" onSubmit={(e) => e.preventDefault()}>
       <FilePicker
         file={file}
         maxSize={1_000_000_000}
@@ -48,10 +50,10 @@ export default function DragNDrop({ onFileSelected, onUpload, isUploading }: Dra
 
       <div className="flex justify-end">
         <div className="flex gap-4 items-center">
-          <Button disabled={buttonIsDisabled} onClick={clearFile} variant="secondary">
+          <Button disabled={buttonIsDisabled} onClick={clearFile} type="button" variant="secondary">
             Cancel
           </Button>
-          <Button disabled={buttonIsDisabled} loading={isUploading} onClick={uploadFile} variant="primary">
+          <Button disabled={buttonIsDisabled} loading={isUploading} onClick={uploadFile} type="button" variant="primary">
             Upload
           </Button>
         </div>
