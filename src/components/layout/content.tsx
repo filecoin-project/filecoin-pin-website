@@ -117,11 +117,13 @@ export default function Content() {
         variant="neutral"
       />
 
-      {/* Show drag-n-drop - disabled when actively uploading */}
-      <div className="space-y-6">
-        <Heading tag="h2">Upload a file</Heading>
-        <DragNDrop isUploading={uploadState.isUploading} key={dragDropKey} onUpload={handleUpload} />
-      </div>
+      {/* Show drag-n-drop only when not uploading */}
+      {!uploadedFile && (
+        <div className="space-y-6">
+          <Heading tag="h2">Upload a file</Heading>
+          <DragNDrop isUploading={uploadState.isUploading} key={dragDropKey} onUpload={handleUpload} />
+        </div>
+      )}
 
       {/* Show active upload progress */}
       {uploadedFile && (
