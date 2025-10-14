@@ -5,23 +5,25 @@ import { Card } from '../ui/card.tsx'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
 
 interface ProgressCardProps {
-  step: Progress
+  progress: Progress
   transactionHash?: string
 }
 
-function ProgressCard({ step, transactionHash }: ProgressCardProps) {
+function ProgressCard({ progress, transactionHash }: ProgressCardProps) {
   return (
     <Card.Wrapper>
       <Card.Header
-        estimatedTime={getEstimatedTime(step.step)}
-        status={step.status}
-        title={getStepLabel(step.step)}
+        estimatedTime={getEstimatedTime(progress.step)}
+        status={progress.status}
+        title={getStepLabel(progress.step)}
         withSpinner
       />
 
-      {step.error && <Alert message={step.error} variant="error" />}
+      {progress.error && (
+        <Alert message={progress.error} variant={progress.step === 'announcing-cids' ? 'warning' : 'error'} />
+      )}
 
-      {step.step === 'finalizing-transaction' && transactionHash && (
+      {progress.step === 'finalizing-transaction' && transactionHash && (
         <Card.Content>
           <TextWithCopyToClipboard
             href={`https://filecoin-testnet.blockscout.com/tx/${transactionHash}`}

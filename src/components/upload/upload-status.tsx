@@ -9,7 +9,7 @@ import { UploadProgress } from './upload-progress.tsx'
 export interface UploadStatusProps {
   fileName: string
   fileSize: string
-  progress: Progress[]
+  progresses: Array<Progress>
   isExpanded?: boolean
   onToggleExpanded?: () => void
   cid?: string
@@ -22,7 +22,7 @@ export interface UploadStatusProps {
 function UploadStatus({
   fileName,
   fileSize,
-  progress,
+  progresses,
   isExpanded = true,
   onToggleExpanded,
   cid,
@@ -33,14 +33,14 @@ function UploadStatus({
 }: UploadStatusProps) {
   // Calculate combined progress for the first stage (creating CAR + checking readiness + uploading)
   const getCombinedFirstStageProgress = useCallback(() => {
-    const { creatingCar, checkingReadiness, uploadingCar } = createStepGroup(progress)
+    const { creatingCar, checkingReadiness, uploadingCar } = createStepGroup(progresses)
     const total = creatingCar.progress + checkingReadiness.progress + uploadingCar.progress
     return Math.round(total / 3)
-  }, [progress])
+  }, [progresses])
 
   // Get the status for the combined first stage
   const getCombinedFirstStageStatus = useCallback((): Progress['status'] => {
-    const { creatingCar, checkingReadiness, uploadingCar } = createStepGroup(progress)
+    const { creatingCar, checkingReadiness, uploadingCar } = createStepGroup(progresses)
     // If any stage has error, show error
     if (uploadingCar?.status === 'error' || checkingReadiness?.status === 'error' || creatingCar?.status === 'error') {
       return 'error'
@@ -64,20 +64,27 @@ function UploadStatus({
 
     // Otherwise pending
     return 'pending'
-  }, [progress])
+  }, [progresses])
 
   // Check if all steps are completed AND we have a CID (upload actually finished)
-  const isCompleted = progress.every((p) => p.status === 'completed') && !!cid
+  // BUT treat IPNI failures as still "completed" since file is stored on Filecoin
+  const isCompleted =
+    Boolean(cid) &&
+    progresses.every((p) => {
+      return p.status === 'completed' || (p.step === 'announcing-cids' && p.status === 'error')
+    })
 
-  // Check if any step is in error
-  const hasError = progress.some((p) => p.status === 'error')
+  // Check if any step is in error (excluding IPNI failures)
+  const hasError = progresses.some((p) => p.status === 'error' && p.step !== 'announcing-cids')
+
+  const hasIpniFailure = progresses.some((p) => p.step === 'announcing-cids' && p.status === 'error')
 
   // Determine the badge status for the file card header
   function getBadgeStatus() {
     if (isCompleted) return 'pinned'
     if (hasError) return 'error'
     // Check if any step is in progress
-    if (progress.some((p) => p.status === 'in-progress')) return 'in-progress'
+    if (progresses.some((p) => p.status === 'in-progress')) return 'in-progress'
     // If no steps are in progress but not all completed, must be pending
     return 'pending'
   }
@@ -97,12 +104,18 @@ function UploadStatus({
 
         <AccordionContent className="space-y-6 mt-6">
           {isCompleted && cid ? (
-            <UploadCompleted cid={cid} network={network} pieceCid={pieceCid} providerName={providerName} />
+            <UploadCompleted
+              cid={cid}
+              hasIpniFailure={hasIpniFailure}
+              network={network}
+              pieceCid={pieceCid}
+              providerName={providerName}
+            />
           ) : (
             <UploadProgress
               getCombinedFirstStageProgress={getCombinedFirstStageProgress}
               getCombinedFirstStageStatus={getCombinedFirstStageStatus}
-              progress={progress}
+              progresses={progresses}
               transactionHash={transactionHash}
             />
           )}

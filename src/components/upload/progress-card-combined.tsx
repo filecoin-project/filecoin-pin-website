@@ -4,17 +4,17 @@ import { Card } from '../ui/card.tsx'
 import { ProgressBar } from '../ui/progress-bar.tsx'
 
 interface ProgressCardCombinedProps {
-  progress: Progress[]
+  progresses: Array<Progress>
   getCombinedFirstStageStatus: () => Progress['status']
   getCombinedFirstStageProgress: () => number
 }
 
 function ProgressCardCombined({
-  progress,
+  progresses,
   getCombinedFirstStageStatus,
   getCombinedFirstStageProgress,
 }: ProgressCardCombinedProps) {
-  const hasCreatingCarStep = progress.find((p) => p.step === 'creating-car')
+  const hasCreatingCarStep = progresses.find((progress) => progress.step === 'creating-car')
 
   const firstStagestatus = getCombinedFirstStageStatus()
   const firstStageProgress = getCombinedFirstStageProgress()

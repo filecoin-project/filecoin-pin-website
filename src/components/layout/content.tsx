@@ -135,7 +135,7 @@ export default function Content() {
             network={wallet.status === 'ready' ? wallet.data.network : undefined}
             onToggleExpanded={() => setIsExpanded(!isExpanded)}
             pieceCid={uploadState.pieceCid}
-            progress={uploadState.progress}
+            progresses={uploadState.progress}
             providerName={providerInfo?.name || (providerInfo?.id ? String(providerInfo.id) : undefined)}
             transactionHash={uploadState.transactionHash}
           />
@@ -169,7 +169,7 @@ export default function Content() {
                 })
               }}
               pieceCid={upload.pieceCid}
-              progress={COMPLETED_PROGRESS}
+              progresses={COMPLETED_PROGRESS}
               providerName={upload.providerName}
               transactionHash={upload.transactionHash}
             />
