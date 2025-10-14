@@ -4,6 +4,7 @@ import './index.css'
 import { Toaster } from 'sonner'
 import App from './app.tsx'
 import { FilecoinPinProvider } from './context/filecoin-pin-provider.tsx'
+import { BreakpointDebugger } from './components/ui/breakpoint-debugger.tsx'
 
 const root = document.getElementById('root')
 
@@ -16,6 +17,7 @@ createRoot(root).render(
     <FilecoinPinProvider>
       <Toaster mobileOffset={0} offset={0} position="bottom-right" />
       <App />
+      {import.meta.env.DEV && <BreakpointDebugger />}
     </FilecoinPinProvider>
   </StrictMode>
 )
