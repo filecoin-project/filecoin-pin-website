@@ -5,7 +5,7 @@ import { StepItem } from '../ui/step-item.tsx'
 import { StepItemContainer } from '../ui/step-item-container.tsx'
 
 export default function SidebarSteps() {
-  const { car, ipni } = SIDEBAR_CONFIG.documentation
+  const { car, ipni, filecoinPin } = SIDEBAR_CONFIG.documentation
 
   return (
     <StepItemContainer>
@@ -36,7 +36,7 @@ export default function SidebarSteps() {
           quickly using standard IPFS tooling (e.g., Gateways).
         </p>
       </StepItem>
-      <ButtonLink href="https://docs.filecoin.io/about/how-filecoin-works/filecoin-pin/">Learn more</ButtonLink>
+      <ButtonLink href={filecoinPin}>Learn more</ButtonLink>
     </StepItemContainer>
   )
 }

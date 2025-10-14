@@ -7,5 +7,6 @@ export const SIDEBAR_CONFIG = {
   documentation: {
     car: 'https://docs.ipfs.tech/concepts/glossary/#car',
     ipni: 'https://docs.ipfs.tech/concepts/ipni',
+    filecoinPin: 'https://filoz.gitbook.io/filoz-filecoin-docs/storage-providers/pdp/developer/filecoin-pin',
   },
 } as const

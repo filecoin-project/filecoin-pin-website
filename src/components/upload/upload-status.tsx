@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import type { Progress } from '../../types/upload-progress.ts'
 import { createStepGroup } from '../../utils/upload-status.ts'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion.tsx'
@@ -7,16 +8,19 @@ import { UploadCompleted } from './upload-completed.tsx'
 import { UploadProgress } from './upload-progress.tsx'
 
 export interface UploadStatusProps {
-  fileName: string
-  fileSize: string
+  fileName: DatasetPiece['fileName']
+  fileSize: DatasetPiece['fileSize']
   progresses: Array<Progress>
   isExpanded?: boolean
   onToggleExpanded?: () => void
-  cid?: string
-  pieceCid?: string
-  providerName?: string
-  transactionHash?: string
-  network?: string
+  cid?: DatasetPiece['cid']
+  pieceCid?: DatasetPiece['pieceCid']
+  providerName?: DatasetPiece['providerName']
+  transactionHash?: DatasetPiece['transactionHash']
+  network?: DatasetPiece['network']
+  providerId?: DatasetPiece['providerId']
+  datasetId?: DatasetPiece['datasetId']
+  serviceURL?: DatasetPiece['serviceURL']
 }
 
 function UploadStatus({
@@ -26,10 +30,13 @@ function UploadStatus({
   isExpanded = true,
   onToggleExpanded,
   cid,
+  datasetId,
+  network,
   pieceCid,
   providerName,
+  providerId,
+  serviceURL,
   transactionHash,
-  network,
 }: UploadStatusProps) {
   // Calculate combined progress for the first stage (creating CAR + checking readiness + uploading)
   const getCombinedFirstStageProgress = useCallback(() => {
@@ -102,7 +109,16 @@ function UploadStatus({
 
         <AccordionContent className="space-y-6 mt-6">
           {isCompleted && cid ? (
-            <UploadCompleted cid={cid} network={network} pieceCid={pieceCid} providerName={providerName} />
+            <UploadCompleted
+              cid={cid}
+              datasetId={datasetId}
+              fileName={fileName}
+              network={network}
+              pieceCid={pieceCid}
+              providerId={providerId}
+              providerName={providerName}
+              serviceURL={serviceURL}
+            />
           ) : (
             <UploadProgress
               getCombinedFirstStageProgress={getCombinedFirstStageProgress}

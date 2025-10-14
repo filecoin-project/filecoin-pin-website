@@ -152,6 +152,7 @@ export default function Content() {
           {uploadHistory.map((upload) => (
             <UploadStatus
               cid={upload.cid}
+              datasetId={upload.datasetId}
               fileName={upload.fileName}
               fileSize={upload.fileSize}
               isExpanded={expandedHistoryItems.has(upload.id)}
@@ -170,7 +171,9 @@ export default function Content() {
               }}
               pieceCid={upload.pieceCid}
               progresses={COMPLETED_PROGRESS}
+              providerId={upload.providerId}
               providerName={upload.providerName}
+              serviceURL={upload.serviceURL}
               transactionHash={upload.transactionHash}
             />
           ))}
