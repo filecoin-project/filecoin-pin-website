@@ -19,7 +19,7 @@ export interface UploadStatusProps {
   network?: string
 }
 
-export default function UploadStatus({
+function UploadStatus({
   fileName,
   fileSize,
   progress,
@@ -111,3 +111,5 @@ export default function UploadStatus({
     </Accordion>
   )
 }
+
+export { UploadStatus }

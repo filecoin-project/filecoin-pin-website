@@ -9,7 +9,7 @@ import { Heading } from '../ui/heading.tsx'
 import { LoadingState } from '../ui/loading-state.tsx'
 import { PageTitle } from '../ui/page-title.tsx'
 import DragNDrop from '../upload/drag-n-drop.tsx'
-import UploadStatus from '../upload/upload-status.tsx'
+import { UploadStatus } from '../upload/upload-status.tsx'
 
 // Completed state for displaying upload history
 const COMPLETED_PROGRESS: Progress[] = [
