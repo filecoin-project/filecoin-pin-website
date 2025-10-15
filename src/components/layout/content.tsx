@@ -90,7 +90,7 @@ export default function Content() {
           <Heading tag="h2">Current upload</Heading>
 
           {/* Show error alert if upload failed */}
-          <UploadError />
+          <UploadError orchestration={orchestration} />
 
           <UploadStatus
             cid={activeUpload.currentCid}

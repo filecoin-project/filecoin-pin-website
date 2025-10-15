@@ -1,8 +1,12 @@
 import { AlertTriangle } from 'lucide-react'
-import { useUploadOrchestration } from '../../hooks/use-upload-orchestration.ts'
+import type { useUploadOrchestration } from '../../hooks/use-upload-orchestration.ts'
 
-function UploadError() {
-  const { activeUpload, uploadedFile, retryUpload, cancelUpload } = useUploadOrchestration()
+interface UploadErrorProps {
+  orchestration: ReturnType<typeof useUploadOrchestration>
+}
+
+function UploadError({ orchestration }: UploadErrorProps) {
+  const { activeUpload, uploadedFile, retryUpload, cancelUpload } = orchestration
 
   if (!activeUpload.error) {
     return null
