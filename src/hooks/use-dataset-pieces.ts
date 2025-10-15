@@ -168,10 +168,23 @@ export const useDatasetPieces = () => {
     loadPieces()
   }, [loadPieces])
 
+  /**
+   * Add a new piece to the history without refetching from backend.
+   * This is used when an upload completes and we already have all the data.
+   */
+  const addPiece = useCallback((piece: DatasetPiece) => {
+    setPieces((prev) => {
+      // Add new piece at the beginning (newest first)
+      const updated = [piece, ...prev]
+      return updated
+    })
+  }, [])
+
   return {
     pieces,
     isLoading,
     error,
     refreshPieces,
+    addPiece,
   }
 }
