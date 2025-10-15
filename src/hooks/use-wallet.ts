@@ -1,13 +1,13 @@
-import { useContext, useMemo } from 'react'
-import { FilecoinPinContext } from '../context/filecoin-pin-provider.tsx'
+import { useMemo } from 'react'
+import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 
+/**
+ * Lightweight hook around the wallet state for UI consumption.
+ * Exposes formatted balances, network, and a refresh action without
+ * leaking the full provider context into components.
+ */
 export const useWallet = () => {
-  const context = useContext(FilecoinPinContext)
-  if (!context) {
-    throw new Error('useWallet must be used within FilecoinPinProvider')
-  }
-
-  const { wallet, refreshWallet } = context
+  const { wallet, refreshWallet } = useFilecoinPinContext()
 
   return useMemo(
     () => ({

@@ -10,6 +10,7 @@ import {
   getSpCarDownloadLink,
 } from '@/utils/links.ts'
 import { useIpniCheck } from '../../hooks/use-ipni-check.ts'
+import { useProviderInfo } from '../../hooks/use-provider-info.ts'
 import { Alert } from '../ui/alert.tsx'
 import { ButtonLink } from '../ui/button/button-link.tsx'
 import { Card } from '../ui/card.tsx'
@@ -22,21 +23,12 @@ interface UploadCompletedProps {
   cid: string
   fileName: UploadStatusProps['fileName']
   pieceCid?: UploadStatusProps['pieceCid']
-  providerName?: UploadStatusProps['providerName']
-  serviceURL?: UploadStatusProps['serviceURL']
   datasetId?: UploadStatusProps['datasetId']
-  providerAddress: string
 }
 
-function UploadCompleted({
-  cid,
-  fileName,
-  pieceCid,
-  providerName,
-  datasetId,
-  providerAddress,
-  serviceURL,
-}: UploadCompletedProps) {
+function UploadCompleted({ cid, fileName, pieceCid, datasetId }: UploadCompletedProps) {
+  // Get provider info from context via hook
+  const providerInfo = useProviderInfo()
   const [hasIpniFailure, setHasIpniFailure] = useState(false)
 
   /**
@@ -53,7 +45,18 @@ function UploadCompleted({
     },
   })
   const fileNameOrDefault = fileName || 'file'
-  const datasetIdOrDefault = datasetId || ''
+  const datasetIdOrDefault = datasetId || providerInfo?.datasetId || ''
+
+  // If provider info is not ready, show a loading state
+  if (!providerInfo) {
+    return (
+      <Card.Wrapper>
+        <Card.InfoRow subtitle="Loading provider information..." title="Upload Complete" />
+      </Card.Wrapper>
+    )
+  }
+
+  const { providerAddress, providerName, serviceURL } = providerInfo
 
   return (
     <>
@@ -79,21 +82,19 @@ function UploadCompleted({
             subtitle={<TextWithCopyToClipboard href={getPieceExplorerLink(pieceCid)} text={pieceCid} />}
             title="Filecoin Piece CID"
           >
-            <DownloadButton href={getSpCarDownloadLink(cid, serviceURL ?? '')} />
+            <DownloadButton href={getSpCarDownloadLink(cid, serviceURL)} />
           </Card.InfoRow>
         </Card.Wrapper>
       )}
 
-      {providerName && (
-        <Card.Wrapper>
-          <Card.InfoRow
-            subtitle={<TextLink href={getProviderExplorerLink(providerAddress)}>{providerName}</TextLink>}
-            title="Provider"
-          >
-            <ButtonLink href={getDatasetExplorerLink(datasetIdOrDefault)}>View proofs</ButtonLink>
-          </Card.InfoRow>
-        </Card.Wrapper>
-      )}
+      <Card.Wrapper>
+        <Card.InfoRow
+          subtitle={<TextLink href={getProviderExplorerLink(providerAddress)}>{providerName}</TextLink>}
+          title="Provider"
+        >
+          <ButtonLink href={getDatasetExplorerLink(datasetIdOrDefault)}>View proofs</ButtonLink>
+        </Card.InfoRow>
+      </Card.Wrapper>
     </>
   )
 }
