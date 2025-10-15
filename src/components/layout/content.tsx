@@ -33,7 +33,7 @@ export default function Content() {
     throw new Error('Content must be used within FilecoinPinProvider')
   }
 
-  const { providerInfo, wallet, synapse } = context
+  const { wallet, synapse } = context
 
   // Determine if we're still initializing (wallet, synapse, provider)
   // Note: We don't block on isLoadingPieces - users can upload while history loads
@@ -46,9 +46,6 @@ export default function Content() {
     }
     if (!synapse) {
       return 'Initializing storage service...'
-    }
-    if (!providerInfo) {
-      return 'Selecting storage provider...'
     }
     return 'Preparing upload interface...'
   }
@@ -153,8 +150,6 @@ export default function Content() {
     }
   }, [uploadState.error, resetUpload])
 
-  const providerAddress = providerInfo?.serviceProvider ?? ''
-
   return (
     <div className="space-y-10">
       <PageTitle />
@@ -183,8 +178,6 @@ export default function Content() {
             onToggleExpanded={() => setIsExpanded(!isExpanded)}
             pieceCid={uploadState.pieceCid ?? ''}
             progresses={uploadState.progress}
-            providerAddress={providerAddress}
-            providerName={providerInfo?.name ?? 'unknown'}
             transactionHash={uploadState.transactionHash ?? ''}
           />
         </div>
@@ -218,9 +211,6 @@ export default function Content() {
               }}
               pieceCid={upload.pieceCid}
               progresses={COMPLETED_PROGRESS}
-              providerAddress={providerAddress}
-              providerName={upload.providerName}
-              serviceURL={upload.serviceURL}
               transactionHash={upload.transactionHash}
             />
           ))}
