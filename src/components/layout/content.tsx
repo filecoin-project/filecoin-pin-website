@@ -11,6 +11,7 @@ import { Heading } from '../ui/heading.tsx'
 import { LoadingState } from '../ui/loading-state.tsx'
 import { PageTitle } from '../ui/page-title.tsx'
 import DragNDrop from '../upload/drag-n-drop.tsx'
+import { UploadError } from '../upload/upload-error.tsx'
 import { UploadStatus } from '../upload/upload-status.tsx'
 
 // Completed state for displaying upload history
@@ -87,6 +88,10 @@ export default function Content() {
       {showActiveUpload && uploadedFile && (
         <div className="space-y-6">
           <Heading tag="h2">Current upload</Heading>
+
+          {/* Show error alert if upload failed */}
+          <UploadError />
+
           <UploadStatus
             cid={activeUpload.currentCid}
             fileName={uploadedFile.file.name}
