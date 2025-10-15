@@ -39,6 +39,6 @@ export const getDatasetExplorerLink = (datasetId: string): string => {
  * TODO: full implementation awaiting download-car, parse to file, client-side logic.
  * @see https://github.com/filecoin-project/filecoin-pin-website/issues/24
  */
-export const getSpCarDownloadLink = (ipfsRootCid: string, serviceUrl: string, _fileName?: string): string => {
-  return `${serviceUrl}ipfs/${ipfsRootCid}?filename=${_fileName}.car`
+export const getSpCarDownloadLink = (ipfsRootCid: string, serviceUrl: string, fileName: string): string => {
+  return `${serviceUrl}ipfs/${ipfsRootCid}?filename=${fileName}.car`
 }
