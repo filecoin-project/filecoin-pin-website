@@ -1,5 +1,5 @@
-import { useContext, useMemo } from 'react'
-import { FilecoinPinContext } from '../context/filecoin-pin-provider.tsx'
+import { useMemo } from 'react'
+import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 
 export interface ProviderInfo {
   providerAddress: string
@@ -34,13 +34,7 @@ export interface ProviderInfo {
  * ```
  */
 export function useProviderInfo(): ProviderInfo | null {
-  const context = useContext(FilecoinPinContext)
-
-  if (!context) {
-    throw new Error('useProviderInfo must be used within FilecoinPinProvider')
-  }
-
-  const { dataSet, providerInfo } = context
+  const { dataSet, providerInfo } = useFilecoinPinContext()
 
   return useMemo(() => {
     // Only return valid data when dataset is ready

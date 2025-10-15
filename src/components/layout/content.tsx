@@ -1,9 +1,10 @@
-import { useContext, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert } from '@/components/ui/alert.tsx'
 import type { Progress } from '@/types/upload-progress.ts'
-import { FilecoinPinContext } from '../../context/filecoin-pin-provider.tsx'
 import { useDatasetPieces } from '../../hooks/use-dataset-pieces.ts'
+import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { useFilecoinUpload } from '../../hooks/use-filecoin-upload.ts'
+import { useUploadProgress } from '../../hooks/use-upload-progress.ts'
 import { formatFileSize } from '../../utils/format-file-size.ts'
 import { Heading } from '../ui/heading.tsx'
 import { LoadingState } from '../ui/loading-state.tsx'
@@ -28,12 +29,8 @@ export default function Content() {
   const [dragDropKey, setDragDropKey] = useState(0) // Key to force DragNDrop remount
   const { uploadState, uploadFile, resetUpload } = useFilecoinUpload()
   const { pieces: uploadHistory, refreshPieces, isLoading: isLoadingPieces } = useDatasetPieces()
-  const context = useContext(FilecoinPinContext)
-  if (!context) {
-    throw new Error('Content must be used within FilecoinPinProvider')
-  }
-
-  const { wallet, synapse } = context
+  const { wallet, synapse } = useFilecoinPinContext()
+  const { isCompleted: isActiveUploadComplete } = useUploadProgress(uploadState.progress, uploadState.currentCid)
 
   // Determine if we're still initializing (wallet, synapse, provider)
   // Note: We don't block on isLoadingPieces - users can upload while history loads
@@ -78,15 +75,7 @@ export default function Content() {
 
   // Refresh pieces list when upload completes
   useEffect(() => {
-    // Check if upload is complete - treat IPNI failures as complete since file is stored on Filecoin
-    const isUploadComplete =
-      !uploadState.isUploading &&
-      uploadState.currentCid &&
-      uploadState.progress.every((p) => {
-        return p.status === 'completed' || (p.step === 'announcing-cids' && p.status === 'error')
-      })
-
-    if (isUploadComplete && uploadState.currentCid) {
+    if (isActiveUploadComplete && uploadState.currentCid) {
       console.debug('[Content] Upload completed, refreshing pieces list')
 
       // Mark this CID to be auto-expanded when it appears in history
@@ -102,7 +91,7 @@ export default function Content() {
         setDragDropKey((prev) => prev + 1)
       }, 2000)
     }
-  }, [uploadState.isUploading, uploadState.progress, uploadState.currentCid, refreshPieces, resetUpload])
+  }, [isActiveUploadComplete, uploadState.currentCid, refreshPieces, resetUpload])
 
   // Auto-expand items when they appear in history (only once per upload)
   useEffect(() => {
