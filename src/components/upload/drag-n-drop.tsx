@@ -32,7 +32,7 @@ export default function DragNDrop({ onFileSelected, onUpload, isUploading }: Dra
     <Root className="space-y-6" onSubmit={(e) => e.preventDefault()}>
       <FilePicker
         file={file}
-        maxSize={1_000_000_000}
+        maxSize={200_000_000}
         onChange={(file) => {
           setFile(file)
           if (file && onFileSelected) {
