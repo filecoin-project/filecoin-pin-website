@@ -1,7 +1,6 @@
-import { useCallback } from 'react'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
+import { useUploadProgress } from '../../hooks/use-upload-progress.ts'
 import type { Progress } from '../../types/upload-progress.ts'
-import { createStepGroup } from '../../utils/upload-status.ts'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion.tsx'
 import { FileInfo } from '../ui/file-info.tsx'
 import { UploadCompleted } from './upload-completed.tsx'
@@ -15,16 +14,9 @@ export interface UploadStatusProps {
   onToggleExpanded?: () => void
   cid?: DatasetPiece['cid']
   pieceCid?: DatasetPiece['pieceCid']
-  providerName: DatasetPiece['providerName']
   transactionHash: DatasetPiece['transactionHash']
   network?: DatasetPiece['network']
-  providerId?: DatasetPiece['providerId']
   datasetId?: DatasetPiece['datasetId']
-  serviceURL?: DatasetPiece['serviceURL']
-  /**
-   * We will have this providerAddress as soon as we have a dataSet...
-   */
-  providerAddress: string
 }
 
 function UploadStatus({
@@ -36,69 +28,10 @@ function UploadStatus({
   cid,
   datasetId,
   pieceCid,
-  providerName,
-  providerAddress,
-  serviceURL,
   transactionHash,
-  network,
 }: UploadStatusProps) {
-  // Calculate combined progress for the first stage (creating CAR + checking readiness + uploading)
-  const getCombinedFirstStageProgress = useCallback(() => {
-    const { creatingCar, checkingReadiness, uploadingCar } = createStepGroup(progresses)
-    const total = creatingCar.progress + checkingReadiness.progress + uploadingCar.progress
-    return Math.round(total / 3)
-  }, [progresses])
-
-  // Get the status for the combined first stage
-  const getCombinedFirstStageStatus = useCallback((): Progress['status'] => {
-    const { creatingCar, checkingReadiness, uploadingCar } = createStepGroup(progresses)
-    // If any stage has error, show error
-    if (uploadingCar?.status === 'error' || checkingReadiness?.status === 'error' || creatingCar?.status === 'error') {
-      return 'error'
-    }
-
-    // If uploading-car is completed, the whole stage is completed
-    if (uploadingCar?.status === 'completed') {
-      return 'completed'
-    }
-
-    // If any stage is in progress OR completed (but not all completed), show in-progress
-    const startedStages: Progress['status'][] = ['in-progress', 'completed']
-    const hasStarted =
-      (uploadingCar?.status && startedStages.includes(uploadingCar.status)) ||
-      (checkingReadiness?.status && startedStages.includes(checkingReadiness.status)) ||
-      (creatingCar?.status && startedStages.includes(creatingCar.status))
-
-    if (hasStarted) {
-      return 'in-progress'
-    }
-
-    // Otherwise pending
-    return 'pending'
-  }, [progresses])
-
-  const hasIpniFailure = progresses.find((p) => p.step === 'announcing-cids')?.status === 'error'
-
-  // Check if all steps are completed AND we have a CID (upload actually finished)
-  // BUT treat IPNI failures as still "completed" since file is stored on Filecoin
-  const isCompleted =
-    Boolean(cid) &&
-    progresses.every((p) => {
-      return p.status === 'completed' || (p.step === 'announcing-cids' && p.status === 'error')
-    })
-
-  // Check if any step is in error (excluding IPNI failures)
-  const hasError = progresses.some((p) => p.status === 'error' && p.step !== 'announcing-cids')
-
-  // Determine the badge status for the file card header
-  function getBadgeStatus() {
-    if (isCompleted) return 'pinned'
-    if (hasError) return 'error'
-    // Check if any step is in progress
-    if (progresses.some((p) => p.status === 'in-progress')) return 'in-progress'
-    // If no steps are in progress but not all completed, must be pending
-    return 'pending'
-  }
+  // Use the upload progress hook to calculate all progress-related values
+  const { isCompleted, badgeStatus } = useUploadProgress(progresses, cid)
 
   return (
     <Accordion
@@ -109,32 +42,15 @@ function UploadStatus({
       value={isExpanded ? 'file-card' : ''}
     >
       <AccordionItem value="file-card">
-        <FileInfo badgeStatus={getBadgeStatus()} fileName={fileName} fileSize={fileSize}>
+        <FileInfo badgeStatus={badgeStatus} fileName={fileName} fileSize={fileSize}>
           <AccordionTrigger />
         </FileInfo>
 
         <AccordionContent className="space-y-6 mt-6">
           {isCompleted && cid ? (
-            <UploadCompleted
-              cid={cid}
-              datasetId={datasetId}
-              fileName={fileName}
-              key={`${network}-${providerName}-${cid}-${pieceCid}`}
-              pieceCid={pieceCid}
-              providerAddress={providerAddress}
-              providerName={providerName}
-              serviceURL={serviceURL}
-            />
+            <UploadCompleted cid={cid} datasetId={datasetId} fileName={fileName} pieceCid={pieceCid} />
           ) : (
-            <UploadProgress
-              cid={cid}
-              fileName={fileName}
-              getCombinedFirstStageProgress={getCombinedFirstStageProgress}
-              getCombinedFirstStageStatus={getCombinedFirstStageStatus}
-              hasIpniFailure={hasIpniFailure}
-              progresses={progresses}
-              transactionHash={transactionHash}
-            />
+            <UploadProgress cid={cid} fileName={fileName} progresses={progresses} transactionHash={transactionHash} />
           )}
         </AccordionContent>
       </AccordionItem>

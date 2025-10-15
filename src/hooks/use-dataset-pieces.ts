@@ -1,6 +1,6 @@
 import { METADATA_KEYS, PDPServer, WarmStorageService } from '@filoz/synapse-sdk'
-import { useCallback, useContext, useEffect, useState } from 'react'
-import { FilecoinPinContext } from '../context/filecoin-pin-provider.tsx'
+import { useCallback, useEffect, useState } from 'react'
+import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 
 export interface DatasetPiece {
   id: string
@@ -18,17 +18,19 @@ export interface DatasetPiece {
   pieceId: number
 }
 
+/**
+ * Fetches and normalizes dataset pieces for the active wallet/provider combo.
+ *
+ * Abstracts away Synapse warm storage + PDP interactions so UI components
+ * simply call this hook and render the returned list.
+ */
 export const useDatasetPieces = () => {
   const [pieces, setPieces] = useState<DatasetPiece[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [hasLoaded, setHasLoaded] = useState(false)
 
-  const context = useContext(FilecoinPinContext)
-  if (!context) {
-    throw new Error('useDatasetPieces must be used within FilecoinPinProvider')
-  }
-
-  const { storageContext, providerInfo, wallet, synapse } = context
+  const { storageContext, providerInfo, wallet, synapse } = useFilecoinPinContext()
 
   const loadPieces = useCallback(async () => {
     if (!storageContext || !providerInfo || !synapse) {
@@ -41,9 +43,11 @@ export const useDatasetPieces = () => {
         !!synapse
       )
       setPieces([])
+      setHasLoaded(false)
       return
     }
 
+    setHasLoaded(false)
     setIsLoading(true)
     setError(null)
 
@@ -151,6 +155,7 @@ export const useDatasetPieces = () => {
       setPieces([])
     } finally {
       setIsLoading(false)
+      setHasLoaded(true)
     }
   }, [storageContext, providerInfo, wallet, synapse])
 
@@ -160,6 +165,7 @@ export const useDatasetPieces = () => {
       loadPieces()
     } else {
       setPieces([])
+      setHasLoaded(false)
     }
   }, [loadPieces])
 
@@ -167,10 +173,24 @@ export const useDatasetPieces = () => {
     loadPieces()
   }, [loadPieces])
 
+  /**
+   * Add a new piece to the history without refetching from backend.
+   * This is used when an upload completes and we already have all the data.
+   */
+  const addPiece = useCallback((piece: DatasetPiece) => {
+    setPieces((prev) => {
+      // Add new piece at the beginning (newest first)
+      const updated = [piece, ...prev]
+      return updated
+    })
+  }, [])
+
   return {
     pieces,
     isLoading,
     error,
     refreshPieces,
+    addPiece,
+    hasLoaded,
   }
 }

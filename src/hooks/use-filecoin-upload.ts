@@ -1,10 +1,10 @@
 import { createCarFromFile } from 'filecoin-pin/core/unixfs'
 import { checkUploadReadiness, executeUpload } from 'filecoin-pin/core/upload'
 import pino from 'pino'
-import { useCallback, useContext, useMemo, useState } from 'react'
-import { FilecoinPinContext } from '../context/filecoin-pin-provider.tsx'
+import { useCallback, useMemo, useState } from 'react'
 import type { Progress } from '../types/upload-progress.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
+import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 import { useIpniCheck } from './use-ipni-check.ts'
 
 interface UploadState {
@@ -40,12 +40,18 @@ const initialProgress: Progress[] = [
 export const INPI_ERROR_MESSAGE =
   "CID not yet indexed by IPNI. It's stored on Filecoin and fetchable now, but may take time to appear on IPFS."
 
+/**
+ * Handles the end-to-end upload workflow with filecoin-pin:
+ * - Builds a CAR file in-browser
+ * - Checks upload readiness (allowances, balances)
+ * - Executes the upload with progress callbacks
+ * - Tracks IPNI availability and on-chain confirmation
+ *
+ * UI components receive a single `uploadState` object plus `uploadFile`/`resetUpload`
+ * actions so they stay dumb and declarative.
+ */
 export const useFilecoinUpload = () => {
-  const context = useContext(FilecoinPinContext)
-  if (!context) {
-    throw new Error('useFilecoinUpload must be used within FilecoinPinProvider')
-  }
-  const { synapse, storageContext, providerInfo } = context
+  const { synapse, storageContext, providerInfo } = useFilecoinPinContext()
 
   const [uploadState, setUploadState] = useState<UploadState>({
     isUploading: false,
