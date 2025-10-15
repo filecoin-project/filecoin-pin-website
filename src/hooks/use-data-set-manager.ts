@@ -8,7 +8,7 @@ import {
   storeDataSetIdForProvider,
 } from '../lib/local-storage/data-set.ts'
 
-type ProviderInfo = NonNullable<Awaited<ReturnType<typeof createStorageContext>>['providerInfo']>
+export type ProviderInfo = NonNullable<Awaited<ReturnType<typeof createStorageContext>>['providerInfo']>
 type StorageContext = NonNullable<Awaited<ReturnType<typeof createStorageContext>>['storage']>
 
 export type DataSetState =

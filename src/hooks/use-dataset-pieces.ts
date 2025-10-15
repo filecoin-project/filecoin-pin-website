@@ -8,14 +8,14 @@ export interface DatasetPiece {
   fileSize: string
   cid: string
   pieceCid: string
-  providerName?: string
+  providerName: string
   datasetId: string
-  providerId?: string
-  serviceURL?: string
-  transactionHash?: string
-  network?: string
+  providerId: string
+  serviceURL: string
+  transactionHash: string
+  network: string
   uploadedAt: number // timestamp
-  pieceId?: number
+  pieceId: number
 }
 
 export const useDatasetPieces = () => {
@@ -110,13 +110,14 @@ export const useDatasetPieces = () => {
               fileSize,
               cid: ipfsRootCid,
               pieceCid,
-              providerName: providerInfo.name || (providerInfo.id ? String(providerInfo.id) : undefined),
+              providerName: providerInfo.name || 'unknown',
               datasetId: String(storageContext.dataSetId),
-              providerId: providerInfo.id ? String(providerInfo.id) : undefined,
-              serviceURL: providerInfo.products?.PDP?.data?.serviceURL,
-              network: wallet?.status === 'ready' ? wallet.data.network : undefined,
+              providerId: providerInfo.id.toString(),
+              serviceURL: providerInfo.products?.PDP?.data?.serviceURL ?? '',
+              network: wallet?.status === 'ready' ? wallet.data.network : 'calibration',
               uploadedAt: metadata.uploadedAt ? Number(metadata.uploadedAt) : Date.now(),
               pieceId,
+              transactionHash: metadata.transactionHash || '',
             }
           } catch (err) {
             console.warn('[DatasetPieces] Failed to fetch metadata for piece:', piece.pieceId, err)
@@ -127,13 +128,14 @@ export const useDatasetPieces = () => {
               fileSize: 'Unknown',
               cid: '',
               pieceCid: piece.pieceCid.toString(),
-              providerName: providerInfo.name || (providerInfo.id ? String(providerInfo.id) : undefined),
+              providerName: providerInfo.name || 'unknown',
               datasetId: String(storageContext.dataSetId),
-              providerId: providerInfo.id ? String(providerInfo.id) : undefined,
-              serviceURL: providerInfo.products?.PDP?.data?.serviceURL,
-              network: wallet?.status === 'ready' ? wallet.data.network : undefined,
+              providerId: providerInfo.id.toString(),
+              serviceURL: providerInfo.products?.PDP?.data?.serviceURL ?? '',
+              network: wallet?.status === 'ready' ? wallet.data.network : 'calibration',
               uploadedAt: Date.now(),
               pieceId: piece.pieceId,
+              transactionHash: '',
             }
           }
         })

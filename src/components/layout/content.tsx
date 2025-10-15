@@ -179,10 +179,10 @@ export default function Content() {
             fileSize={formatFileSize(uploadedFile.file.size)}
             isExpanded={isExpanded}
             onToggleExpanded={() => setIsExpanded(!isExpanded)}
-            pieceCid={uploadState.pieceCid}
+            pieceCid={uploadState.pieceCid ?? ''}
             progresses={uploadState.progress}
-            providerName={providerInfo?.name || (providerInfo?.id ? String(providerInfo.id) : undefined)}
-            transactionHash={uploadState.transactionHash}
+            providerName={providerInfo?.name ?? 'unknown'}
+            transactionHash={uploadState.transactionHash ?? ''}
           />
         </div>
       )}

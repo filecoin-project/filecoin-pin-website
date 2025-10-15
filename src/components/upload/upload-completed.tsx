@@ -19,7 +19,7 @@ import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
 import type { UploadStatusProps } from './upload-status.tsx'
 
 interface UploadCompletedProps {
-  cid: UploadStatusProps['cid']
+  cid: string
   fileName: UploadStatusProps['fileName']
   pieceCid?: UploadStatusProps['pieceCid']
   providerName?: UploadStatusProps['providerName']
@@ -37,7 +37,6 @@ function UploadCompleted({
   providerId,
   serviceURL,
 }: UploadCompletedProps) {
-  // const { ipfsGatewayBaseUrl, providerBaseUrl } = UPLOAD_COMPLETED_LINKS
   const [hasIpniFailure, setHasIpniFailure] = useState(false)
 
   /**
@@ -54,10 +53,8 @@ function UploadCompleted({
     },
   })
   const fileNameOrDefault = fileName || 'file'
-  const cidOrDefault = cid || ''
   const providerIdOrDefault = providerId || ''
   const datasetIdOrDefault = datasetId || ''
-  const serviceUrlOrDefault = serviceURL || { serviceUrl: '' }
 
   return (
     <>
@@ -66,17 +63,14 @@ function UploadCompleted({
         <Card.InfoRow
           subtitle={
             hasIpniFailure ? (
-              <TextWithCopyToClipboard text={cidOrDefault} />
+              <TextWithCopyToClipboard text={cid} />
             ) : (
-              <TextWithCopyToClipboard
-                href={getIpfsGatewayRenderLink(cidOrDefault, fileNameOrDefault)}
-                text={cidOrDefault}
-              />
+              <TextWithCopyToClipboard href={getIpfsGatewayRenderLink(cid, fileNameOrDefault)} text={cid} />
             )
           }
           title="IPFS Root CID"
         >
-          {!hasIpniFailure && <DownloadButton href={getIpfsGatewayDownloadLink(cidOrDefault, fileNameOrDefault)} />}
+          {!hasIpniFailure && <DownloadButton href={getIpfsGatewayDownloadLink(cid, fileNameOrDefault)} />}
         </Card.InfoRow>
       </Card.Wrapper>
 
@@ -86,7 +80,7 @@ function UploadCompleted({
             subtitle={<TextWithCopyToClipboard href={getPieceExplorerLink(pieceCid)} text={pieceCid} />}
             title="Filecoin Piece CID"
           >
-            <DownloadButton href={getSpCarDownloadLink(cidOrDefault, serviceUrlOrDefault)} />
+            <DownloadButton href={getSpCarDownloadLink(cid, serviceURL ?? '')} />
           </Card.InfoRow>
         </Card.Wrapper>
       )}

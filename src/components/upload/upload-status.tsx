@@ -15,8 +15,8 @@ export interface UploadStatusProps {
   onToggleExpanded?: () => void
   cid?: DatasetPiece['cid']
   pieceCid?: DatasetPiece['pieceCid']
-  providerName?: DatasetPiece['providerName']
-  transactionHash?: DatasetPiece['transactionHash']
+  providerName: DatasetPiece['providerName']
+  transactionHash: DatasetPiece['transactionHash']
   network?: DatasetPiece['network']
   providerId?: DatasetPiece['providerId']
   datasetId?: DatasetPiece['datasetId']
