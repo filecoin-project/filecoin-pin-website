@@ -43,5 +43,5 @@ export const getSpCarDownloadLink = (ipfsRootCid: string, serviceUrl: string, _f
   // providerInfo.getDownloadLink or from filecoin-pin
   // download and filename query params are broken currently
   // return `https://${providerInfo.serviceUrl}/ipfs/${ipfsRootCid}?download=true&filename=${fileName}`
-  return `${serviceUrl}ipfs/${ipfsRootCid}`
+  return `${serviceUrl}/ipfs/${ipfsRootCid}`
 }
