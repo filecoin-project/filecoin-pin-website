@@ -8,7 +8,7 @@ const UPLOAD_COMPLETED_LINKS = {
  * download button href
  */
 export const getIpfsGatewayDownloadLink = (cid: string, fileName: string): string => {
-  return `${getIpfsGatewayRenderLink(cid, fileName)}?download=true&filename=${fileName}`
+  return `${getIpfsGatewayRenderLink(cid, fileName)}?filename=${fileName}.car`
 }
 
 /**
@@ -37,11 +37,8 @@ export const getDatasetExplorerLink = (datasetId: string): string => {
 
 /**
  * TODO: full implementation awaiting download-car, parse to file, client-side logic.
- * @see https://github.com/filecoin-project/filecoin-pin-website/issues/29#issuecomment-3403015452
+ * @see https://github.com/filecoin-project/filecoin-pin-website/issues/24
  */
-export const getSpCarDownloadLink = (ipfsRootCid: string, serviceUrl: string, _fileName?: string): string => {
-  // providerInfo.getDownloadLink or from filecoin-pin
-  // download and filename query params are broken currently
-  // return `https://${providerInfo.serviceUrl}/ipfs/${ipfsRootCid}?download=true&filename=${fileName}`
-  return `${serviceUrl}ipfs/${ipfsRootCid}`
+export const getSpCarDownloadLink = (ipfsRootCid: string, serviceUrl: string, fileName: string): string => {
+  return `${serviceUrl}ipfs/${ipfsRootCid}?filename=${fileName}.car`
 }
