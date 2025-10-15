@@ -59,6 +59,10 @@ This demo supports deployment with a shared session key, allowing multiple users
 
 **Important:** This approach relies on browser localStorage for user identity, which is fine for demos but not suitable for production. For production applications, use a backend database to track user → data set mappings with proper authentication.
 
+## Storage Provider Selection
+
+During the launch window we hardcode a small allowlist of “known good” storage providers and randomly pick from it when a provider is not specified via the `providerId` debug parameter. This is an expedient, temporary measure to smooth out early network volatility while we gather feedback and improve automated provider discovery. Expect this allowlist to grow then disappear entirely once Calibration stabilizes; outside the launch period you should remove the hardcoded IDs and rely on normal provider selection logic (inside filecoin-pin and underlying synapse-sdk) instead.
+
 ## Development
 
 For detailed information on:
