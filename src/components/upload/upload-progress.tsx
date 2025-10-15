@@ -9,6 +9,7 @@ interface UploadProgressProps {
   getCombinedFirstStageStatus: () => Progress['status']
   getCombinedFirstStageProgress: () => number
   cid?: string
+  fileName: string
   hasIpniFailure?: boolean
 }
 function UploadProgress({
@@ -17,6 +18,7 @@ function UploadProgress({
   getCombinedFirstStageStatus,
   getCombinedFirstStageProgress,
   cid,
+  fileName,
   hasIpniFailure,
 }: UploadProgressProps) {
   const finalizingStep = progresses.find((p) => p.step === 'finalizing-transaction')
@@ -24,6 +26,7 @@ function UploadProgress({
     <>
       <CarUploadAndIpniCard
         cid={cid}
+        fileName={fileName}
         getCombinedFirstStageProgress={getCombinedFirstStageProgress}
         getCombinedFirstStageStatus={getCombinedFirstStageStatus}
         hasIpniFailure={hasIpniFailure}

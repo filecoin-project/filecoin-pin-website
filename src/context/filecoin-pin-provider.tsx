@@ -1,3 +1,4 @@
+import type { ProviderInfo } from '@filoz/synapse-sdk'
 import type { SynapseService } from 'filecoin-pin/core/synapse'
 import { createContext, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { type DataSetState, useDataSetManager } from '../hooks/use-data-set-manager.ts'
@@ -6,7 +7,6 @@ import { getSynapseClient } from '../lib/filecoin-pin/synapse.ts'
 import { fetchWalletSnapshot, type WalletSnapshot } from '../lib/filecoin-pin/wallet.ts'
 import { getDebugParams, logDebugParams } from '../utils/debug-params.ts'
 
-type ProviderInfo = NonNullable<ReturnType<typeof useDataSetManager>['providerInfo']>
 type StorageContext = NonNullable<ReturnType<typeof useDataSetManager>['storageContext']>
 
 type WalletState =

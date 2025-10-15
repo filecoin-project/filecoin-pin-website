@@ -53,7 +53,13 @@ export default function DragNDrop({ onFileSelected, onUpload, isUploading }: Dra
           <Button disabled={buttonIsDisabled} onClick={clearFile} type="button" variant="secondary">
             Cancel
           </Button>
-          <Button disabled={buttonIsDisabled} loading={isUploading} onClick={uploadFile} type="button" variant="primary">
+          <Button
+            disabled={buttonIsDisabled}
+            loading={isUploading}
+            onClick={uploadFile}
+            type="button"
+            variant="primary"
+          >
             Upload
           </Button>
         </div>

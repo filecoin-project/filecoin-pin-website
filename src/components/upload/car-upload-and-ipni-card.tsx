@@ -1,3 +1,4 @@
+import { getIpfsGatewayDownloadLink, getIpfsGatewayRenderLink } from '@/utils/links.ts'
 import { COMBINED_STEPS } from '../../constants/upload-status.tsx'
 import { INPI_ERROR_MESSAGE } from '../../hooks/use-filecoin-upload.ts'
 import type { Progress } from '../../types/upload-progress.ts'
@@ -13,6 +14,7 @@ interface CarUploadAndIpniCardProps {
   getCombinedFirstStageStatus: () => Progress['status']
   getCombinedFirstStageProgress: () => number
   cid?: string
+  fileName: string
   hasIpniFailure?: boolean
 }
 
@@ -27,6 +29,7 @@ export const CarUploadAndIpniCard = ({
   getCombinedFirstStageStatus,
   getCombinedFirstStageProgress,
   cid,
+  fileName,
   hasIpniFailure,
 }: CarUploadAndIpniCardProps) => {
   const uploadingStep = progresses.find((p) => p.step === 'uploading-car')
@@ -43,11 +46,14 @@ export const CarUploadAndIpniCard = ({
         {hasIpniFailure && <Alert message={INPI_ERROR_MESSAGE} variant="warning" />}
         <Card.InfoRow
           subtitle={
-            <TextWithCopyToClipboard text={cid} {...(!hasIpniFailure && { href: `https://dweb.link/ipfs/${cid}` })} />
+            <TextWithCopyToClipboard
+              text={cid}
+              {...(!hasIpniFailure && { href: getIpfsGatewayRenderLink(cid, fileName) })}
+            />
           }
           title="IPFS Root CID"
         >
-          {!hasIpniFailure && <DownloadButton href={`https://dweb.link/ipfs/${cid}`} />}
+          {!hasIpniFailure && <DownloadButton href={getIpfsGatewayDownloadLink(cid, fileName)} />}
         </Card.InfoRow>
       </Card.Wrapper>
     )

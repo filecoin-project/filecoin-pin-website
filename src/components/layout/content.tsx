@@ -153,6 +153,8 @@ export default function Content() {
     }
   }, [uploadState.error, resetUpload])
 
+  const providerAddress = providerInfo?.serviceProvider ?? ''
+
   return (
     <div className="space-y-10">
       <PageTitle />
@@ -179,10 +181,11 @@ export default function Content() {
             fileSize={formatFileSize(uploadedFile.file.size)}
             isExpanded={isExpanded}
             onToggleExpanded={() => setIsExpanded(!isExpanded)}
-            pieceCid={uploadState.pieceCid}
+            pieceCid={uploadState.pieceCid ?? ''}
             progresses={uploadState.progress}
-            providerName={providerInfo?.name || (providerInfo?.id ? String(providerInfo.id) : undefined)}
-            transactionHash={uploadState.transactionHash}
+            providerAddress={providerAddress}
+            providerName={providerInfo?.name ?? 'unknown'}
+            transactionHash={uploadState.transactionHash ?? ''}
           />
         </div>
       )}
@@ -215,7 +218,7 @@ export default function Content() {
               }}
               pieceCid={upload.pieceCid}
               progresses={COMPLETED_PROGRESS}
-              providerId={upload.providerId}
+              providerAddress={providerAddress}
               providerName={upload.providerName}
               serviceURL={upload.serviceURL}
               transactionHash={upload.transactionHash}
