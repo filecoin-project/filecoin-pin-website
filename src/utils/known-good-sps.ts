@@ -1,5 +1,7 @@
 /**
- * List of known good storage providers (SPs) that are verified and reliable
+ * Temporary allowlist of storage providers that have proven reliable during launch.
+ * This exists to paper over early stability issues while the wider provider ecosystem
+ * catches up. Remove once automatic provider discovery is trustworthy again.
  */
 export const KNOWN_GOOD_SPS = [2, 8, 16] as const
 

@@ -8,11 +8,13 @@ import { selectRandomSP } from './known-good-sps.ts'
  *
  * Supported parameters:
  * - `providerId`: Specify a storage provider ID to use. When set, the system will:
- *                 - Check for a data set in localStorage for this wallet+provider combination
- *                 - If found, reconnect to that data set
- *                 - If not found, create a new data set with this provider
- *                 - Store the data set ID separately for this wallet+provider pair
- *                 When NOT set, a random storage provider from the known-good list will be selected.
+ *   - Check for a data set in localStorage for this wallet+provider combination
+ *   - If found, reconnect to that data set
+ *   - If not found, create a new data set with this provider
+ *   - Store the data set ID separately for this wallet+provider pair
+ *   When NOT set, a random storage provider from the known-good list will be selected.
+ *   That allowlist is a short-term launch workaround and will be removed once provider
+ *   functionality stabilizes.
  * - `dataSetId`: Specify a data set ID to use (instead of localStorage or creating new)
  *
  * Examples:
