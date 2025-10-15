@@ -21,6 +21,10 @@ export interface UploadStatusProps {
   providerId?: DatasetPiece['providerId']
   datasetId?: DatasetPiece['datasetId']
   serviceURL?: DatasetPiece['serviceURL']
+  /**
+   * We will have this providerAddress as soon as we have a dataSet...
+   */
+  providerAddress: string
 }
 
 function UploadStatus({
@@ -33,7 +37,7 @@ function UploadStatus({
   datasetId,
   pieceCid,
   providerName,
-  providerId,
+  providerAddress,
   serviceURL,
   transactionHash,
   network,
@@ -117,7 +121,7 @@ function UploadStatus({
               fileName={fileName}
               key={`${network}-${providerName}-${cid}-${pieceCid}`}
               pieceCid={pieceCid}
-              providerId={providerId}
+              providerAddress={providerAddress}
               providerName={providerName}
               serviceURL={serviceURL}
             />

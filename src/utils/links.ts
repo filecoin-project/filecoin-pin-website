@@ -21,8 +21,8 @@ export const getIpfsGatewayRenderLink = (cid: string, fileName: string): string 
 /**
  * completed upload provider name text hyperlink
  */
-export const getProviderExplorerLink = (providerId: string): string => {
-  return `${UPLOAD_COMPLETED_LINKS.pdpExplorerBaseUrl}providers/${providerId}`
+export const getProviderExplorerLink = (providerAddress: string): string => {
+  return `${UPLOAD_COMPLETED_LINKS.pdpExplorerBaseUrl}providers/${providerAddress}`
 }
 
 // for pieceCid text hyperlink

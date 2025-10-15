@@ -23,9 +23,9 @@ interface UploadCompletedProps {
   fileName: UploadStatusProps['fileName']
   pieceCid?: UploadStatusProps['pieceCid']
   providerName?: UploadStatusProps['providerName']
-  providerId?: UploadStatusProps['providerId']
   serviceURL?: UploadStatusProps['serviceURL']
   datasetId?: UploadStatusProps['datasetId']
+  providerAddress: string
 }
 
 function UploadCompleted({
@@ -34,7 +34,7 @@ function UploadCompleted({
   pieceCid,
   providerName,
   datasetId,
-  providerId,
+  providerAddress,
   serviceURL,
 }: UploadCompletedProps) {
   const [hasIpniFailure, setHasIpniFailure] = useState(false)
@@ -53,7 +53,6 @@ function UploadCompleted({
     },
   })
   const fileNameOrDefault = fileName || 'file'
-  const providerIdOrDefault = providerId || ''
   const datasetIdOrDefault = datasetId || ''
 
   return (
@@ -88,7 +87,7 @@ function UploadCompleted({
       {providerName && (
         <Card.Wrapper>
           <Card.InfoRow
-            subtitle={<TextLink href={getProviderExplorerLink(providerIdOrDefault)}>{providerName}</TextLink>}
+            subtitle={<TextLink href={getProviderExplorerLink(providerAddress)}>{providerName}</TextLink>}
             title="Provider"
           >
             <ButtonLink href={getDatasetExplorerLink(datasetIdOrDefault)}>View proofs</ButtonLink>
