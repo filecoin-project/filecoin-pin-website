@@ -15,6 +15,7 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
+    <h1>Filecoin-pinception</h1>
     <FilecoinPinProvider>
       <UploadHistoryProvider>
         <Toaster mobileOffset={0} offset={0} position="bottom-right" />
