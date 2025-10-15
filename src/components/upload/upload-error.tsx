@@ -1,5 +1,6 @@
 import { AlertTriangle } from 'lucide-react'
 import type { useUploadOrchestration } from '../../hooks/use-upload-orchestration.ts'
+import { ButtonBase } from '../ui/button/button-base.tsx'
 
 interface UploadErrorProps {
   orchestration: ReturnType<typeof useUploadOrchestration>
@@ -24,21 +25,18 @@ function UploadError({ orchestration }: UploadErrorProps) {
           <p className="text-red-300">{activeUpload.error}</p>
         </div>
       </div>
-      <div className="flex gap-3 justify-end">
-        <button
-          className="px-4 py-2 rounded-lg font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-100 cursor-pointer"
-          onClick={cancelUpload}
-          type="button"
-        >
+      <div className="flex gap-4 justify-end">
+        <ButtonBase onClick={cancelUpload} type="button" variant="secondary">
           Cancel
-        </button>
-        <button
-          className="px-4 py-2 rounded-lg font-medium bg-red-700 hover:bg-red-600 text-red-50 cursor-pointer"
+        </ButtonBase>
+        <ButtonBase
+          className="bg-red-700 hover:bg-red-600 hover:opacity-100"
           onClick={retryUpload}
           type="button"
+          variant="primary"
         >
           Retry Upload
-        </button>
+        </ButtonBase>
       </div>
     </div>
   )
