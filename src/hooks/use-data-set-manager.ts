@@ -11,6 +11,30 @@ import {
 
 type StorageContext = NonNullable<Awaited<ReturnType<typeof createStorageContext>>['storage']>
 
+/**
+ * Detects nonce collision errors from the PDP server.
+ * These occur when multiple users try to create data sets simultaneously with the same wallet.
+ *
+ * NOTE: This is a temporary workaround. The current contract implementation uses sequential nonces
+ * which causes collisions when multiple users create data sets concurrently with a shared wallet.
+ * The next version of the contracts will use random nonces, eliminating this issue.
+ *
+ * Error pattern indicators:
+ * - exit 33 (contract revert code)
+ * - RetCode=33
+ * - failed to estimate gas
+ */
+const isNonceCollisionError = (error: unknown): boolean => {
+  if (!(error instanceof Error)) return false
+  const msg = error.message
+  // Match on reliable patterns present in both error variants
+  return (
+    msg.includes('failed to estimate gas') &&
+    (msg.includes('exit 33') || msg.includes('exit=[33]')) &&
+    msg.includes('RetCode=33')
+  )
+}
+
 export type DataSetState =
   | { status: 'idle'; dataSetId?: number }
   | { status: 'initializing'; dataSetId?: number }
@@ -45,6 +69,7 @@ interface UseDataSetManagerReturn {
  * - Reconnecting to existing data sets via localStorage
  * - Managing storage context creation and caching
  * - Preventing duplicate concurrent initialization attempts
+ * - Automatic retry (up to 4 attempts) for nonce collision errors
  * - Debug/test overrides via URL parameters (dataSetId, providerId)
  */
 export function useDataSetManager({
@@ -54,6 +79,7 @@ export function useDataSetManager({
 }: UseDataSetManagerProps): UseDataSetManagerReturn {
   const [dataSet, setDataSet] = useState<DataSetState>({ status: 'idle' })
   const isEnsuringDataSetRef = useRef<boolean>(false)
+  const retryCountRef = useRef<number>(0)
 
   /**
    * Ensure a data set exists for the current wallet.
@@ -67,6 +93,7 @@ export function useDataSetManager({
    * - If found, returns it immediately
    * - If not found, creates a new data set and stores it
    * - Guards against duplicate concurrent calls using a ref
+   * - Automatically retries up to 4 times on nonce collision
    *
    * @returns The data set ID, or null if prerequisites aren't ready or initialization fails
    */
@@ -182,6 +209,7 @@ export function useDataSetManager({
             storageContext: result.storage,
             providerInfo: result.providerInfo,
           })
+          retryCountRef.current = 0 // Reset retry counter on success
           return dataSetId
         }
 
@@ -223,8 +251,29 @@ export function useDataSetManager({
           storageContext: result.storage,
           providerInfo: result.providerInfo,
         })
+        retryCountRef.current = 0 // Reset retry counter on success
         return newDataSetId
       } catch (error) {
+        const MAX_RETRIES = 4
+        const isRetryable = isNonceCollisionError(error)
+
+        // Retry on nonce collision (temporary workaround for sequential nonce issue)
+        if (isRetryable && retryCountRef.current < MAX_RETRIES) {
+          retryCountRef.current++
+
+          console.warn(
+            `[DataSet] Nonce collision detected (attempt ${retryCountRef.current}/${MAX_RETRIES}), retrying...`
+          )
+
+          // Release the guard before retrying
+          isEnsuringDataSetRef.current = false
+
+          return ensureDataSet() // Recursive retry
+        }
+
+        // Reset retry counter on permanent failure
+        retryCountRef.current = 0
+
         console.error('[DataSet] Failed to create data set:', error)
         const errorMessage = error instanceof Error ? error.message : 'Failed to initialize data set'
         setDataSet((prev) => ({
