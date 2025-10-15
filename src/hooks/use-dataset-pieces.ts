@@ -28,6 +28,7 @@ export const useDatasetPieces = () => {
   const [pieces, setPieces] = useState<DatasetPiece[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [hasLoaded, setHasLoaded] = useState(false)
 
   const { storageContext, providerInfo, wallet, synapse } = useFilecoinPinContext()
 
@@ -42,9 +43,11 @@ export const useDatasetPieces = () => {
         !!synapse
       )
       setPieces([])
+      setHasLoaded(false)
       return
     }
 
+    setHasLoaded(false)
     setIsLoading(true)
     setError(null)
 
@@ -152,6 +155,7 @@ export const useDatasetPieces = () => {
       setPieces([])
     } finally {
       setIsLoading(false)
+      setHasLoaded(true)
     }
   }, [storageContext, providerInfo, wallet, synapse])
 
@@ -161,6 +165,7 @@ export const useDatasetPieces = () => {
       loadPieces()
     } else {
       setPieces([])
+      setHasLoaded(false)
     }
   }, [loadPieces])
 
@@ -186,5 +191,6 @@ export const useDatasetPieces = () => {
     error,
     refreshPieces,
     addPiece,
+    hasLoaded,
   }
 }

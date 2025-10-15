@@ -42,6 +42,11 @@ export interface UploadHistoryContextValue {
    * Error state for history fetching
    */
   error: string | null
+
+  /**
+   * Indicates whether we've completed at least one history load attempt.
+   */
+  hasLoaded: boolean
 }
 
 const UploadHistoryContext = createContext<UploadHistoryContextValue | undefined>(undefined)
@@ -80,7 +85,7 @@ const UploadHistoryContext = createContext<UploadHistoryContextValue | undefined
  * ```
  */
 export function UploadHistoryProvider({ children }: { children: ReactNode }) {
-  const { pieces, refreshPieces, addPiece, isLoading, error } = useDatasetPieces()
+  const { pieces, refreshPieces, addPiece, isLoading, error, hasLoaded } = useDatasetPieces()
 
   const getUploadByCid = useCallback(
     (cid: string) => {
@@ -113,8 +118,9 @@ export function UploadHistoryProvider({ children }: { children: ReactNode }) {
       addUpload: addPiece,
       isLoading,
       error,
+      hasLoaded,
     }),
-    [pieces, getUploadByCid, getUploadByPieceCid, getUploadById, refreshPieces, addPiece, isLoading, error]
+    [pieces, getUploadByCid, getUploadByPieceCid, getUploadById, refreshPieces, addPiece, isLoading, error, hasLoaded]
   )
 
   return <UploadHistoryContext.Provider value={value}>{children}</UploadHistoryContext.Provider>

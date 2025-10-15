@@ -31,7 +31,7 @@ export default function Content() {
   const { showUploadForm, showActiveUpload, isUploading } = useUploadUI(orchestration)
 
   // Upload history data access
-  const { history: uploadHistory, isLoading: isLoadingPieces } = useUploadHistory()
+  const { history: uploadHistory, isLoading: isLoadingPieces, hasLoaded: hasLoadedHistory } = useUploadHistory()
 
   // Expansion state management
   const { isExpanded, toggleExpansion } = useUploadExpansion(orchestration)
@@ -101,7 +101,7 @@ export default function Content() {
       )}
 
       {/* Show loading state while initializing */}
-      {(isLoadingPieces || isInitializing) && uploadHistory.length === 0 && (
+      {(!hasLoadedHistory || isLoadingPieces || isInitializing) && uploadHistory.length === 0 && (
         <LoadingState message={getLoadingMessage()} />
       )}
 
