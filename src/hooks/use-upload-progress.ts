@@ -1,3 +1,4 @@
+import type { Status } from '@/components/ui/badge-status.tsx'
 import { useMemo } from 'react'
 import type { Progress } from '../types/upload-progress.ts'
 import { createStepGroup } from '../utils/upload-status.ts'
@@ -32,7 +33,7 @@ export interface UploadProgressInfo {
   /**
    * Badge status for the file card header
    */
-  badgeStatus: 'pinned' | 'error' | 'in-progress' | 'pending'
+  badgeStatus: Status
 }
 
 /**
@@ -112,11 +113,17 @@ export function useUploadProgress(progresses: Progress[], cid?: string): UploadP
 
     // Check if any step is in error (excluding IPNI failures)
     const hasError = progresses.some((p) => p.status === 'error' && p.step !== 'announcing-cids')
+    const finalizingStep = progresses.find((p) => p.step === 'finalizing-transaction')
+    const announcingStep = progresses.find((p) => p.step === 'announcing-cids')
+
 
     // Determine the badge status for the file card header
     const getBadgeStatus = (): UploadProgressInfo['badgeStatus'] => {
       if (isCompleted) return 'pinned'
       if (hasError) return 'error'
+      if (finalizingStep?.status === 'completed' && announcingStep?.status !== 'completed') {
+        return 'published'
+      }
       // Check if any step is in progress
       if (progresses.some((p) => p.status === 'in-progress')) return 'in-progress'
       // If no steps are in progress but not all completed, must be pending
