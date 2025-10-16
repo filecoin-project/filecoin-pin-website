@@ -2,7 +2,7 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/utils/cn.ts'
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center font-medium px-5 py-3 rounded-md transition-colors w-full hover:opacity-90',
+  'inline-flex items-center justify-center font-medium px-5 py-3 rounded-md transition-colors w-full hover:opacity-90 cursor-pointer',
   {
     variants: {
       variant: {
