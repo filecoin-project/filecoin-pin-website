@@ -107,8 +107,31 @@ Keep UI-only concerns inside [`src/components/`](src/components/) and use the ho
 - Keep comments concise; favor self-documenting code when possible.
 - When adding hooks or context, provide minimal unit tests or storybook-like examples once testing scaffolding is in place.
 
+## Commit Messages
+
+This project uses [Conventional Commits](https://www.conventionalcommits.org/) for all commit messages and PR titles.
+
+**Format:** `<type>: <description>`
+
+**Common types:**
+- `feat:` - New feature
+- `fix:` - Bug fix
+- `docs:` - Documentation changes
+- `refactor:` - Code refactoring (no behavior change)
+- `test:` - Adding or updating tests
+- `chore:` - Maintenance tasks, dependency updates
+
+**Examples:**
+```
+feat: add drag-and-drop file upload support
+fix: correct IPNI indexing verification logic
+docs: update README with deployment instructions
+refactor: simplify wallet initialization flow
+```
+
 ## Pull Requests
 
+- Use conventional commit format for your PR title (see above).
 - Reference the GitHub issue in the PR description.
 - Include screenshots or terminal output for user-facing changes or CLI flows.
 - Ensure new directories and files adhere to the structure above so future contributors can quickly navigate Filecoin integration points.
