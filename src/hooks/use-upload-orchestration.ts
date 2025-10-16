@@ -117,23 +117,6 @@ export function useUploadOrchestration() {
   ])
 
   /**
-   * Auto-clear upload state on error after 5 seconds
-   * This gives users time to see the error before resetting the UI
-   */
-  useEffect(() => {
-    if (uploadState.error) {
-      console.debug('[UploadOrchestration] Upload error detected, will auto-clear in 5 seconds')
-      const timer = setTimeout(() => {
-        setUploadedFile(null)
-        resetUpload()
-        // Increment key to force DragNDrop to remount and clear its state
-        setDragDropKey((prev) => prev + 1)
-      }, 5000)
-      return () => clearTimeout(timer)
-    }
-  }, [uploadState.error, resetUpload])
-
-  /**
    * Start an upload and track the file metadata.
    * Sets uploadedFile immediately to switch UI to progress view.
    * Uploads in the background and updates with actual CID when complete.
@@ -162,6 +145,31 @@ export function useUploadOrchestration() {
     },
     [uploadFile]
   )
+
+  /**
+   * Clear upload state and reset to upload form.
+   * Called when user dismisses an error or cancels an upload.
+   */
+  const cancelUpload = useCallback(() => {
+    console.debug('[UploadOrchestration] Canceling upload')
+    setUploadedFile(null)
+    resetUpload()
+    // Increment key to force DragNDrop to remount and clear its state
+    setDragDropKey((prev) => prev + 1)
+  }, [resetUpload])
+
+  /**
+   * Retry a failed upload with the same file.
+   * Only works if there's an uploadedFile and an error state.
+   */
+  const retryUpload = useCallback(() => {
+    if (!uploadedFile) {
+      console.warn('[UploadOrchestration] Cannot retry: no file in uploadedFile state')
+      return
+    }
+    console.debug('[UploadOrchestration] Retrying upload for file:', uploadedFile.file.name)
+    handleUpload(uploadedFile.file)
+  }, [uploadedFile, handleUpload])
 
   return {
     /**
@@ -193,5 +201,17 @@ export function useUploadOrchestration() {
      * @param file - File to upload
      */
     startUpload: handleUpload,
+
+    /**
+     * Retry the current failed upload
+     * Re-uploads the same file that previously failed
+     */
+    retryUpload,
+
+    /**
+     * Cancel the current upload and clear error state
+     * Returns user to the upload form
+     */
+    cancelUpload,
   }
 }

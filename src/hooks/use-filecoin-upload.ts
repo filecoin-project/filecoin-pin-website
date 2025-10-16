@@ -1,7 +1,7 @@
 import { createCarFromFile } from 'filecoin-pin/core/unixfs'
 import { checkUploadReadiness, executeUpload } from 'filecoin-pin/core/upload'
 import pino from 'pino'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Progress } from '../types/upload-progress.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
@@ -51,7 +51,17 @@ export const INPI_ERROR_MESSAGE =
  * actions so they stay dumb and declarative.
  */
 export const useFilecoinUpload = () => {
-  const { synapse, storageContext, providerInfo } = useFilecoinPinContext()
+  const { synapse, storageContext, providerInfo, ensureDataSet } = useFilecoinPinContext()
+
+  // Use refs to track the latest context values, so the upload callback can access them
+  // even if the dataset is initialized after the callback is created
+  const storageContextRef = useRef(storageContext)
+  const providerInfoRef = useRef(providerInfo)
+
+  useEffect(() => {
+    storageContextRef.current = storageContext
+    providerInfoRef.current = providerInfo
+  }, [storageContext, providerInfo])
 
   const [uploadState, setUploadState] = useState<UploadState>({
     isUploading: false,
@@ -149,20 +159,27 @@ export const useFilecoinUpload = () => {
           },
         })
 
-        // Ensure we have storage context from provider (created during data set initialization)
-        if (!storageContext || !providerInfo) {
-          // This should never happen because the upload button is disabled if the data set is not ready
-          throw new Error('Storage context not ready. Please ensure a data set is initialized before uploading.')
+        // Ensure we have a data set ready before uploading
+        console.debug('[FilecoinUpload] Ensuring data set is ready before upload...')
+        await ensureDataSet()
+
+        // Get the latest storage context and provider info from refs
+        // (these may have been updated by ensureDataSet if dataset wasn't ready)
+        const currentStorageContext = storageContextRef.current
+        const currentProviderInfo = providerInfoRef.current
+
+        if (!currentStorageContext || !currentProviderInfo) {
+          throw new Error('Storage context not ready. Failed to initialize data set. Please try again.')
         }
 
         console.debug('[FilecoinUpload] Using storage context from provider:', {
-          providerInfo,
-          dataSetId: storageContext.dataSetId,
+          providerInfo: currentProviderInfo,
+          dataSetId: currentStorageContext.dataSetId,
         })
 
         const synapseService = {
-          storage: storageContext,
-          providerInfo,
+          storage: currentStorageContext,
+          providerInfo: currentProviderInfo,
           synapse,
         }
 
@@ -226,7 +243,7 @@ export const useFilecoinUpload = () => {
         }))
       }
     },
-    [updateProgress, synapse, storageContext, providerInfo]
+    [updateProgress, synapse, ensureDataSet]
   )
 
   const resetUpload = useCallback(() => {

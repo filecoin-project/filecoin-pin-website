@@ -1,73 +1,137 @@
+import { cva, type VariantProps } from 'class-variance-authority'
 import { clsx } from 'clsx'
-import { AlertTriangle, CircleAlert, CircleCheck } from 'lucide-react'
+import { AlertTriangle, CircleAlert, CircleCheck, Info, type LucideIcon } from 'lucide-react'
+import { ButtonBase } from '@/components/ui/button/button-base.tsx'
 
-const variantConfig = {
-  success: {
-    containerClass: 'bg-green-950/60 border border-green-900/40',
-    textClass: 'text-green-300',
-    iconClass: 'text-green-300',
-    Icon: CircleCheck,
-    buttonClass: 'bg-green-700 hover:bg-green-600 text-green-50',
+const alertVariants = cva('flex items-center gap-3 p-4 rounded-xl border', {
+  variants: {
+    variant: {
+      success: 'bg-green-950/60 border-green-900/40 text-green-200',
+      error: 'bg-red-950/60 border-red-900/40 text-red-300',
+      info: 'bg-brand-950/60 border-brand-900/40 text-brand-400',
+      warning: 'bg-yellow-600/30 border-yellow-400/20 text-yellow-100',
+      neutral: 'bg-zinc-900 border-zinc-700/40 text-zinc-100',
+    },
   },
-  error: {
-    containerClass: 'bg-red-950/60 border border-red-900/40',
-    textClass: 'text-red-300',
-    iconClass: 'text-red-300',
-    Icon: AlertTriangle,
-    buttonClass: 'bg-red-700 hover:bg-red-600 text-red-50',
+  defaultVariants: {
+    variant: 'neutral',
   },
-  info: {
-    containerClass: 'bg-brand-950/60 border border-brand-900/40',
-    textClass: 'text-brand-500',
-    iconClass: 'text-brand-500',
-    Icon: CircleCheck,
-    buttonClass: 'bg-brand-700 hover:bg-brand-600 text-brand-50',
+})
+
+const messageVariants = cva('text-base', {
+  variants: {
+    variant: {
+      success: 'text-green-300',
+      error: 'text-red-400',
+      info: 'text-brand-500',
+      warning: 'text-yellow-200',
+      neutral: 'text-zinc-100',
+    },
   },
-  warning: {
-    containerClass: 'bg-yellow-600/30 border border-yellow-400/20',
-    textClass: 'text-yellow-200',
-    iconClass: 'text-yellow-200',
-    Icon: CircleAlert,
-    buttonClass: 'bg-yellow-700 hover:bg-yellow-600 text-white',
+})
+
+const descriptionVariants = cva('', {
+  variants: {
+    variant: {
+      success: 'text-green-200',
+      error: 'text-red-300',
+      info: 'text-brand-400',
+      warning: 'text-yellow-100',
+      neutral: 'text-zinc-200',
+    },
   },
-  neutral: {
-    containerClass: 'bg-zinc-900 border border-zinc-700/40',
-    textClass: 'text-zinc-100',
-    iconClass: 'text-zinc-400',
-    Icon: CircleAlert,
-    buttonClass: 'bg-zinc-700 hover:bg-zinc-600 text-zinc-100',
+})
+
+const iconVariants = cva('', {
+  variants: {
+    variant: {
+      success: 'text-green-300',
+      error: 'text-red-400',
+      info: 'text-brand-500',
+      warning: 'text-yellow-200',
+      neutral: 'text-zinc-400',
+    },
   },
+})
+
+const sharedButtonStyle = 'w-fit flex-shrink-0'
+
+const primaryButtonVariants = cva(sharedButtonStyle, {
+  variants: {
+    variant: {
+      success: 'bg-green-700 hover:bg-green-600 text-green-50',
+      error: 'bg-red-700 hover:bg-red-600 text-red-50',
+      info: 'bg-brand-700 hover:bg-brand-600 text-brand-50',
+      warning: 'bg-yellow-700 hover:bg-yellow-600 text-white',
+      neutral: 'bg-zinc-700 hover:bg-zinc-600 text-zinc-100',
+    },
+  },
+})
+
+const secondaryButtonVariants = cva(sharedButtonStyle, {
+  variants: {
+    variant: {
+      success: 'hover:bg-green-950/90 border border-green-700 text-green-500',
+      error: 'hover:bg-red-950/90 border border-red-700 text-red-500',
+      info: 'hover:bg-brand-950/90 border border-brand-700 text-brand-500',
+      warning: 'hover:bg-yellow-950/90 border border-yellow-700 text-yellow-500',
+      neutral: 'hover:bg-zinc-950/90 border border-zinc-600 text-zinc-400',
+    },
+  },
+})
+
+export type AlertVariant = NonNullable<VariantProps<typeof alertVariants>['variant']>
+
+type ButtonType = {
+  children: React.ReactNode
+  onClick?: React.ComponentProps<'button'>['onClick']
 }
-
-export type AlertVariant = keyof typeof variantConfig
 
 type AlertProps = {
-  variant: AlertVariant
+  variant?: AlertVariant
   message: string
-  button?: {
-    children: string
-    onClick: React.ComponentProps<'button'>['onClick']
-  }
+  description?: string
+  button?: ButtonType
+  cancelButton?: ButtonType
 }
 
-function Alert({ variant, message, button }: AlertProps) {
-  const { containerClass, textClass, iconClass, buttonClass, Icon } = variantConfig[variant]
+const ICONS: Record<AlertVariant, LucideIcon> = {
+  success: CircleCheck,
+  error: AlertTriangle,
+  info: Info,
+  warning: CircleAlert,
+  neutral: CircleAlert,
+}
+
+export function Alert({ variant = 'neutral', message, description, button, cancelButton }: AlertProps) {
+  const Icon = ICONS[variant]
 
   return (
-    <div className={clsx(containerClass, 'flex items-center gap-3 p-4 rounded-xl')} role="alert">
-      <span aria-hidden="true" className={iconClass}>
+    <div className={alertVariants({ variant })} role="alert">
+      <span aria-hidden="true" className={iconVariants({ variant })}>
         <Icon size={22} />
       </span>
-      <span className={clsx(textClass, 'flex-1')}>{message}</span>
-      {button && (
-        <button
-          className={clsx(buttonClass, 'px-4 py-2 rounded-lg font-medium flex-shrink-0 cursor-pointer')}
-          type="button"
-          {...button}
-        />
+
+      <div className="flex-1 flex flex-col gap-0.5">
+        <span className={clsx(messageVariants({ variant }), description && 'font-semibold')}>{message}</span>
+        {description && <span className={descriptionVariants({ variant })}>{description}</span>}
+      </div>
+
+      {(button || cancelButton) && (
+        <div className="flex gap-3">
+          {cancelButton && (
+            <ButtonBase
+              {...cancelButton}
+              className={secondaryButtonVariants({ variant })}
+              size="sm"
+              variant="unstyled"
+            />
+          )}
+          {button && (
+            <ButtonBase {...button} className={primaryButtonVariants({ variant })} size="sm" variant="unstyled" />
+          )}
+        </div>
       )}
     </div>
   )
 }
-
-export { Alert }
