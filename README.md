@@ -2,14 +2,20 @@
 
 A simple, easy-to-understand demo showing how to use [`filecoin-pin`](https://github.com/filecoin-project/filecoin-pin) to upload files to Filecoin. This single-page React + TypeScript app demonstrates the core upload workflow with progress tracking and wallet integration.
 
+## Status
+
+**⚠️ Not ready yet for production** - At least as of 2025-10-15, this Filecoin Pin demo dApp runs on Filecoin Calibration testnet only.  It's not ready for production use yet.  See:
+- [filecoin-pin#45](https://github.com/filecoin-project/filecoin-pin/issues/45) for tracking when this will be publicly deployed to pin.filecoin.cloud.
+- [filecoin-pin-website#77](https://github.com/filecoin-project/filecoin-pin-website/issues/77) for tracking "bring your own wallet" support.
+
 ## What This Demo Shows
 
 This app demonstrates the complete `filecoin-pin` upload workflow:
 - Create CAR files from user files
-- Check upload readiness
-- Execute uploads to Filecoin
+- Execute uploads to Filecoin SP
+- Verify the CID indexing and advertising from the Filecoin SP to IPNI 
+- Verify the commitment onchain from the Filecoin SP to perform proof of data possession (PDP)
 - Track progress through each step
-- Verify CID indexing via IPNI
 
 The core integration logic is in `src/hooks/use-filecoin-upload.ts` and `src/context/filecoin-pin-provider.tsx`. Everything else is UI components. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for detailed file structure.
 
@@ -44,7 +50,7 @@ For environment setup and detailed project structure, see [`CONTRIBUTING.md`](CO
 
 ## Multi-User Support with Session Keys
 
-This demo supports deployment with a shared session key, allowing multiple users to safely upload files using the same wallet.
+This demo currently doesn't support users bringing their own wallet, which is tracked in [issue #77](https://github.com/filecoin-project/filecoin-pin-website/issues/77).  Instead it relies on deployment with a shared session key, allowing multiple users to safely upload files using the same wallet.
 
 **How it works:**
 - **Session key authentication** – Uses `VITE_WALLET_ADDRESS` + `VITE_SESSION_KEY` instead of exposing the wallet's private key
@@ -57,7 +63,7 @@ This demo supports deployment with a shared session key, allowing multiple users
 - Each user's browser stores their unique data set ID
 - Users only see pieces from their own data set
 
-**Important:** This approach relies on browser localStorage for user identity, which is fine for demos but not suitable for production. For production applications, use a backend database to track user → data set mappings with proper authentication.
+**Important:** This approach relies on browser localStorage for user identity, which is fine for demos but not suitable for production.
 
 ## Storage Provider Selection
 

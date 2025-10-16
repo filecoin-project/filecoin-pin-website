@@ -12,7 +12,7 @@ Thanks for helping build the Filecoin Pin demo! This document captures the prefe
    **Option 1: Private Key (local development only)**
    - `VITE_FILECOIN_PRIVATE_KEY` – Your wallet's private key (use calibration test keys for local work).
 
-   **Option 2: Session Key (recommended for deployments)**
+   **Option 2: Session Key (recommended for deployments where users don't bring their own wallet)**
    - `VITE_WALLET_ADDRESS` – The wallet address that created the session key.
    - `VITE_SESSION_KEY` – A session key authorized for this wallet.
 
