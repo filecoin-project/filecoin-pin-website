@@ -1,6 +1,6 @@
 import { cva, type VariantProps } from 'class-variance-authority'
 import { clsx } from 'clsx'
-import { AlertTriangle, CircleAlert, CircleCheck, Info } from 'lucide-react'
+import { AlertTriangle, CircleAlert, CircleCheck, Info, type LucideIcon } from 'lucide-react'
 import { ButtonBase } from '@/components/ui/button/button-base.tsx'
 
 const alertVariants = cva('flex items-center gap-3 p-4 rounded-xl border', {
@@ -54,7 +54,9 @@ const iconVariants = cva('', {
   },
 })
 
-const buttonVariants = cva('px-4 py-2 rounded-lg w-fit flex-shrink-0', {
+const sharedButtonStyle = 'w-fit flex-shrink-0'
+
+const primaryButtonVariants = cva(sharedButtonStyle, {
   variants: {
     variant: {
       success: 'bg-green-700 hover:bg-green-600 text-green-50',
@@ -62,6 +64,18 @@ const buttonVariants = cva('px-4 py-2 rounded-lg w-fit flex-shrink-0', {
       info: 'bg-brand-700 hover:bg-brand-600 text-brand-50',
       warning: 'bg-yellow-700 hover:bg-yellow-600 text-white',
       neutral: 'bg-zinc-700 hover:bg-zinc-600 text-zinc-100',
+    },
+  },
+})
+
+const secondaryButtonVariants = cva(sharedButtonStyle, {
+  variants: {
+    variant: {
+      success: 'hover:bg-green-950/90 border border-green-700 text-green-500',
+      error: 'hover:bg-red-950/90 border border-red-700 text-red-500',
+      info: 'hover:bg-brand-950/90 border border-brand-700 text-brand-500',
+      warning: 'hover:bg-yellow-950/90 border border-yellow-700 text-yellow-500',
+      neutral: 'hover:bg-zinc-950/90 border border-zinc-600 text-zinc-400',
     },
   },
 })
@@ -81,7 +95,7 @@ type AlertProps = {
   cancelButton?: ButtonType
 }
 
-const ICONS: Record<AlertVariant, React.ElementType> = {
+const ICONS: Record<AlertVariant, LucideIcon> = {
   success: CircleCheck,
   error: AlertTriangle,
   info: Info,
@@ -104,16 +118,17 @@ export function Alert({ variant = 'neutral', message, description, button, cance
       </div>
 
       {(button || cancelButton) && (
-        <div className="flex gap-3 flex-shrink-0">
+        <div className="flex gap-3">
           {cancelButton && (
-            <ButtonBase className={buttonVariants()} onClick={cancelButton.onClick} variant="secondary">
-              {cancelButton.children}
-            </ButtonBase>
+            <ButtonBase
+              {...cancelButton}
+              className={secondaryButtonVariants({ variant })}
+              size="sm"
+              variant="unstyled"
+            />
           )}
           {button && (
-            <ButtonBase className={buttonVariants({ variant })} onClick={button.onClick} type="button">
-              {button.children}
-            </ButtonBase>
+            <ButtonBase {...button} className={primaryButtonVariants({ variant })} size="sm" variant="unstyled" />
           )}
         </div>
       )}
