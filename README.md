@@ -11,27 +11,34 @@ A simple, easy-to-understand demo showing how to use [`filecoin-pin`](https://gi
 ## What This Demo Shows
 
 This app demonstrates the complete `filecoin-pin` upload workflow:
-- Create CAR files from user files
-- Execute uploads to Filecoin SP
-- Verify the CID indexing and advertising from the Filecoin SP to IPNI 
-- Verify the commitment onchain from the Filecoin SP to perform proof of data possession (PDP)
-- Track progress through each step
 
-The core integration logic is in `src/hooks/use-filecoin-upload.ts` and `src/context/filecoin-pin-provider.tsx`. Everything else is UI components. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for detailed file structure.
+```mermaid
+graph LR
+    A[Select File] --> B[Create CAR]
+    B --> C[Fund Filecoin Pay Account if Necessary]
+    C --> D[Upload to SP]
+    D --> E[IPNI Indexing]
+    E --> F[IPFS Mainnet Retrieval]
+    D --> G[Onchain Commitment]
+    G --> H[Direct from SP retrieval]
+```
 
-## Stack
+- **Prepare** - Create CAR files from user files
+- **Upload** - Execute upload to Filecoin Storage Provider (SP)
+- **Index** - Verify CID indexing and advertising from the SP to IPNI
+- **Commit** - Verify the onchain commitment from the SP to perform proof of data possession (PDP)
+- **Track** - Monitor progress through each step
 
-- Vite for dev server and bundling
-- React 19 with the modern JSX runtime
-- TypeScript with strict settings
-- Biome for formatting, linting, and import hygiene
+The core integration logic is in [`src/hooks/use-filecoin-upload.ts`](src/hooks/use-filecoin-upload.ts) and [`src/context/filecoin-pin-provider.tsx`](src/context/filecoin-pin-provider.tsx). Everything else is UI components. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for detailed file structure.
 
-## Prerequisites
+## Quick Start
+
+### Prerequisites
 
 - Node.js 18.0+ (Vite supports the active LTS releases)
 - npm 9+ (bundled with Node)
 
-## Getting Started
+### Installation
 
 ```sh
 npm install
@@ -46,11 +53,24 @@ Visit `http://localhost:5173` to see the demo.
 - `npm run lint` – Check code quality
 - `npm run lint:fix` – Fix linting issues
 
-For environment setup and detailed project structure, see [`CONTRIBUTING.md`](CONTRIBUTING.md).
+For environment configuration and authentication options, see [`CONTRIBUTING.md`](CONTRIBUTING.md#local-setup).
 
-## Multi-User Support with Session Keys
+## Architecture
 
-This demo currently doesn't support users bringing their own wallet, which is tracked in [issue #77](https://github.com/filecoin-project/filecoin-pin-website/issues/77).  Instead it relies on deployment with a shared session key, allowing multiple users to safely upload files using the same wallet.
+### Tech Stack
+
+- **Build Tool** - Vite for dev server and bundling
+- **Framework** - React 19 with modern JSX runtime
+- **Language** - TypeScript with strict settings
+- **Code Quality** - Biome for formatting, linting, and import hygiene
+
+### Project Structure
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for source layout and coding guidelines.
+
+### Multi-User Support with Session Keys
+
+This demo currently doesn't support users bringing their own wallet, which is tracked in [issue #77](https://github.com/filecoin-project/filecoin-pin-website/issues/77). Instead it relies on deployment with a shared session key, allowing multiple users to safely upload files using the same wallet.
 
 **How it works:**
 - **Session key authentication** – Uses `VITE_WALLET_ADDRESS` + `VITE_SESSION_KEY` instead of exposing the wallet's private key
@@ -65,16 +85,24 @@ This demo currently doesn't support users bringing their own wallet, which is tr
 
 **Important:** This approach relies on browser localStorage for user identity, which is fine for demos but not suitable for production.
 
-## Storage Provider Selection
+### Storage Provider Selection
 
-During the launch window we hardcode a small allowlist of “known good” storage providers and randomly pick from it when a provider is not specified via the `providerId` debug parameter. This is an expedient, temporary measure to smooth out early network volatility while we gather feedback and improve automated provider discovery. Expect this allowlist to grow then disappear entirely once Calibration stabilizes; outside the launch period you should remove the hardcoded IDs and rely on normal provider selection logic (inside filecoin-pin and underlying synapse-sdk) instead.
+During the pre-product development window we hardcode a small allowlist of "known good" storage providers and randomly pick from it when a provider is not specified via the `providerId` debug parameter. This is an expedient, temporary measure to smooth out early network volatility while we gather feedback and improve automated provider discovery. This allowlist will shift to onchain with [filecoin-services#291](https://github.com/FilOzone/filecoin-services/issues/291).  Outside the launch period you should remove the hardcoded IDs and rely on normal provider selection logic (inside filecoin-pin and underlying synapse-sdk) instead.
 
-## Development
+## Community and Support
 
-For detailed information on:
-- Environment configuration (authentication options)
-- Project structure and file organization
-- Coding guidelines and conventions
-- Pull request workflow
+### Get Help
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+- **Issues** - Open issues in this repo if you see any problems with the demo dApp
+- **Community Discussion** - Join the conversation in Filecoin Slack's public [#fil-foc](https://filecoinproject.slack.com/archives/C07CGTXHHT4) channel
+
+### Documentation
+
+- **[Live Demo Walkthrough](https://docs.filecoin.io/builder-cookbook/filecoin-pin/dapp-demo)** - Step-by-step guide to using this demo
+- **[Video Demo](https://www.youtube.com/watch?v=UElx1_qF12o)** - Screen recording showing the dApp in action
+- **[filecoin-pin Repository](https://github.com/filecoin-project/filecoin-pin)** - Core library and CLI
+- **[Filecoin Pin Documentation](https://docs.filecoin.io/builder-cookbook/filecoin-pin)** - Complete guides and tutorials
+
+### Contributing
+
+For contributing to this project, see [`CONTRIBUTING.md`](CONTRIBUTING.md).
