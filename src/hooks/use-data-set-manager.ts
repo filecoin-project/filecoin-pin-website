@@ -267,6 +267,7 @@ export function useDataSetManager({
 
           // Release the guard before retrying
           isEnsuringDataSetRef.current = false
+          setDataSet((prev) => ({ ...prev, status: 'idle' }))
 
           return ensureDataSet() // Recursive retry
         }
