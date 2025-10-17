@@ -1,5 +1,4 @@
 import { useState } from 'react'
-// import { UPLOAD_COMPLETED_LINKS } from '@/constants/upload-completed-links.ts'
 import { INPI_ERROR_MESSAGE } from '@/hooks/use-filecoin-upload.ts'
 import {
   getDatasetExplorerLink,
@@ -44,7 +43,7 @@ function UploadCompleted({ cid, fileName, pieceCid, datasetId }: UploadCompleted
       setHasIpniFailure(true)
     },
   })
-  const fileNameOrDefault = fileName || 'file'
+  // TODO: fix types, datasetId should never be undefined here...
   const datasetIdOrDefault = datasetId || providerInfo?.datasetId || ''
 
   // If provider info is not ready, show a loading state
@@ -67,12 +66,12 @@ function UploadCompleted({ cid, fileName, pieceCid, datasetId }: UploadCompleted
             hasIpniFailure ? (
               <TextWithCopyToClipboard text={cid} />
             ) : (
-              <TextWithCopyToClipboard href={getIpfsGatewayRenderLink(cid, fileNameOrDefault)} text={cid} />
+              <TextWithCopyToClipboard href={getIpfsGatewayRenderLink(cid, fileName)} text={cid} />
             )
           }
           title="IPFS Root CID"
         >
-          {!hasIpniFailure && <DownloadButton href={getIpfsGatewayDownloadLink(cid, fileNameOrDefault)} />}
+          {!hasIpniFailure && <DownloadButton href={getIpfsGatewayDownloadLink(cid, fileName)} />}
         </Card.InfoRow>
       </Card.Wrapper>
 
@@ -82,7 +81,7 @@ function UploadCompleted({ cid, fileName, pieceCid, datasetId }: UploadCompleted
             subtitle={<TextWithCopyToClipboard href={getPieceExplorerLink(pieceCid)} text={pieceCid} />}
             title="Filecoin Piece CID"
           >
-            <DownloadButton href={getSpCarDownloadLink(cid, serviceURL)} />
+            <DownloadButton href={getSpCarDownloadLink(cid, serviceURL, fileName)} />
           </Card.InfoRow>
         </Card.Wrapper>
       )}
