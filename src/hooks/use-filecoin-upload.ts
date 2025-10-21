@@ -2,21 +2,21 @@ import { createCarFromFile } from 'filecoin-pin/core/unixfs'
 import { checkUploadReadiness, executeUpload } from 'filecoin-pin/core/upload'
 import pino from 'pino'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Progress } from '../types/upload-progress.ts'
+import type { StepState } from '../types/upload/step.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 import { useIpniCheck } from './use-ipni-check.ts'
 
 interface UploadState {
   isUploading: boolean
-  progress: Progress[]
+  progress: StepState[]
   error?: string
   currentCid?: string
   pieceCid?: string
   transactionHash?: string
 }
 
-const initialProgress: Progress[] = [
+const initialProgress: StepState[] = [
   { step: 'creating-car', progress: 0, status: 'pending' },
   { step: 'checking-readiness', progress: 0, status: 'pending' },
   { step: 'uploading-car', progress: 0, status: 'pending' },
@@ -68,7 +68,7 @@ export const useFilecoinUpload = () => {
     progress: initialProgress,
   })
 
-  const updateProgress = useCallback((step: Progress['step'], updates: Partial<Progress>) => {
+  const updateProgress = useCallback((step: StepState['step'], updates: Partial<StepState>) => {
     setUploadState((prev) => ({
       ...prev,
       progress: prev.progress.map((p) => (p.step === step ? { ...p, ...updates } : p)),

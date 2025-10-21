@@ -1,9 +1,9 @@
 import { cva, type VariantProps } from 'class-variance-authority'
 import { CircleCheck, LoaderCircle } from 'lucide-react'
-import type { Progress } from '../../types/upload-progress.ts'
+import type { StepState } from '../../types/upload/step.ts'
 import { cn } from '../../utils/cn.ts'
 
-export type Status = Progress['status'] | 'pinned' | 'published'
+export type Status = StepState['status'] | 'pinned' | 'published'
 
 type BadgeStatusProps = VariantProps<typeof badgeVariants> & {
   status: Status
