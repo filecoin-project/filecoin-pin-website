@@ -1,3 +1,5 @@
+import { useFirstStageState } from '@/hooks/use-first-stage-state.ts'
+import { useStepStates } from '@/hooks/use-step-states.ts'
 import type { StepState } from '../../types/upload/step.ts'
 import { getStepEstimatedTime, getStepLabel } from '../../utils/upload/step.ts'
 import { Card } from '../ui/card.tsx'
@@ -5,23 +7,22 @@ import { ProgressBar } from '../ui/progress-bar.tsx'
 
 interface ProgressCardCombinedProps {
   stepStates: Array<StepState>
-  firstStageStatus: StepState['status']
-  firstStageProgress: StepState['progress']
 }
 
-function ProgressCardCombined({ stepStates, firstStageStatus, firstStageProgress }: ProgressCardCombinedProps) {
-  const hasCreatingCarStep = stepStates.find((stepState) => stepState.step === 'creating-car')
+function ProgressCardCombined({ stepStates }: ProgressCardCombinedProps) {
+  const { creatingCarStep } = useStepStates(stepStates)
+  const { progress, status } = useFirstStageState(stepStates)
 
-  if (!hasCreatingCarStep) return null
+  if (!creatingCarStep) return null
 
   return (
     <Card.Wrapper>
       <Card.Header
         estimatedTime={getStepEstimatedTime('creating-car')}
-        status={firstStageStatus}
+        status={status}
         title={getStepLabel('creating-car')}
       />
-      {firstStageStatus === 'in-progress' && <ProgressBar progress={firstStageProgress} />}
+      {status === 'in-progress' && <ProgressBar progress={progress} />}
     </Card.Wrapper>
   )
 }

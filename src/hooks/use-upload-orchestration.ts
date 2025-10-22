@@ -52,7 +52,9 @@ export function useUploadOrchestration() {
   const { uploadState, uploadFile, resetUpload } = useFilecoinUpload()
   const { addUpload } = useUploadHistory()
   const { storageContext, providerInfo, wallet } = useFilecoinPinContext()
-  const { isUploadSuccessful } = useUploadProgress({ stepStates: uploadState.progress, cid: uploadState.currentCid })
+  const { uploadOutcome } = useUploadProgress({ stepStates: uploadState.stepStates, cid: uploadState.currentCid })
+
+  const { isUploadSuccessful } = uploadOutcome
 
   // Track the file being uploaded (for displaying metadata like fileName)
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null)

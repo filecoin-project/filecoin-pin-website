@@ -1,12 +1,12 @@
 import type { StepState } from '../upload/step.ts'
 
-export type StageId = 'first-stage' | 'second-stage' | 'third-stage'
+export type StageId = 'firstStage' | 'secondStage' | 'thirdStage'
 
 export const STAGE_STEPS: Record<StageId, readonly StepState['step'][]> = {
-  'first-stage': ['creating-car', 'checking-readiness', 'uploading-car'],
-  'second-stage': ['announcing-cids'],
-  'third-stage': ['finalizing-transaction'],
-} as const
+  firstStage: ['creating-car', 'checking-readiness', 'uploading-car'],
+  secondStage: ['announcing-cids'],
+  thirdStage: ['finalizing-transaction'],
+} as const satisfies Record<StageId, readonly StepState['step'][]>
 
 export type FirstStageGroup = Record<
   'creatingCar' | 'checkingReadiness' | 'uploadingCar',

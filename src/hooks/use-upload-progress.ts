@@ -1,16 +1,20 @@
 import { useMemo } from 'react'
 import type { Status } from '@/components/ui/badge-status.tsx'
 import type { StepState } from '../types/upload/step.ts'
-import { getFirstStageProgress, getFirstStageStatus } from '../utils/upload/stage.ts'
 import { getUploadBadgeStatus, getUploadOutcome } from '../utils/upload/upload.ts'
+import { useStepStates } from './use-step-states.ts'
 
-export interface UploadProgressInfo {
-  firstStageProgress: StepState['progress']
-  firstStageStatus: StepState['status']
-  hasUploadIpniFailure: boolean
+type UploadOutcome = {
+  hasIpniAnnounceFailure: boolean
   isUploadSuccessful: boolean
   isUploadFailure: boolean
-  uploadBadgeStatus: Status
+}
+
+type UploadBadgeStatus = Status
+
+export interface UploadProgressInfo {
+  uploadOutcome: UploadOutcome
+  uploadBadgeStatus: UploadBadgeStatus
 }
 
 type useUploadProgressProps = {
@@ -31,7 +35,7 @@ type useUploadProgressProps = {
  * @example
  * ```tsx
  * function UploadCard({ progresses, cid }) {
- *   const { isCompleted, badgeStatus, hasUploadIpniFailure } = useUploadProgress(progresses, cid)
+ *   const { isCompleted, badgeStatus, hasIpniAnnounceFailure } = useUploadProgress(progresses, cid)
  *
  *   return (
  *     <Card status={badgeStatus}>
@@ -42,22 +46,25 @@ type useUploadProgressProps = {
  * ```
  */
 export function useUploadProgress({ stepStates, cid }: useUploadProgressProps): UploadProgressInfo {
+  const { finalizingStep, announcingCidsStep } = useStepStates(stepStates)
+
   return useMemo(() => {
-    const firstStageProgress = getFirstStageProgress(stepStates)
-    const firstStageStatus = getFirstStageStatus(stepStates)
-    const { hasUploadIpniFailure, isUploadSuccessful, isUploadFailure } = getUploadOutcome({ stepStates, cid })
+    const { hasIpniAnnounceFailure, isUploadSuccessful, isUploadFailure } = getUploadOutcome({ stepStates, cid })
+
     const uploadBadgeStatus = getUploadBadgeStatus({
       isUploadSuccessful,
       isUploadFailure,
       stepStates,
+      finalizingStep,
+      announcingCidsStep,
     })
 
     return {
-      firstStageProgress,
-      firstStageStatus,
-      hasUploadIpniFailure,
-      isUploadSuccessful,
-      isUploadFailure,
+      uploadOutcome: {
+        hasIpniAnnounceFailure,
+        isUploadSuccessful,
+        isUploadFailure,
+      },
       uploadBadgeStatus,
     }
   }, [stepStates, cid])

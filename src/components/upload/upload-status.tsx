@@ -31,7 +31,9 @@ function UploadStatus({
   transactionHash,
 }: UploadStatusProps) {
   // Use the upload progress hook to calculate all progress-related values
-  const { isUploadSuccessful, uploadBadgeStatus } = useUploadProgress({ stepStates, cid })
+  const { uploadOutcome, uploadBadgeStatus } = useUploadProgress({ stepStates, cid })
+
+  const { isUploadSuccessful } = uploadOutcome
 
   return (
     <Accordion

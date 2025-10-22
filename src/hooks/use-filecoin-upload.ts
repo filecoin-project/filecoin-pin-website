@@ -9,14 +9,14 @@ import { useIpniCheck } from './use-ipni-check.ts'
 
 interface UploadState {
   isUploading: boolean
-  progress: StepState[]
+  stepStates: StepState[]
   error?: string
   currentCid?: string
   pieceCid?: string
   transactionHash?: string
 }
 
-const initialProgress: StepState[] = [
+export const INITIAL_STEP_STATES: StepState[] = [
   { step: 'creating-car', progress: 0, status: 'pending' },
   { step: 'checking-readiness', progress: 0, status: 'pending' },
   { step: 'uploading-car', progress: 0, status: 'pending' },
@@ -65,21 +65,23 @@ export const useFilecoinUpload = () => {
 
   const [uploadState, setUploadState] = useState<UploadState>({
     isUploading: false,
-    progress: initialProgress,
+    stepStates: INITIAL_STEP_STATES,
   })
 
-  const updateProgress = useCallback((step: StepState['step'], updates: Partial<StepState>) => {
+  const updateStepState = useCallback((step: StepState['step'], updates: Partial<StepState>) => {
     setUploadState((prev) => ({
       ...prev,
-      progress: prev.progress.map((p) => (p.step === step ? { ...p, ...updates } : p)),
+      stepStates: prev.stepStates.map((stepState) =>
+        stepState.step === step ? { ...stepState, ...updates } : stepState
+      ),
     }))
   }, [])
 
   // Check if announcing-cids is in progress
   const isAnnouncingCids = useMemo(() => {
-    const announcingStep = uploadState.progress.find((p) => p.step === 'announcing-cids')
+    const announcingStep = uploadState.stepStates.find((stepState) => stepState.step === 'announcing-cids')
     return announcingStep?.status === 'in-progress'
-  }, [uploadState.progress])
+  }, [uploadState.stepStates])
 
   // Use IPNI check hook to poll for CID availability
   useIpniCheck({
@@ -88,12 +90,12 @@ export const useFilecoinUpload = () => {
     maxAttempts: 10,
     onSuccess: () => {
       console.debug('[FilecoinUpload] IPNI check succeeded, marking announcing-cids as completed')
-      updateProgress('announcing-cids', { status: 'completed', progress: 100 })
+      updateStepState('announcing-cids', { status: 'completed', progress: 100 })
     },
     onError: (error) => {
       // IPNI check failed - mark as error with a helpful message
       console.warn('[FilecoinUpload] IPNI check failed after max attempts:', error.message)
-      updateProgress('announcing-cids', {
+      updateStepState('announcing-cids', {
         status: 'error',
         progress: 0,
         error: INPI_ERROR_MESSAGE,
@@ -105,18 +107,18 @@ export const useFilecoinUpload = () => {
     async (file: File, metadata?: Record<string, string>): Promise<string> => {
       setUploadState({
         isUploading: true,
-        progress: initialProgress,
+        stepStates: INITIAL_STEP_STATES,
       })
 
       try {
         // Step 1: Create CAR and upload to Filecoin SP
-        updateProgress('creating-car', { status: 'in-progress', progress: 0 })
+        updateStepState('creating-car', { status: 'in-progress', progress: 0 })
 
         // Create CAR from file with progress tracking
         const carResult = await createCarFromFile(file, {
           onProgress: (bytesProcessed: number, totalBytes: number) => {
             const progressPercent = Math.round((bytesProcessed / totalBytes) * 100)
-            updateProgress('creating-car', { progress: progressPercent })
+            updateStepState('creating-car', { progress: progressPercent })
           },
         })
 
@@ -126,16 +128,16 @@ export const useFilecoinUpload = () => {
           currentCid: carResult.rootCid.toString(),
         }))
 
-        updateProgress('creating-car', { status: 'completed', progress: 100 })
+        updateStepState('creating-car', { status: 'completed', progress: 100 })
         // creating the car is done, but its not uploaded yet.
 
         // Step 2: Check readiness
-        updateProgress('checking-readiness', { status: 'in-progress', progress: 0 })
+        updateStepState('checking-readiness', { status: 'in-progress', progress: 0 })
 
         if (!synapse) {
           throw new Error('Synapse client not initialized. Please check your configuration.')
         }
-        updateProgress('checking-readiness', { progress: 50 })
+        updateStepState('checking-readiness', { progress: 50 })
 
         // validate that we can actually upload the car, passing the autoConfigureAllowances flag to true to automatically configure allowances if needed.
         const readinessCheck = await checkUploadReadiness({
@@ -149,7 +151,7 @@ export const useFilecoinUpload = () => {
           throw new Error('Readiness check failed')
         }
 
-        updateProgress('checking-readiness', { status: 'completed', progress: 100 })
+        updateStepState('checking-readiness', { status: 'completed', progress: 100 })
 
         // Create a simple logger for the upload
         const logger = pino({
@@ -184,7 +186,7 @@ export const useFilecoinUpload = () => {
         }
 
         // Step 3: Upload CAR to Synapse (Filecoin SP)
-        updateProgress('uploading-car', { status: 'in-progress', progress: 0 })
+        updateStepState('uploading-car', { status: 'in-progress', progress: 0 })
 
         await executeUpload(synapseService, carResult.carBytes, carResult.rootCid, {
           logger,
@@ -202,9 +204,9 @@ export const useFilecoinUpload = () => {
                 ...prev,
                 pieceCid: pieceCid.toString(),
               }))
-              updateProgress('uploading-car', { status: 'completed', progress: 100 })
+              updateStepState('uploading-car', { status: 'completed', progress: 100 })
               // now the other steps can move to in-progress
-              updateProgress('announcing-cids', { status: 'in-progress', progress: 0 })
+              updateStepState('announcing-cids', { status: 'in-progress', progress: 0 })
             },
             onPieceAdded: (transaction) => {
               console.debug('[FilecoinUpload] Piece add transaction:', { transaction })
@@ -216,11 +218,11 @@ export const useFilecoinUpload = () => {
                 }))
               }
               // now the finalizing-transaction step can move to in-progress
-              updateProgress('finalizing-transaction', { status: 'in-progress', progress: 0 })
+              updateStepState('finalizing-transaction', { status: 'in-progress', progress: 0 })
             },
             onPieceConfirmed: () => {
               // Complete finalization
-              updateProgress('finalizing-transaction', { status: 'completed', progress: 100 })
+              updateStepState('finalizing-transaction', { status: 'completed', progress: 100 })
               console.debug('[FilecoinUpload] Upload fully completed and confirmed on chain')
             },
           },
@@ -243,13 +245,13 @@ export const useFilecoinUpload = () => {
         }))
       }
     },
-    [updateProgress, synapse, ensureDataSet]
+    [updateStepState, synapse, ensureDataSet]
   )
 
   const resetUpload = useCallback(() => {
     setUploadState({
       isUploading: false,
-      progress: initialProgress,
+      stepStates: INITIAL_STEP_STATES,
       currentCid: undefined,
       pieceCid: undefined,
       transactionHash: undefined,

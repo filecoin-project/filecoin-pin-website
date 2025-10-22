@@ -99,7 +99,7 @@ export default function Content() {
             isExpanded={activeUploadExpanded}
             onToggleExpanded={() => setActiveUploadExpanded(!activeUploadExpanded)}
             pieceCid={activeUpload.pieceCid ?? ''}
-            stepStates={activeUpload.progress}
+            stepStates={activeUpload.stepStates}
             transactionHash={activeUpload.transactionHash ?? ''}
           />
         </div>

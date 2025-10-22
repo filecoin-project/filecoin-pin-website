@@ -1,7 +1,7 @@
 import { getIpfsGatewayDownloadLink, getIpfsGatewayRenderLink } from '@/utils/links.ts'
 import { INPI_ERROR_MESSAGE } from '../../hooks/use-filecoin-upload.ts'
+import { useStepStates } from '../../hooks/use-step-states.ts'
 import { useUploadProgress } from '../../hooks/use-upload-progress.ts'
-import { STAGE_STEPS } from '../../types/upload/stage.ts'
 import type { StepState } from '../../types/upload/step.ts'
 import { Alert } from '../ui/alert.tsx'
 import { Card } from '../ui/card.tsx'
@@ -24,48 +24,43 @@ interface CarUploadAndIpniCardProps {
  */
 export const CarUploadAndIpniCard = ({ stepStates, cid, fileName }: CarUploadAndIpniCardProps) => {
   // Use the upload progress hook to calculate all progress-related values
-  const { firstStageProgress, firstStageStatus, hasUploadIpniFailure } = useUploadProgress({
+  const { uploadOutcome } = useUploadProgress({
     stepStates,
     cid,
   })
-  const uploadingStep = stepStates.find((stepState) => stepState.step === 'uploading-car')
-  const announcingStep = stepStates.find((stepState) => stepState.step === 'announcing-cids')
+
+  const { hasIpniAnnounceFailure } = uploadOutcome
+
+  const { announcingCidsStep, uploadingCarStep } = useStepStates(stepStates)
 
   const shouldShowCidCard =
-    uploadingStep?.status === 'completed' &&
-    (announcingStep?.status === 'completed' || announcingStep?.status === 'error') &&
+    uploadingCarStep?.status === 'completed' &&
+    (announcingCidsStep?.status === 'completed' || announcingCidsStep?.status === 'error') &&
     cid
 
   if (shouldShowCidCard) {
     return (
       <Card.Wrapper>
-        {hasUploadIpniFailure && <Alert message={INPI_ERROR_MESSAGE} variant="warning" />}
+        {hasIpniAnnounceFailure && <Alert message={INPI_ERROR_MESSAGE} variant="warning" />}
         <Card.InfoRow
           subtitle={
             <TextWithCopyToClipboard
               text={cid}
-              {...(!hasUploadIpniFailure && { href: getIpfsGatewayRenderLink(cid, fileName) })}
+              {...(!hasIpniAnnounceFailure && { href: getIpfsGatewayRenderLink(cid, fileName) })}
             />
           }
           title="IPFS Root CID"
         >
-          {!hasUploadIpniFailure && <DownloadButton href={getIpfsGatewayDownloadLink(cid, fileName)} />}
+          {!hasIpniAnnounceFailure && <DownloadButton href={getIpfsGatewayDownloadLink(cid, fileName)} />}
         </Card.InfoRow>
       </Card.Wrapper>
     )
   }
 
-  // Filter progresses to only include the combined steps for ProgressCardCombined
-  const firstStageStates = stepStates.filter((stepState) => STAGE_STEPS['first-stage'].includes(stepState.step))
-
   return (
     <>
-      <ProgressCardCombined
-        firstStageProgress={firstStageProgress}
-        firstStageStatus={firstStageStatus}
-        stepStates={firstStageStates}
-      />
-      {announcingStep && <ProgressCard stepState={announcingStep} />}
+      <ProgressCardCombined stepStates={stepStates} />
+      {announcingCidsStep && <ProgressCard stepState={announcingCidsStep} />}
     </>
   )
 }
