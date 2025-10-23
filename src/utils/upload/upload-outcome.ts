@@ -1,3 +1,4 @@
+import type { UploadOutcome } from '../../hooks/use-upload-progress.ts'
 import type { StepState } from '../../types/upload/step.ts'
 
 type getUploadOutcomeProps = {
@@ -27,8 +28,8 @@ export function getUploadOutcome({ stepStates, cid }: getUploadOutcomeProps) {
 }
 
 type getUploadBadgeStatusProps = {
-  isUploadSuccessful: boolean
-  isUploadFailure: boolean
+  isUploadSuccessful: UploadOutcome['isUploadSuccessful']
+  isUploadFailure: UploadOutcome['isUploadFailure']
   stepStates: StepState[]
   finalizingStep?: StepState
   announcingCidsStep?: StepState
@@ -49,8 +50,9 @@ export function getUploadBadgeStatus({
   const hasPendingSteps = stepStates.some((s) => s.status === 'pending')
   const hasCompletedSteps = stepStates.some((s) => s.status === 'completed')
 
-  if (isUploadSuccessful) return 'pinned'
   if (isUploadFailure) return 'error'
+
+  if (isUploadSuccessful && announcingCidsStep?.status === 'completed') return 'pinned'
 
   if (finalizingStep?.status === 'completed' && announcingCidsStep?.status !== 'completed') {
     return 'published'

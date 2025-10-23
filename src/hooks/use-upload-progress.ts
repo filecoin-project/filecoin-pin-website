@@ -1,10 +1,10 @@
-import { useMemo } from 'react'
 import type { Status } from '@/components/ui/badge-status.tsx'
+import { useMemo } from 'react'
 import type { StepState } from '../types/upload/step.ts'
 import { getUploadBadgeStatus, getUploadOutcome } from '../utils/upload/upload-outcome.ts'
 import { useStepStates } from './use-step-states.ts'
 
-type UploadOutcome = {
+export type UploadOutcome = {
   hasIpniAnnounceFailure: boolean
   isUploadSuccessful: boolean
   isUploadFailure: boolean
