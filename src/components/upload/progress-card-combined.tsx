@@ -1,7 +1,7 @@
 import { useFirstStageState } from '@/hooks/use-first-stage-state.ts'
 import { useStepStates } from '@/hooks/use-step-states.ts'
 import type { StepState } from '../../types/upload/step.ts'
-import { getStepEstimatedTime, getStepLabel } from '../../utils/upload/step.ts'
+import { getStepEstimatedTime, getStepLabel } from '../../utils/upload/step-utils.ts'
 import { Card } from '../ui/card.tsx'
 import { ProgressBar } from '../ui/progress-bar.tsx'
 

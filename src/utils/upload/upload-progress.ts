@@ -1,6 +1,6 @@
 import type { FirstStageGroup } from '../../types/upload/stage.ts'
 import type { StepState } from '../../types/upload/step.ts'
-import { stepHasActiveStatus } from './step.ts'
+import { stepHasActiveStatus } from './step-utils.ts'
 
 export const firstStageGroup: FirstStageGroup = {
   creatingCar: { progress: 0, status: 'pending' },

@@ -1,5 +1,5 @@
 import type { StepState } from '../../types/upload/step.ts'
-import { getStepEstimatedTime, getStepLabel } from '../../utils/upload/step.ts'
+import { getStepEstimatedTime, getStepLabel } from '../../utils/upload/step-utils.ts'
 import { Alert } from '../ui/alert.tsx'
 import { Card } from '../ui/card.tsx'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'

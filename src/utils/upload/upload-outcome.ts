@@ -5,6 +5,10 @@ type getUploadOutcomeProps = {
   cid?: string
 }
 
+/**
+ * Analyzes upload step states to determine overall upload outcome.
+ * Checks for IPNI announcement failures, upload failures, and success status.
+ */
 export function getUploadOutcome({ stepStates, cid }: getUploadOutcomeProps) {
   const hasIpniAnnounceFailure =
     stepStates.find((stepState) => stepState.step === 'announcing-cids')?.status === 'error'
@@ -30,6 +34,10 @@ type getUploadBadgeStatusProps = {
   announcingCidsStep?: StepState
 }
 
+/**
+ * Determines the appropriate badge status for UI display based on upload state.
+ * Returns status for progress indicators and completion badges.
+ */
 export function getUploadBadgeStatus({
   isUploadSuccessful,
   isUploadFailure,
