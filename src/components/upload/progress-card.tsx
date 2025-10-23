@@ -1,29 +1,29 @@
-import type { Progress } from '@/types/upload-progress.ts'
-import { getEstimatedTime, getStepLabel } from '../../utils/upload-status.ts'
+import type { StepState } from '../../types/upload/step.ts'
+import { getStepEstimatedTime, getStepLabel } from '../../utils/upload/step-utils.ts'
 import { Alert } from '../ui/alert.tsx'
 import { Card } from '../ui/card.tsx'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
 
 interface ProgressCardProps {
-  progress: Progress
+  stepState: StepState
   transactionHash?: string
 }
 
-function ProgressCard({ progress, transactionHash }: ProgressCardProps) {
+function ProgressCard({ stepState, transactionHash }: ProgressCardProps) {
   return (
     <Card.Wrapper>
       <Card.Header
-        estimatedTime={getEstimatedTime(progress.step)}
-        status={progress.status}
-        title={getStepLabel(progress.step)}
+        estimatedTime={getStepEstimatedTime(stepState.step)}
+        status={stepState.status}
+        title={getStepLabel(stepState.step)}
         withSpinner
       />
 
-      {progress.error && (
-        <Alert message={progress.error} variant={progress.step === 'announcing-cids' ? 'warning' : 'error'} />
+      {stepState.error && (
+        <Alert message={stepState.error} variant={stepState.step === 'announcing-cids' ? 'warning' : 'error'} />
       )}
 
-      {progress.step === 'finalizing-transaction' && transactionHash && (
+      {stepState.step === 'finalizing-transaction' && transactionHash && (
         <Card.Content>
           <TextWithCopyToClipboard
             href={`https://filecoin-testnet.blockscout.com/tx/${transactionHash}`}

@@ -1,0 +1,65 @@
+import type { UploadOutcome } from '../../hooks/use-upload-progress.ts'
+import type { StepState } from '../../types/upload/step.ts'
+
+type getUploadOutcomeProps = {
+  stepStates: StepState[]
+  cid?: string
+}
+
+/**
+ * Analyzes upload step states to determine overall upload outcome.
+ * Checks for IPNI announcement failures, upload failures, and success status.
+ */
+export function getUploadOutcome({ stepStates, cid }: getUploadOutcomeProps) {
+  const hasIpniAnnounceFailure =
+    stepStates.find((stepState) => stepState.step === 'announcing-cids')?.status === 'error'
+
+  const isUploadFailure = stepStates.some(
+    (stepState) => stepState.status === 'error' && stepState.step !== 'announcing-cids'
+  )
+
+  const isUploadSuccessful =
+    Boolean(cid) &&
+    stepStates.every((stepState) => {
+      return stepState.status === 'completed' || (stepState.step === 'announcing-cids' && stepState.status === 'error')
+    })
+
+  return { hasIpniAnnounceFailure, isUploadSuccessful, isUploadFailure }
+}
+
+type getUploadBadgeStatusProps = {
+  isUploadSuccessful: UploadOutcome['isUploadSuccessful']
+  isUploadFailure: UploadOutcome['isUploadFailure']
+  stepStates: StepState[]
+  finalizingStep?: StepState
+  announcingCidsStep?: StepState
+}
+
+/**
+ * Determines the appropriate badge status for UI display based on upload state.
+ * Returns status for progress indicators and completion badges.
+ */
+export function getUploadBadgeStatus({
+  isUploadSuccessful,
+  isUploadFailure,
+  stepStates,
+  finalizingStep,
+  announcingCidsStep,
+}: getUploadBadgeStatusProps) {
+  const hasInProgressSteps = stepStates.some((stepState) => stepState.status === 'in-progress')
+  const hasPendingSteps = stepStates.some((s) => s.status === 'pending')
+  const hasCompletedSteps = stepStates.some((s) => s.status === 'completed')
+
+  if (isUploadFailure) return 'error'
+
+  if (isUploadSuccessful && announcingCidsStep?.status === 'completed') return 'pinned'
+
+  if (finalizingStep?.status === 'completed' && announcingCidsStep?.status !== 'completed') {
+    return 'published'
+  }
+
+  if (hasInProgressSteps) return 'in-progress'
+  if (hasCompletedSteps && hasPendingSteps) return 'in-progress'
+
+  return 'pending'
+}
