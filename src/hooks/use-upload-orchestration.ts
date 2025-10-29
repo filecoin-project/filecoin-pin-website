@@ -52,7 +52,9 @@ export function useUploadOrchestration() {
   const { uploadState, uploadFile, resetUpload } = useFilecoinUpload()
   const { addUpload } = useUploadHistory()
   const { storageContext, providerInfo, wallet } = useFilecoinPinContext()
-  const { isCompleted } = useUploadProgress(uploadState.progress, uploadState.currentCid)
+  const { uploadOutcome } = useUploadProgress({ stepStates: uploadState.stepStates, cid: uploadState.currentCid })
+
+  const { isUploadSuccessful } = uploadOutcome
 
   // Track the file being uploaded (for displaying metadata like fileName)
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null)
@@ -71,7 +73,7 @@ export function useUploadOrchestration() {
    * 4. Force DragNDrop remount to clear its state
    */
   useEffect(() => {
-    if (isCompleted && uploadState.pieceCid && uploadedFile && storageContext && providerInfo) {
+    if (isUploadSuccessful && uploadState.pieceCid && uploadedFile && storageContext && providerInfo) {
       console.debug('[UploadOrchestration] Upload completed, adding to history')
 
       // Mark this piece CID to be auto-expanded when it appears in history
@@ -104,7 +106,7 @@ export function useUploadOrchestration() {
       setDragDropKey((prev) => prev + 1)
     }
   }, [
-    isCompleted,
+    isUploadSuccessful,
     uploadState.pieceCid,
     uploadState.currentCid,
     uploadState.transactionHash,

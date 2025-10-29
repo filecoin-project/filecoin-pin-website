@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { Alert } from '@/components/ui/alert.tsx'
-import type { Progress } from '@/types/upload-progress.ts'
 import { useUploadHistory } from '../../context/upload-history-context.tsx'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { useUploadExpansion } from '../../hooks/use-upload-expansion.ts'
 import { useUploadOrchestration } from '../../hooks/use-upload-orchestration.ts'
 import { useUploadUI } from '../../hooks/use-upload-ui.ts'
+import type { StepState } from '../../types/upload/step.ts'
 import { formatFileSize } from '../../utils/format-file-size.ts'
 import { Heading } from '../ui/heading.tsx'
 import { LoadingState } from '../ui/loading-state.tsx'
@@ -15,7 +15,7 @@ import { UploadError } from '../upload/upload-error.tsx'
 import { UploadStatus } from '../upload/upload-status.tsx'
 
 // Completed state for displaying upload history
-const COMPLETED_PROGRESS: Progress[] = [
+const COMPLETED_PROGRESS: StepState[] = [
   { step: 'creating-car', status: 'completed', progress: 100 },
   { step: 'checking-readiness', status: 'completed', progress: 100 },
   { step: 'uploading-car', status: 'completed', progress: 100 },
@@ -99,7 +99,7 @@ export default function Content() {
             isExpanded={activeUploadExpanded}
             onToggleExpanded={() => setActiveUploadExpanded(!activeUploadExpanded)}
             pieceCid={activeUpload.pieceCid ?? ''}
-            progresses={activeUpload.progress}
+            stepStates={activeUpload.stepStates}
             transactionHash={activeUpload.transactionHash ?? ''}
           />
         </div>
@@ -124,7 +124,7 @@ export default function Content() {
               key={upload.id}
               onToggleExpanded={() => toggleExpansion(upload.id)}
               pieceCid={upload.pieceCid}
-              progresses={COMPLETED_PROGRESS}
+              stepStates={COMPLETED_PROGRESS}
               transactionHash={upload.transactionHash}
             />
           ))}
