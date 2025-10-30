@@ -4,6 +4,29 @@ import { useCallback, useEffect, useRef } from 'react'
 // Value indicates the last known result of the IPNI listing check
 const ipniSessionResultByCid: Map<string, 'success' | 'failed'> = new Map()
 
+// LocalStorage helpers for success-only persistence across tabs/sessions
+const LS_SUCCESS_PREFIX = 'ipni-check-success-v1:'
+
+function getLocalStorageSuccess(cid: string): boolean {
+  try {
+    const key = `${LS_SUCCESS_PREFIX}${cid}`
+    return typeof window !== 'undefined' && window.localStorage.getItem(key) === '1'
+  } catch {
+    return false
+  }
+}
+
+function setLocalStorageSuccess(cid: string): void {
+  try {
+    const key = `${LS_SUCCESS_PREFIX}${cid}`
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(key, '1')
+    }
+  } catch {
+    // ignore storage write errors (quota/disabled/private mode)
+  }
+}
+
 interface UseIpniCheckOptions {
   cid: string | null
   isActive: boolean
@@ -80,6 +103,7 @@ export const useIpniCheck = ({
       if (success) {
         isCheckingRef.current = false
         ipniSessionResultByCid.set(cid, 'success')
+        setLocalStorageSuccess(cid)
         onSuccessRef.current()
         return
       }
@@ -111,12 +135,23 @@ export const useIpniCheck = ({
       const prior = ipniSessionResultByCid.get(cid)
       if (prior === 'success') {
         console.debug('[IpniCheck] Session cache hit (success) for CID:', cid)
+        if (!getLocalStorageSuccess(cid)) {
+          setLocalStorageSuccess(cid)
+        }
         onSuccessRef.current()
         return
       }
       if (prior === 'failed') {
         console.debug('[IpniCheck] Session cache hit (failed) for CID:', cid)
         onErrorRef.current?.(new Error('IPNI check previously failed in this session'))
+        return
+      }
+
+      // Check cross-tab/session success cache in localStorage
+      if (getLocalStorageSuccess(cid)) {
+        console.debug('[IpniCheck] LocalStorage cache hit (success) for CID:', cid)
+        ipniSessionResultByCid.set(cid, 'success')
+        onSuccessRef.current()
         return
       }
 
