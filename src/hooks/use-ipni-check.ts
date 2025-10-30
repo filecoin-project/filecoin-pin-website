@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react'
 
+// Session-scoped cache to prevent repeated IPNI checks per CID within a page session
+// Value indicates the last known result of the IPNI listing check
+const ipniSessionResultByCid: Map<string, 'success' | 'failed'> = new Map()
+
 interface UseIpniCheckOptions {
   cid: string | null
   isActive: boolean
@@ -75,6 +79,7 @@ export const useIpniCheck = ({
 
       if (success) {
         isCheckingRef.current = false
+        ipniSessionResultByCid.set(cid, 'success')
         onSuccessRef.current()
         return
       }
@@ -83,6 +88,7 @@ export const useIpniCheck = ({
       if (attemptRef.current >= maxAttempts) {
         console.debug(`[IpniCheck] Max attempts (${maxAttempts}) reached for CID ${cid}`)
         isCheckingRef.current = false
+        ipniSessionResultByCid.set(cid, 'failed')
         onErrorRef.current?.(new Error(`IPNI check failed after ${maxAttempts} attempts`))
         return
       }
@@ -101,6 +107,19 @@ export const useIpniCheck = ({
   // Start polling when isActive becomes true
   useEffect(() => {
     if (isActive && cid) {
+      // If we've already checked this CID in the current page session, reuse the result and skip polling
+      const prior = ipniSessionResultByCid.get(cid)
+      if (prior === 'success') {
+        console.debug('[IpniCheck] Session cache hit (success) for CID:', cid)
+        onSuccessRef.current()
+        return
+      }
+      if (prior === 'failed') {
+        console.debug('[IpniCheck] Session cache hit (failed) for CID:', cid)
+        onErrorRef.current?.(new Error('IPNI check previously failed in this session'))
+        return
+      }
+
       console.debug('[IpniCheck] Starting polling for CID:', cid)
       pollWithBackoff()
     }
