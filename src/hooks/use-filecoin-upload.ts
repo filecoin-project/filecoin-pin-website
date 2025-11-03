@@ -1,11 +1,11 @@
 import { createCarFromFile } from 'filecoin-pin/core/unixfs'
 import { checkUploadReadiness, executeUpload } from 'filecoin-pin/core/upload'
 import pino from 'pino'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { StepState } from '../types/upload/step.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
-import { useIpniCheck } from './use-ipni-check.ts'
+import { cacheIpniResult } from './use-ipni-check.ts'
 
 interface UploadState {
   isUploading: boolean
@@ -51,7 +51,7 @@ export const INPI_ERROR_MESSAGE =
  * actions so they stay dumb and declarative.
  */
 export const useFilecoinUpload = () => {
-  const { synapse, storageContext, providerInfo, ensureDataSet } = useFilecoinPinContext()
+  const { synapse, storageContext, providerInfo, checkIfDatasetExists } = useFilecoinPinContext()
 
   // Use refs to track the latest context values, so the upload callback can access them
   // even if the dataset is initialized after the callback is created
@@ -77,32 +77,6 @@ export const useFilecoinUpload = () => {
     }))
   }, [])
 
-  // Check if announcing-cids is in progress
-  const isAnnouncingCids = useMemo(() => {
-    const announcingStep = uploadState.stepStates.find((stepState) => stepState.step === 'announcing-cids')
-    return announcingStep?.status === 'in-progress'
-  }, [uploadState.stepStates])
-
-  // Use IPNI check hook to poll for CID availability
-  useIpniCheck({
-    cid: uploadState.currentCid ?? null,
-    isActive: isAnnouncingCids,
-    maxAttempts: 10,
-    onSuccess: () => {
-      console.debug('[FilecoinUpload] IPNI check succeeded, marking announcing-cids as completed')
-      updateStepState('announcing-cids', { status: 'completed', progress: 100 })
-    },
-    onError: (error) => {
-      // IPNI check failed - mark as error with a helpful message
-      console.warn('[FilecoinUpload] IPNI check failed after max attempts:', error.message)
-      updateStepState('announcing-cids', {
-        status: 'error',
-        progress: 0,
-        error: INPI_ERROR_MESSAGE,
-      })
-    },
-  })
-
   const uploadFile = useCallback(
     async (file: File, metadata?: Record<string, string>): Promise<string> => {
       setUploadState({
@@ -123,9 +97,10 @@ export const useFilecoinUpload = () => {
         })
 
         // Store the CID for IPNI checking
+        const rootCid = carResult.rootCid.toString()
         setUploadState((prev) => ({
           ...prev,
-          currentCid: carResult.rootCid.toString(),
+          currentCid: rootCid,
         }))
 
         updateStepState('creating-car', { status: 'completed', progress: 100 })
@@ -161,17 +136,12 @@ export const useFilecoinUpload = () => {
           },
         })
 
-        // Ensure we have a data set ready before uploading
-        console.debug('[FilecoinUpload] Ensuring data set is ready before upload...')
-        await ensureDataSet()
-
         // Get the latest storage context and provider info from refs
-        // (these may have been updated by ensureDataSet if dataset wasn't ready)
         const currentStorageContext = storageContextRef.current
         const currentProviderInfo = providerInfoRef.current
 
         if (!currentStorageContext || !currentProviderInfo) {
-          throw new Error('Storage context not ready. Failed to initialize data set. Please try again.')
+          throw new Error('Storage context not ready. Failed to initialize storage context. Please try again.')
         }
 
         console.debug('[FilecoinUpload] Using storage context from provider:', {
@@ -225,11 +195,31 @@ export const useFilecoinUpload = () => {
                 break
               }
 
-              case 'onPieceConfirmed':
+              case 'onPieceConfirmed': {
                 // Complete finalization
                 updateStepState('finalizing-transaction', { status: 'completed', progress: 100 })
                 console.debug('[FilecoinUpload] Upload fully completed and confirmed on chain')
                 break
+              }
+              case 'ipniAdvertisement.failed': {
+                // IPNI check failed - mark as error with a helpful message
+                console.warn('[FilecoinUpload] IPNI check failed after max attempts:', event.data.error.message)
+                // Cache the failed result
+                cacheIpniResult(rootCid, 'failed')
+                updateStepState('announcing-cids', {
+                  status: 'error',
+                  progress: 0,
+                  error: INPI_ERROR_MESSAGE,
+                })
+                break
+              }
+              case 'ipniAdvertisement.complete': {
+                console.debug('[FilecoinUpload] IPNI check succeeded, marking announcing-cids as completed')
+                // Cache the success result
+                cacheIpniResult(rootCid, 'success')
+                updateStepState('announcing-cids', { status: 'completed', progress: 100 })
+                break
+              }
               default:
                 break
             }
@@ -237,7 +227,7 @@ export const useFilecoinUpload = () => {
         })
 
         // Return the actual CID from the CAR result
-        return carResult.rootCid.toString()
+        return rootCid
       } catch (error) {
         console.error('[FilecoinUpload] Upload failed with error:', error)
         const errorMessage = error instanceof Error ? error.message : 'Upload failed'
@@ -253,7 +243,7 @@ export const useFilecoinUpload = () => {
         }))
       }
     },
-    [updateStepState, synapse, ensureDataSet]
+    [updateStepState, synapse, checkIfDatasetExists]
   )
 
   const resetUpload = useCallback(() => {

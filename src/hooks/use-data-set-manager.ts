@@ -2,19 +2,14 @@ import type { ProviderInfo } from '@filoz/synapse-sdk'
 import { createStorageContext, type SynapseService } from 'filecoin-pin/core/synapse'
 import pino from 'pino'
 import { useCallback, useRef, useState } from 'react'
-import {
-  getStoredDataSetId,
-  getStoredDataSetIdForProvider,
-  storeDataSetId,
-  storeDataSetIdForProvider,
-} from '../lib/local-storage/data-set.ts'
+import { getStoredDataSetId, getStoredDataSetIdForProvider } from '../lib/local-storage/data-set.ts'
 
 type StorageContext = NonNullable<Awaited<ReturnType<typeof createStorageContext>>['storage']>
 
 export type DataSetState =
   | { status: 'idle'; dataSetId?: number }
   | { status: 'initializing'; dataSetId?: number }
-  | { status: 'ready'; dataSetId: number; storageContext: StorageContext; providerInfo: ProviderInfo }
+  | { status: 'ready'; dataSetId: number | null; storageContext: StorageContext; providerInfo: ProviderInfo }
   | { status: 'error'; error: string; dataSetId?: number }
 
 interface UseDataSetManagerProps {
@@ -32,7 +27,7 @@ interface UseDataSetManagerProps {
 
 interface UseDataSetManagerReturn {
   dataSet: DataSetState
-  ensureDataSet: () => Promise<number | null>
+  checkIfDatasetExists: () => Promise<number | null>
   storageContext: StorageContext | null
   providerInfo: ProviderInfo | null
 }
@@ -53,10 +48,10 @@ export function useDataSetManager({
   debugParams,
 }: UseDataSetManagerProps): UseDataSetManagerReturn {
   const [dataSet, setDataSet] = useState<DataSetState>({ status: 'idle' })
-  const isEnsuringDataSetRef = useRef<boolean>(false)
+  const isCheckingDataSetRef = useRef<boolean>(false)
 
   /**
-   * Ensure a data set exists for the current wallet.
+   * Check if a data set exists for the current wallet.
    *
    * This is called both:
    * 1. Proactively when wallet + synapse are ready (for better UX)
@@ -65,15 +60,15 @@ export function useDataSetManager({
    * - Returns null if wallet/synapse aren't ready yet (will retry automatically)
    * - Checks localStorage for existing data set ID
    * - If found, returns it immediately
-   * - If not found, creates a new data set and stores it
+   * - If not found, returns null (does not create a new data set)
    * - Guards against duplicate concurrent calls using a ref
    *
-   * @returns The data set ID, or null if prerequisites aren't ready or initialization fails
+   * @returns The data set ID if found, or null if not found or prerequisites aren't ready
    */
-  const ensureDataSet = useCallback(async (): Promise<number | null> => {
+  const checkIfDatasetExists = useCallback(async (): Promise<number | null> => {
     // Guard against duplicate concurrent calls (before state updates)
-    if (isEnsuringDataSetRef.current) {
-      console.debug('[DataSet] Already ensuring data set (guarded by ref), skipping duplicate call')
+    if (isCheckingDataSetRef.current) {
+      console.debug('[DataSet] Already checking data set (guarded by ref), skipping duplicate call')
       // Return current dataSetId from state
       return new Promise<number | null>((resolve) => {
         setDataSet((current) => {
@@ -126,7 +121,7 @@ export function useDataSetManager({
     }
 
     // Set the ref guard only after checking we should proceed
-    isEnsuringDataSetRef.current = true
+    isCheckingDataSetRef.current = true
 
     try {
       // Check for debug/test parameters from URL
@@ -185,64 +180,33 @@ export function useDataSetManager({
           return dataSetId
         }
 
-        console.debug('[DataSet] Creating new data set for wallet:', walletAddress)
-
-        const result = await createStorageContext(synapse, logger, {
-          ...providerOptions,
-          dataset: {
-            createNew: true,
-          },
-        })
-
-        const newDataSetId = result.storage.dataSetId
-        if (!newDataSetId) {
-          throw new Error('Data set ID not returned from storage context creation')
-        }
-
-        // Store for future use (unless we're in debug mode with URL dataSetId override)
-        if (urlDataSetId) {
-          console.debug('[DataSet] Created new data set ID (not storing due to URL override):', newDataSetId)
-        } else if (urlProviderId) {
-          // If providerId was specified, store with provider-specific key
-          // Otherwise use default wallet-only key (existing behavior)
-          storeDataSetIdForProvider(walletAddress, urlProviderId, newDataSetId)
-          console.debug(
-            '[DataSet] Created and stored new data set ID with provider:',
-            newDataSetId,
-            'provider:',
-            urlProviderId
-          )
-        } else {
-          storeDataSetId(walletAddress, newDataSetId)
-          console.debug('[DataSet] Created and stored new data set ID:', newDataSetId)
-        }
-
+        // we don't have a dataset id, and don't want to create one, but we need a storage context to exist.
+        const result = await createStorageContext(synapse, logger)
         setDataSet({
           status: 'ready',
-          dataSetId: newDataSetId,
+          dataSetId: result.storage.dataSetId ?? null,
           storageContext: result.storage,
           providerInfo: result.providerInfo,
         })
-        return newDataSetId
+        return result.storage.dataSetId ?? null
       } catch (error) {
-        console.error('[DataSet] Failed to create data set:', error)
-        const errorMessage = error instanceof Error ? error.message : 'Failed to initialize data set'
-        setDataSet((prev) => ({
+        console.error('[DataSet] Failed to check data set:', error)
+        const errorMessage = error instanceof Error ? error.message : 'Failed to check data set'
+        setDataSet(() => ({
           status: 'error',
           error: errorMessage,
-          dataSetId: prev.dataSetId,
         }))
         return null
       }
     } finally {
       // Always release the guard, even on early returns
-      isEnsuringDataSetRef.current = false
+      isCheckingDataSetRef.current = false
     }
   }, [walletAddress, synapse, debugParams])
 
   return {
     dataSet,
-    ensureDataSet,
+    checkIfDatasetExists,
     storageContext: dataSet.status === 'ready' ? dataSet.storageContext : null,
     providerInfo: dataSet.status === 'ready' ? dataSet.providerInfo : null,
   }

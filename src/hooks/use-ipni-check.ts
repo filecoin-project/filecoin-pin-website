@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { validateIPNIAdvertisement } from 'filecoin-pin/core/utils'
+import { CID } from 'multiformats/cid'
+import { useEffect, useRef } from 'react'
 
 // Session-scoped cache to prevent repeated IPNI checks per CID within a page session
 // Value indicates the last known result of the IPNI listing check
@@ -32,28 +34,19 @@ interface UseIpniCheckOptions {
   isActive: boolean
   onSuccess: () => void
   onError?: (error: Error) => void
-  maxAttempts?: number
-  initialDelayMs?: number
-  maxDelayMs?: number
 }
 
 /**
- * Hook to poll IPNI (filecoinpin.contact) with exponential backoff to verify CID availability
+ * Hook to check IPNI cache for CID availability.
+ *
+ * Note: filecoin-pin now handles IPNI checking, so this hook only provides
+ * caching functionality. It checks session cache and localStorage cache,
+ * and calls the appropriate callbacks if cached results are found.
+ *
+ * To cache a result, call `cacheIpniResult` with the CID and result.
  */
-export const useIpniCheck = ({
-  cid,
-  isActive,
-  onSuccess,
-  onError,
-  maxAttempts = 10,
-  initialDelayMs = 1000,
-  maxDelayMs = 30000,
-}: UseIpniCheckOptions) => {
-  const attemptRef = useRef(0)
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const isCheckingRef = useRef(false)
-
-  // Store callbacks in refs to prevent pollWithBackoff from being recreated
+export const useIpniCheck = ({ cid, isActive, onSuccess, onError }: UseIpniCheckOptions) => {
+  // Store callbacks in refs to prevent them from being recreated
   const onSuccessRef = useRef(onSuccess)
   const onErrorRef = useRef(onError)
 
@@ -63,75 +56,15 @@ export const useIpniCheck = ({
     onErrorRef.current = onError
   }, [onSuccess, onError])
 
-  const checkIpni = useCallback(async (currentCid: string): Promise<boolean> => {
-    try {
-      const response = await fetch(`https://filecoinpin.contact/cid/${currentCid}`)
-      console.debug(`[IpniCheck] Response for ${currentCid}:`, response.status, response.statusText)
-
-      // Only consider 200 as successful (CID is actually indexed and available)
-      // 404 means it's not indexed yet
-      const isAvailable = response.ok && response.status === 200
-      console.debug(`[IpniCheck] CID ${currentCid} available:`, isAvailable)
-      return isAvailable
-    } catch (error) {
-      console.error('[IpniCheck] Error checking IPNI:', error)
-      // Network errors, continue retrying
-      return false
-    }
-  }, [])
-
-  const pollWithBackoff = useCallback(async () => {
-    if (!cid || !isActive || isCheckingRef.current) {
-      return
-    }
-
-    console.debug('[IpniCheck] Starting IPNI polling for CID', cid)
-    isCheckingRef.current = true
-    attemptRef.current = 0
-
-    const poll = async () => {
-      if (!isActive || !cid) {
-        isCheckingRef.current = false
-        return
-      }
-
-      attemptRef.current += 1
-      console.debug(`[IpniCheck] Attempt ${attemptRef.current}/${maxAttempts} for CID ${cid}`)
-
-      const success = await checkIpni(cid)
-
-      if (success) {
-        isCheckingRef.current = false
-        ipniSessionResultByCid.set(cid, 'success')
-        setLocalStorageSuccess(cid)
-        onSuccessRef.current()
-        return
-      }
-
-      // Check if we've exceeded max attempts
-      if (attemptRef.current >= maxAttempts) {
-        console.debug(`[IpniCheck] Max attempts (${maxAttempts}) reached for CID ${cid}`)
-        isCheckingRef.current = false
-        ipniSessionResultByCid.set(cid, 'failed')
-        onErrorRef.current?.(new Error(`IPNI check failed after ${maxAttempts} attempts`))
-        return
-      }
-
-      // Calculate exponential backoff delay
-      const delay = Math.min(initialDelayMs * 2 ** (attemptRef.current - 1), maxDelayMs)
-
-      // Schedule next attempt
-      timeoutRef.current = setTimeout(poll, delay)
-    }
-
-    // Start polling
-    poll()
-  }, [cid, isActive, checkIpni, maxAttempts, initialDelayMs, maxDelayMs])
-
-  // Start polling when isActive becomes true
+  // Check cache when isActive becomes true
   useEffect(() => {
     if (isActive && cid) {
-      // If we've already checked this CID in the current page session, reuse the result and skip polling
+      const cidInstance = CID.parse(cid)
+      if (cidInstance === null) {
+        onErrorRef.current?.(new Error('Invalid CID'))
+        return
+      }
+      // If we've already checked this CID in the current page session, reuse the result and skip checking
       const prior = ipniSessionResultByCid.get(cid)
       if (prior === 'success') {
         console.debug('[IpniCheck] Session cache hit (success) for CID:', cid)
@@ -155,25 +88,29 @@ export const useIpniCheck = ({
         return
       }
 
-      console.debug('[IpniCheck] Starting polling for CID:', cid)
-      pollWithBackoff()
+      // No cached result found - use validateIPNIAdvertisement to check if the CID is advertised to IPNI
+      console.debug('[IpniCheck] No cache found for CID:', cid, '- filecoin-pin will handle checking')
+      validateIPNIAdvertisement(cidInstance, { maxAttempts: 1 })
+        .then(() => {
+          cacheIpniResult(cid, 'success')
+          onSuccessRef.current?.()
+        })
+        .catch((error) => {
+          console.error('[IpniCheck] IPNI check failed:', error)
+          cacheIpniResult(cid, 'failed')
+          onErrorRef.current?.(error)
+        })
     }
+  }, [isActive, cid])
+}
 
-    // Cleanup on unmount or when isActive becomes false
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
-      isCheckingRef.current = false
-    }
-  }, [isActive, cid, pollWithBackoff])
-
-  // Reset when CID changes
-  useEffect(() => {
-    attemptRef.current = 0
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-    }
-    isCheckingRef.current = false
-  }, [cid])
+/**
+ * Cache an IPNI check result for a CID.
+ * This should be called when filecoin-pin reports IPNI advertisement results.
+ */
+export function cacheIpniResult(cid: string, result: 'success' | 'failed'): void {
+  ipniSessionResultByCid.set(cid, result)
+  if (result === 'success') {
+    setLocalStorageSuccess(cid)
+  }
 }

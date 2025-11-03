@@ -9,7 +9,8 @@
     "lint": "biome check --no-errors-on-unmatched --files-ignore-unknown=true .",
     "lint:fix": "biome check --no-errors-on-unmatched --files-ignore-unknown=true --write .",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.12",
@@ -17,7 +18,7 @@
     "@tailwindcss/vite": "^4.1.14",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "filecoin-pin": "^0.9.0",
+    "filecoin-pin": "^0.11.0",
     "lucide-react": "^0.545.0",
     "pino": "^10.0.0",
     "pretty-bytes": "^7.1.0",
@@ -36,6 +37,7 @@
     "@vitejs/plugin-react": "^5.0.4",
     "buffer": "^6.0.3",
     "globals": "^16.4.0",
+    "patch-package": "^8.0.1",
     "process": "^0.11.10",
     "tw-animate-css": "^1.4.0",
     "typescript": "~5.9.3",

@@ -1,5 +1,6 @@
 import { initializeSynapse, type SynapseService } from 'filecoin-pin/core/synapse'
 import pino from 'pino'
+import * as Sentry from '@sentry/browser'
 
 const logger = pino({
   level: 'debug',
@@ -14,14 +15,27 @@ let synapsePromise: Promise<SynapseService['synapse']> | null = null
 
 export const getSynapseClient = (config: SynapseSetupConfig) => {
   if (!synapsePromise) {
-    synapsePromise = initializeSynapse({
-      ...config,
-      telemetry: {
-        sentrySetTags: {
-          appName: 'filecoinPinWebsite'
-        }
+    synapsePromise = initializeSynapse(
+      {
+        ...config,
+        telemetry: {
+          sentryInitOptions: {
+            defaultIntegrations: false,
+            integrations: [Sentry.httpClientIntegration()],
+          },
+          sentrySetTags: {
+            appName: 'filecoinPinWebsite',
+            filecoinPinWebsiteDomain: window.location.origin,
+          },
+        },
+      },
+      logger
+    ).then((synapse) => {
+      if (synapse.telemetry?.sentry) {
+        synapse.telemetry?.sentry.disable
       }
-    }, logger)
+      return synapse
+    })
   }
 
   return synapsePromise

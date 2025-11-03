@@ -37,7 +37,6 @@ function UploadCompleted({ cid, fileName, pieceCid, datasetId }: UploadCompleted
     cid: cid || null,
     isActive: true,
     onSuccess: () => setHasIpniFailure(false),
-    maxAttempts: 1,
     onError: (error) => {
       console.error('[UploadCompleted] IPNI check failed:', error)
       setHasIpniFailure(true)

@@ -1,0 +1,27 @@
+diff --git a/node_modules/@filoz/synapse-sdk/dist/src/telemetry/service.js b/node_modules/@filoz/synapse-sdk/dist/src/telemetry/service.js
+index 5f771b2..7eab92c 100644
+--- a/node_modules/@filoz/synapse-sdk/dist/src/telemetry/service.js
++++ b/node_modules/@filoz/synapse-sdk/dist/src/telemetry/service.js
+@@ -63,7 +63,8 @@ export class TelemetryService {
+             }
+             if (modifiedSpan.description && httpVerbPattern.test(modifiedSpan.description)) {
+                 modifiedSpan.description = sanitizeUrlForSpan(modifiedSpan.description);
+-                if (modifiedSpan.op === 'http.client' || modifiedSpan.data['sentry.op'] === 'http.client') {
++                if (modifiedSpan.op === 'http.client' || modifiedSpan.data['sentry.op'] === 'http.client' || (isBrowser && modifiedSpan.op === 'http.wrapper')) {
++                    modifiedSpan.op = 'http.client';
+                     modifiedSpan.data = {
+                         ...globalTags,
+                         ...modifiedSpan.data,
+diff --git a/node_modules/@filoz/synapse-sdk/dist/src/telemetry/singleton.js b/node_modules/@filoz/synapse-sdk/dist/src/telemetry/singleton.js
+index 833cad5..8ef309a 100644
+--- a/node_modules/@filoz/synapse-sdk/dist/src/telemetry/singleton.js
++++ b/node_modules/@filoz/synapse-sdk/dist/src/telemetry/singleton.js
+@@ -112,7 +112,7 @@ function wrapFetch() {
+         const method = input instanceof Request ? input.method : init?.method || 'GET';
+         return sentry.startSpan({
+             name: `${method} ${url.toString()} Wrapper`,
+-            op: 'http.wrapper',
++            op: isBrowser ? 'http.client' : 'http.wrapper',
+         }, async () => {
+             return originalFetch(input, init);
+         });

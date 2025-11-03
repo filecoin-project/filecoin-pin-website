@@ -40,12 +40,17 @@ export default function Content() {
   // Active upload accordion expansion (separate from history expansion)
   const [activeUploadExpanded, setActiveUploadExpanded] = useState(true)
 
-  // Wallet/synapse status for loading states
-  const { wallet, synapse } = useFilecoinPinContext()
+  // Wallet/synapse/dataset status for loading states
+  const { wallet, synapse, dataSet, storageContext } = useFilecoinPinContext()
 
   // Determine if we're still initializing (wallet, synapse, provider)
   // Note: We don't block on isLoadingPieces - users can upload while history loads
   const isInitializing = wallet.status === 'loading' || wallet.status === 'idle'
+
+  // Check if we've confirmed there's no dataset (wallet/synapse ready, but no dataset found)
+  // In this case, we shouldn't show loading because there won't be any pieces/history to load
+  const hasConfirmedNoDataset =
+    wallet.status === 'ready' && synapse !== null && dataSet.status === 'idle' && !storageContext && !isInitializing
 
   // Get loading message based on current state
   const getLoadingMessage = () => {
@@ -55,7 +60,7 @@ export default function Content() {
     if (!synapse) {
       return 'Initializing storage service...'
     }
-    return 'Preparing upload interface...'
+    return 'Loading previous uploads...'
   }
 
   // If wallet failed to load, show error instead of spinner
@@ -105,10 +110,10 @@ export default function Content() {
         </div>
       )}
 
-      {/* Show loading state while initializing */}
-      {(!hasLoadedHistory || isLoadingPieces || isInitializing) && uploadHistory.length === 0 && (
-        <LoadingState message={getLoadingMessage()} />
-      )}
+      {/* Show loading state while initializing, but not if we've confirmed there's no dataset */}
+      {!hasConfirmedNoDataset &&
+        (!hasLoadedHistory || isLoadingPieces || isInitializing) &&
+        uploadHistory.length === 0 && <LoadingState message={getLoadingMessage()} />}
 
       {/* Always show upload history when available */}
       {uploadHistory.length > 0 && (
