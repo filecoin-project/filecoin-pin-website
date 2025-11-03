@@ -3,7 +3,7 @@
  * This exists to paper over early stability issues while the wider provider ecosystem
  * catches up. Remove once automatic provider discovery is trustworthy again.
  */
-export const KNOWN_GOOD_SPS = [2, 8, 16] as const
+export const KNOWN_GOOD_SPS = [1, 2] as const
 
 /**
  * Randomly select a storage provider from the known good SPs list

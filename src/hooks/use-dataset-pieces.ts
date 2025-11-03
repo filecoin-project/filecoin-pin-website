@@ -62,6 +62,11 @@ export const useDatasetPieces = () => {
         setPieces([])
         return
       }
+      if (!storageContext.dataSetId) {
+        console.warn('[DatasetPieces] Storage context does not have a data set ID')
+        setPieces([])
+        return
+      }
 
       /***
        * The below warmStorage and pdp server stuff should be migrated into nice API provided by filecoin-pin at some point.
@@ -101,6 +106,9 @@ export const useDatasetPieces = () => {
               'from dataset:',
               storageContext.dataSetId
             )
+            if (!storageContext.dataSetId) {
+              throw new Error('Storage context does not have a data set ID')
+            }
             const metadata = await warmStorage.getPieceMetadata(storageContext.dataSetId, pieceId)
 
             // Extract relevant metadata

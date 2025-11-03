@@ -13,7 +13,7 @@ export interface WalletSnapshot {
   address: string
   network: string
   filBalance: bigint
-  usdfcBalance: bigint
+  walletUsdfcBalance: bigint
   formatted: {
     fil: string
     usdfc: string
@@ -29,10 +29,10 @@ export const fetchWalletSnapshot = async (synapse: SynapseService['synapse']): P
     address: status.address,
     network: status.network,
     filBalance: status.filBalance,
-    usdfcBalance: status.usdfcBalance,
+    walletUsdfcBalance: status.walletUsdfcBalance,
     formatted: {
       fil: formatFIL(status.filBalance, isCalibration, 2),
-      usdfc: `${formatUSDFC(status.usdfcBalance, 2)} ${usdfcLabel}`,
+      usdfc: `${formatUSDFC(status.walletUsdfcBalance, 2)} ${usdfcLabel}`,
     },
     raw: status,
   }

@@ -16,10 +16,10 @@
  * 3. **User isolation**: In scenarios where multiple users share the same browser
  *    (e.g., shared computers, testing), each wallet maintains its own data set.
  *
- * Storage format: `filecoin-pin-data-set-id-{walletAddress}` → `{dataSetId}`
+ * Storage format: `filecoin-pin-data-set-id-{version}-{walletAddress}` → `{dataSetId}`
  */
 
-const DATA_SET_ID_KEY = 'filecoin-pin-data-set-id'
+const DATA_SET_ID_KEY = 'filecoin-pin-data-set-id-v1'
 
 /**
  * Get the storage key for a given wallet and optional provider.

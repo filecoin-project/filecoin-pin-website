@@ -196,35 +196,43 @@ export const useFilecoinUpload = () => {
             label: file.name,
             fileSize: formatFileSize(file.size),
           },
-          callbacks: {
-            onUploadComplete: (pieceCid) => {
-              console.debug('[FilecoinUpload] Upload complete, piece CID:', pieceCid)
-              // Store the piece CID from the callback
-              setUploadState((prev) => ({
-                ...prev,
-                pieceCid: pieceCid.toString(),
-              }))
-              updateStepState('uploading-car', { status: 'completed', progress: 100 })
-              // now the other steps can move to in-progress
-              updateStepState('announcing-cids', { status: 'in-progress', progress: 0 })
-            },
-            onPieceAdded: (transaction) => {
-              console.debug('[FilecoinUpload] Piece add transaction:', { transaction })
-              // Store the transaction hash if available
-              if (transaction?.hash) {
+          onProgress: (event) => {
+            switch (event.type) {
+              case 'onUploadComplete':
+                console.debug('[FilecoinUpload] Upload complete, piece CID:', event.data.pieceCid)
+                // Store the piece CID from the callback
                 setUploadState((prev) => ({
                   ...prev,
-                  transactionHash: transaction.hash,
+                  pieceCid: event.data.pieceCid.toString(),
                 }))
+                updateStepState('uploading-car', { status: 'completed', progress: 100 })
+                // now the other steps can move to in-progress
+                updateStepState('announcing-cids', { status: 'in-progress', progress: 0 })
+                break
+
+              case 'onPieceAdded': {
+                const txHash = event.data.txHash
+                console.debug('[FilecoinUpload] Piece add transaction:', { txHash })
+                // Store the transaction hash if available
+                if (txHash) {
+                  setUploadState((prev) => ({
+                    ...prev,
+                    transactionHash: txHash,
+                  }))
+                }
+                // now the finalizing-transaction step can move to in-progress
+                updateStepState('finalizing-transaction', { status: 'in-progress', progress: 0 })
+                break
               }
-              // now the finalizing-transaction step can move to in-progress
-              updateStepState('finalizing-transaction', { status: 'in-progress', progress: 0 })
-            },
-            onPieceConfirmed: () => {
-              // Complete finalization
-              updateStepState('finalizing-transaction', { status: 'completed', progress: 100 })
-              console.debug('[FilecoinUpload] Upload fully completed and confirmed on chain')
-            },
+
+              case 'onPieceConfirmed':
+                // Complete finalization
+                updateStepState('finalizing-transaction', { status: 'completed', progress: 100 })
+                console.debug('[FilecoinUpload] Upload fully completed and confirmed on chain')
+                break
+              default:
+                break
+            }
           },
         })
 
