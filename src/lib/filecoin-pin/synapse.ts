@@ -18,9 +18,6 @@ export const getSynapseClient = (config: SynapseSetupConfig) => {
       {
         ...config,
         telemetry: {
-          sentryInitOptions: {
-            debug: true
-          },
           sentrySetTags: {
             appName: 'filecoinPinWebsite',
             filecoinPinWebsiteDomain: window.location.origin,
