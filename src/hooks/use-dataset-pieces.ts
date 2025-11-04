@@ -32,6 +32,8 @@ export const useDatasetPieces = () => {
 
   const { storageContext, providerInfo, wallet, synapse } = useFilecoinPinContext()
 
+  const dataSetId = storageContext?.dataSetId
+
   const loadPieces = useCallback(async () => {
     if (!storageContext || !providerInfo || !synapse) {
       console.debug(
@@ -62,7 +64,7 @@ export const useDatasetPieces = () => {
         setPieces([])
         return
       }
-      if (!storageContext.dataSetId) {
+      if (!dataSetId) {
         console.warn('[DatasetPieces] Storage context does not have a data set ID')
         setPieces([])
         return
@@ -77,15 +79,10 @@ export const useDatasetPieces = () => {
 
       // Query the PDP server for the dataset and its pieces
       const pdpServer = new PDPServer(null, serviceURL)
-      console.debug('[DatasetPieces] Fetching pieces for dataSetId:', storageContext.dataSetId)
-      const dataSetData = await pdpServer.getDataSet(storageContext.dataSetId)
+      console.debug('[DatasetPieces] Fetching pieces for dataSetId:', dataSetId)
+      const dataSetData = await pdpServer.getDataSet(dataSetId)
 
-      console.debug(
-        '[DatasetPieces] Found',
-        dataSetData.pieces.length,
-        'pieces in dataset id: ',
-        storageContext.dataSetId
-      )
+      console.debug('[DatasetPieces] Found', dataSetData.pieces.length, 'pieces in dataset id: ', dataSetId)
 
       if (dataSetData.pieces.length === 0) {
         setPieces([])
@@ -100,16 +97,8 @@ export const useDatasetPieces = () => {
             const pieceCid = piece.pieceCid.toString()
 
             // Fetch metadata for this piece
-            console.debug(
-              '[DatasetPieces] Fetching metadata for piece:',
-              pieceId,
-              'from dataset:',
-              storageContext.dataSetId
-            )
-            if (!storageContext.dataSetId) {
-              throw new Error('Storage context does not have a data set ID')
-            }
-            const metadata = await warmStorage.getPieceMetadata(storageContext.dataSetId, pieceId)
+            console.debug('[DatasetPieces] Fetching metadata for piece:', pieceId, 'from dataset:', dataSetId)
+            const metadata = await warmStorage.getPieceMetadata(dataSetId, pieceId)
 
             // Extract relevant metadata
             const ipfsRootCid = metadata[METADATA_KEYS.IPFS_ROOT_CID] || ''
@@ -123,7 +112,7 @@ export const useDatasetPieces = () => {
               cid: ipfsRootCid,
               pieceCid,
               providerName: providerInfo.name || 'unknown',
-              datasetId: String(storageContext.dataSetId),
+              datasetId: String(dataSetId),
               providerId: providerInfo.id.toString(),
               serviceURL: providerInfo.products?.PDP?.data?.serviceURL ?? '',
               network: wallet?.status === 'ready' ? wallet.data.network : 'calibration',
@@ -141,7 +130,7 @@ export const useDatasetPieces = () => {
               cid: '',
               pieceCid: piece.pieceCid.toString(),
               providerName: providerInfo.name || 'unknown',
-              datasetId: String(storageContext.dataSetId),
+              datasetId: String(dataSetId),
               providerId: providerInfo.id.toString(),
               serviceURL: providerInfo.products?.PDP?.data?.serviceURL ?? '',
               network: wallet?.status === 'ready' ? wallet.data.network : 'calibration',
@@ -165,7 +154,7 @@ export const useDatasetPieces = () => {
       setIsLoading(false)
       setHasLoaded(true)
     }
-  }, [storageContext, providerInfo, wallet, synapse])
+  }, [dataSetId, providerInfo, wallet, synapse])
 
   // Load pieces when storage context is ready
   useEffect(() => {
