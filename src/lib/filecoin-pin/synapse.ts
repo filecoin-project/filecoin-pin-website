@@ -27,7 +27,7 @@ export const getSynapseClient = (config: SynapseSetupConfig) => {
       logger
     ).then((synapse) => {
       if (synapse.telemetry?.sentry) {
-        synapse.telemetry?.sentry.disable
+        synapse.telemetry?.sentry.disable()
       }
       return synapse
     })
