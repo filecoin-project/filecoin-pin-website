@@ -1,4 +1,4 @@
-import { validateIPNIAdvertisement } from 'filecoin-pin/core/utils'
+import { type ValidateIPNIAdvertisementOptions, validateIPNIAdvertisement } from 'filecoin-pin/core/utils'
 import { CID } from 'multiformats/cid'
 import { useEffect, useRef } from 'react'
 
@@ -34,6 +34,7 @@ interface UseIpniCheckOptions {
   isActive: boolean
   onSuccess: () => void
   onError?: (error: Error) => void
+  validateIpniAdvertisementOptions?: ValidateIPNIAdvertisementOptions
 }
 
 /**
@@ -45,7 +46,13 @@ interface UseIpniCheckOptions {
  *
  * To cache a result, call `cacheIpniResult` with the CID and result.
  */
-export const useIpniCheck = ({ cid, isActive, onSuccess, onError }: UseIpniCheckOptions) => {
+export const useIpniCheck = ({
+  cid,
+  isActive,
+  onSuccess,
+  onError,
+  validateIpniAdvertisementOptions,
+}: UseIpniCheckOptions) => {
   // Store callbacks in refs to prevent them from being recreated
   const onSuccessRef = useRef(onSuccess)
   const onErrorRef = useRef(onError)
@@ -90,7 +97,7 @@ export const useIpniCheck = ({ cid, isActive, onSuccess, onError }: UseIpniCheck
 
       // No cached result found - use validateIPNIAdvertisement to check if the CID is advertised to IPNI
       console.debug('[IpniCheck] No cache found for CID:', cid, '- filecoin-pin will handle checking')
-      validateIPNIAdvertisement(cidInstance, { maxAttempts: 1 })
+      validateIPNIAdvertisement(cidInstance, validateIpniAdvertisementOptions)
         .then(() => {
           cacheIpniResult(cid, 'success')
           onSuccessRef.current?.()

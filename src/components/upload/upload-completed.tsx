@@ -41,6 +41,9 @@ function UploadCompleted({ cid, fileName, pieceCid, datasetId }: UploadCompleted
       console.error('[UploadCompleted] IPNI check failed:', error)
       setHasIpniFailure(true)
     },
+    validateIpniAdvertisementOptions: {
+      maxAttempts: 1,
+    },
   })
   // TODO: fix types, datasetId should never be undefined here...
   const datasetIdOrDefault = datasetId || providerInfo?.datasetId || ''
