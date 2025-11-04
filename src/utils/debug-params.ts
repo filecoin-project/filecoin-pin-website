@@ -5,19 +5,14 @@
  * to reproduce specific scenarios with predictable URLs.
  *
  * Supported parameters:
- * - `providerId`: Specify a storage provider ID to use. When set, the system will:
- *   - Check for a data set in localStorage for this wallet+provider combination
- *   - If found, reconnect to that data set
- *   - If not found, create a new data set with this provider
- *   - Store the data set ID separately for this wallet+provider pair
- *   When NOT set, a random storage provider from the known-good list will be selected.
- *   That allowlist is a short-term launch workaround and will be removed once provider
- *   functionality stabilizes.
- * - `dataSetId`: Specify a data set ID to use (instead of localStorage or creating new)
+ * - `providerId`: Specify a storage provider ID to force when establishing the storage context.
+ *   When set, we reuse any matching data set cached in localStorage (wallet + provider pair);
+ *   otherwise Synapse will automatically choose the provider during initialization.
+ * - `dataSetId`: Specify a data set ID to use (instead of localStorage discovery)
  *
  * Examples:
  * - Test with specific provider: https://pin.filecoin.cloud/?providerId=123
- *   (Creates/connects to a data set for provider 123, separate from your default data set)
+ *   (Reconnects to a data set for provider 123, separate from your default data set)
  *
  * - Test with existing data set: https://pin.filecoin.cloud/?dataSetId=456
  *   (Connects to data set 456 directly)
@@ -51,8 +46,7 @@ const parseQueryParamNumber = (value: string | null): number | null => {
 
 /**
  * Parse debug parameters from URL query string.
- * If no providerId is specified in the URL, a random storage provider
- * from the known-good list will be selected.
+ * When no providerId is provided, Synapse will handle provider selection automatically.
  *
  * @returns Object with providerId and dataSetId (null if not provided or invalid)
  */
@@ -62,7 +56,8 @@ export function getDebugParams(): DebugParams {
   const providerIdParam = params.get('providerId')
   const dataSetId = params.get('dataSetId')
 
-  // Use URL providerId if present, otherwise let synapse choose the provider
+  // Use URL providerId if present, otherwise defer to Synapse for selection
+  // Currently only provider 2 is returning successful ipni advertisements, set this with providerId=2 in the query string.
   const providerId = parseQueryParamNumber(providerIdParam)
 
   return {

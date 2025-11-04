@@ -36,9 +36,8 @@ interface UseDataSetManagerReturn {
  * Hook to manage data set lifecycle for a wallet.
  *
  * Handles:
- * - Creating new data sets for first-time users
- * - Reconnecting to existing data sets via localStorage
- * - Managing storage context creation and caching
+ * - Reconnecting to existing data sets discovered via localStorage
+ * - Resolving storage contexts through Synapse and caching them
  * - Preventing duplicate concurrent initialization attempts
  * - Debug/test overrides via URL parameters (dataSetId, providerId)
  */
