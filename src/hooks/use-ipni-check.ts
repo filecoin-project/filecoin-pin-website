@@ -66,8 +66,10 @@ export const useIpniCheck = ({
   // Check cache when isActive becomes true
   useEffect(() => {
     if (isActive && cid) {
-      const cidInstance = CID.parse(cid)
-      if (cidInstance === null) {
+      let cidInstance
+      try {
+        cidInstance = CID.parse(cid)
+      } catch (err) {
         onErrorRef.current?.(new Error('Invalid CID'))
         return
       }
