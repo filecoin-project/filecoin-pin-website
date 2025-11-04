@@ -160,16 +160,17 @@ export function useDataSetManager({
 
         // Build provider options for debug/test mode
         const createContextOptions: CreateStorageContextOptions = {}
+        let hasOverrides = false
         if (urlProviderId !== null) {
           createContextOptions.providerId = urlProviderId
+          hasOverrides = true
         }
         if (effectiveDataSetId !== null) {
           createContextOptions.dataset = {
             useExisting: effectiveDataSetId,
           }
+          hasOverrides = true
         }
-
-        const hasOverrides = createContextOptions.dataset !== undefined || createContextOptions.providerId != null
 
         const result = await createStorageContext(synapse, logger, hasOverrides ? createContextOptions : undefined)
         const resolvedDataSetId = result.storage.dataSetId ?? effectiveDataSetId ?? null
