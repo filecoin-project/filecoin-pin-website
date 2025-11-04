@@ -50,19 +50,6 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
   })
 
   const refreshWallet = useCallback(async () => {
-    // const hasStandardAuth = config.privateKey != null
-    // const hasSessionKeyAuth = config.walletAddress != null && config.sessionKey != null
-
-    // if (!hasStandardAuth && !hasSessionKeyAuth) {
-    //   setWallet((prev) => ({
-    //     status: 'error',
-    //     error:
-    //       'Missing authentication: provide either VITE_FILECOIN_PRIVATE_KEY or (VITE_WALLET_ADDRESS + VITE_SESSION_KEY)',
-    //     data: prev.data,
-    //   }))
-    //   return
-    // }
-
     setWallet((prev) => ({
       status: 'loading',
       data: prev.status === 'ready' ? prev.data : undefined,
