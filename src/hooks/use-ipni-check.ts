@@ -2,9 +2,9 @@ import { type ValidateIPNIAdvertisementOptions, validateIPNIAdvertisement } from
 import { CID } from 'multiformats/cid'
 import { useEffect, useRef } from 'react'
 
-// Session-scoped cache to prevent repeated IPNI checks per CID within a page session
-// Value indicates the last known result of the IPNI listing check
-const ipniSessionResultByCid: Map<string, 'success' | 'failed'> = new Map()
+// Session-scoped cache to prevent repeated IPNI checks per CID within a page session.
+// Value indicates the last known result of the IPNI listing check; "pending" marks an in-flight request.
+const ipniSessionResultByCid: Map<string, 'success' | 'failed' | 'pending'> = new Map()
 
 // LocalStorage helpers for success-only persistence across tabs/sessions
 const LS_SUCCESS_PREFIX = 'ipni-check-success-v1:'
@@ -83,9 +83,9 @@ export const useIpniCheck = ({
       }
       if (prior === 'failed') {
         console.debug('[IpniCheck] Session cache hit (failed) for CID:', cid)
-        onErrorRef.current?.(new Error('IPNI check previously failed in this session'))
         return
       }
+      if (prior === 'pending') return
 
       // Check cross-tab/session success cache in localStorage
       if (getLocalStorageSuccess(cid)) {
@@ -96,6 +96,7 @@ export const useIpniCheck = ({
       }
 
       // No cached result found - use validateIPNIAdvertisement to check if the CID is advertised to IPNI
+      ipniSessionResultByCid.set(cid, 'pending')
       console.debug('[IpniCheck] No cache found for CID:', cid, '- filecoin-pin will handle checking')
       validateIPNIAdvertisement(cidInstance, validateIpniAdvertisementOptions)
         .then(() => {
