@@ -111,7 +111,7 @@ export const useIpniCheck = ({
           onErrorRef.current?.(error)
         })
     }
-  }, [isActive, cid])
+  }, [isActive, cid, validateIpniAdvertisementOptions])
 }
 
 /**
