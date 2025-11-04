@@ -1,8 +1,8 @@
 import type { ProviderInfo } from '@filoz/synapse-sdk'
-import { createStorageContext, type SynapseService } from 'filecoin-pin/core/synapse'
+import { type CreateStorageContextOptions, createStorageContext, type SynapseService } from 'filecoin-pin/core/synapse'
 import pino from 'pino'
 import { useCallback, useRef, useState } from 'react'
-import { getStoredDataSetId, getStoredDataSetIdForProvider } from '../lib/local-storage/data-set.ts'
+import { getStoredDataSetId } from '../lib/local-storage/data-set.ts'
 
 type StorageContext = NonNullable<Awaited<ReturnType<typeof createStorageContext>>['storage']>
 
@@ -125,23 +125,30 @@ export function useDataSetManager({
 
     try {
       // Check for debug/test parameters from URL
-      const urlDataSetId = debugParams?.dataSetId
-      const urlProviderId = debugParams?.providerId
+      const urlDataSetId = debugParams?.dataSetId ?? null
+      const urlProviderId = debugParams?.providerId ?? null
+      const hasUrlOverrides = urlDataSetId !== null || urlProviderId !== null
 
-      // Check localStorage with priority:
-      // 1. If providerId specified, check provider-specific key
-      // 2. Otherwise, check default wallet-only key (existing behavior)
       console.debug('[DataSet] Checking localStorage for wallet:', walletAddress)
-      const storedId = urlProviderId
-        ? getStoredDataSetIdForProvider(walletAddress, urlProviderId)
-        : getStoredDataSetId(walletAddress)
-      console.debug('[DataSet] StoredId from localStorage:', storedId)
+      const storedDataSetId = hasUrlOverrides ? null : getStoredDataSetId(walletAddress)
+      if (storedDataSetId !== null) {
+        console.debug('[DataSet] Found stored data set ID from localStorage:', storedDataSetId)
+      }
 
-      // Determine which data set ID to use (URL > localStorage)
-      const dataSetId = urlDataSetId ?? storedId
+      const effectiveDataSetId = urlDataSetId ?? storedDataSetId
+      if (urlDataSetId !== null) {
+        console.debug('[DataSet] Using data set ID from URL override:', urlDataSetId)
+      } else if (storedDataSetId !== null) {
+        console.debug('[DataSet] Using data set ID from localStorage:', storedDataSetId)
+      } else {
+        console.debug('[DataSet] No data set ID overrides found, will create or resolve automatically')
+      }
 
       // Need to create storage context (either for existing or new data set)
-      setDataSet((prev) => ({ status: 'initializing', dataSetId: dataSetId ?? prev.dataSetId }))
+      setDataSet(() => ({
+        status: 'initializing',
+        dataSetId: effectiveDataSetId ?? undefined,
+      }))
 
       try {
         const logger = pino({
@@ -152,43 +159,27 @@ export function useDataSetManager({
         })
 
         // Build provider options for debug/test mode
-        const providerOptions: { providerId?: number } = {}
-        if (urlProviderId) {
-          providerOptions.providerId = urlProviderId
+        const createContextOptions: CreateStorageContextOptions = {}
+        if (urlProviderId !== null) {
+          createContextOptions.providerId = urlProviderId
+        }
+        if (effectiveDataSetId !== null) {
+          createContextOptions.dataset = {
+            useExisting: effectiveDataSetId,
+          }
         }
 
-        if (dataSetId) {
-          console.debug(
-            '[DataSet] Found existing data set ID, creating storage context:',
-            dataSetId,
-            urlDataSetId ? '(from URL)' : '(from localStorage)'
-          )
+        const hasOverrides = createContextOptions.dataset !== undefined || createContextOptions.providerId != null
 
-          const result = await createStorageContext(synapse, logger, {
-            ...providerOptions,
-            dataset: {
-              useExisting: dataSetId,
-            },
-          })
-
-          setDataSet({
-            status: 'ready',
-            dataSetId: dataSetId,
-            storageContext: result.storage,
-            providerInfo: result.providerInfo,
-          })
-          return dataSetId
-        }
-
-        // we don't have a dataset id, and don't want to create one, but we need a storage context to exist.
-        const result = await createStorageContext(synapse, logger)
+        const result = await createStorageContext(synapse, logger, hasOverrides ? createContextOptions : undefined)
+        const resolvedDataSetId = result.storage.dataSetId ?? effectiveDataSetId ?? null
         setDataSet({
           status: 'ready',
-          dataSetId: result.storage.dataSetId ?? null,
+          dataSetId: resolvedDataSetId,
           storageContext: result.storage,
           providerInfo: result.providerInfo,
         })
-        return result.storage.dataSetId ?? null
+        return resolvedDataSetId
       } catch (error) {
         console.error('[DataSet] Failed to check data set:', error)
         const errorMessage = error instanceof Error ? error.message : 'Failed to check data set'

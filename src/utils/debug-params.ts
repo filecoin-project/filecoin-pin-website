@@ -1,5 +1,3 @@
-import { selectRandomSP } from './known-good-sps.ts'
-
 /**
  * Debug/testing utilities for URL parameters.
  *
@@ -36,6 +34,21 @@ interface DebugParams {
   dataSetId: number | null
 }
 
+const parseQueryParamNumber = (value: string | null): number | null => {
+  if (value === null) {
+    return null
+  }
+
+  const parsed = Number.parseInt(value, 10)
+
+  if (Number.isNaN(parsed)) {
+    console.warn(`[DEBUG PARAMS] Invalid number: ${value}`)
+    return null
+  }
+
+  return parsed
+}
+
 /**
  * Parse debug parameters from URL query string.
  * If no providerId is specified in the URL, a random storage provider
@@ -49,12 +62,12 @@ export function getDebugParams(): DebugParams {
   const providerIdParam = params.get('providerId')
   const dataSetId = params.get('dataSetId')
 
-  // Use URL providerId if present, otherwise select a random known-good SP
-  const providerId = providerIdParam ? Number.parseInt(providerIdParam, 10) || null : selectRandomSP()
+  // Use URL providerId if present, otherwise let synapse choose the provider
+  const providerId = parseQueryParamNumber(providerIdParam)
 
   return {
     providerId,
-    dataSetId: dataSetId ? Number.parseInt(dataSetId, 10) || null : null,
+    dataSetId: parseQueryParamNumber(dataSetId),
   }
 }
 
