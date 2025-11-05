@@ -90,7 +90,7 @@ export const useDatasetPieces = () => {
       }
 
       // For each piece, fetch its metadata
-      const piecesWithMetadata: DatasetPiece[] = await Promise.all(
+      const piecesWithMetadata: (DatasetPiece | null)[] = await Promise.all(
         dataSetData.pieces.map(async (piece) => {
           try {
             const pieceId = piece.pieceId
@@ -99,6 +99,19 @@ export const useDatasetPieces = () => {
             // Fetch metadata for this piece
             console.debug('[DatasetPieces] Fetching metadata for piece:', pieceId, 'from dataset:', dataSetId)
             const metadata = await warmStorage.getPieceMetadata(dataSetId, pieceId)
+
+            // Filter out pieces that don't have both metadata.fileSize and metadata.label, meaning they were not created by this website.
+            if (!metadata.fileSize || !metadata.label) {
+              console.debug(
+                '[DatasetPieces] Filtering out piece:',
+                pieceId,
+                '- missing fileSize:',
+                !metadata.fileSize,
+                'or label:',
+                !metadata.label
+              )
+              return null
+            }
 
             // Extract relevant metadata
             const ipfsRootCid = metadata[METADATA_KEYS.IPFS_ROOT_CID] || ''
@@ -122,30 +135,25 @@ export const useDatasetPieces = () => {
             }
           } catch (err) {
             console.warn('[DatasetPieces] Failed to fetch metadata for piece:', piece.pieceId, err)
-            // Return minimal data
-            return {
-              id: `piece-${piece.pieceId}`,
-              fileName: `Piece ${piece.pieceId}`,
-              fileSize: 'Unknown',
-              cid: '',
-              pieceCid: piece.pieceCid.toString(),
-              providerName: providerInfo.name || 'unknown',
-              datasetId: String(dataSetId),
-              providerId: providerInfo.id.toString(),
-              serviceURL: providerInfo.products?.PDP?.data?.serviceURL ?? '',
-              network: wallet?.status === 'ready' ? wallet.data.network : 'calibration',
-              uploadedAt: Date.now(),
-              pieceId: piece.pieceId,
-              transactionHash: '',
-            }
+            // Return null for pieces that failed to fetch metadata (they won't have fileSize/label)
+            return null
           }
         })
       )
 
-      // Sort by piece ID (newest first, assuming higher IDs are newer)
-      piecesWithMetadata.sort((a, b) => (b.pieceId || 0) - (a.pieceId || 0))
+      // Filter out null values (pieces without required metadata)
+      const validPieces = piecesWithMetadata.filter((piece): piece is DatasetPiece => piece !== null)
 
-      setPieces(piecesWithMetadata)
+      // Sort by piece ID (newest first, assuming higher IDs are newer)
+      validPieces.sort((a, b) => (b.pieceId || 0) - (a.pieceId || 0))
+
+      console.debug(
+        '[DatasetPieces] Filtered to',
+        validPieces.length,
+        'pieces with required metadata (fileSize and label)'
+      )
+
+      setPieces(validPieces)
     } catch (err) {
       console.error('[DatasetPieces] Failed to load pieces:', err)
       setError(err instanceof Error ? err.message : 'Failed to load pieces')
