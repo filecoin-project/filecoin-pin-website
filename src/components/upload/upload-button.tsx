@@ -1,9 +1,9 @@
-import { Root, FormControl, FormField, FormMessage } from '@radix-ui/react-form'
-import { useRef, useState } from 'react'
+import { FormControl, FormField, FormMessage, Root } from '@radix-ui/react-form'
 import { PlusIcon } from 'lucide-react'
-
-import { ButtonBase as Button } from '../ui/button/button-base.tsx'
+import { useRef, useState } from 'react'
+import { MAX_FILE_SIZE } from '@/constants/files.ts'
 import { formatFileSize } from '@/utils/format-file-size.ts'
+import { ButtonBase as Button } from '../ui/button/button-base.tsx'
 
 interface UploadButtonProps {
   onUpload: (file: File) => void
@@ -16,19 +16,18 @@ export function UploadButton({
   onUpload,
   isUploading = false,
   accept = ['*'],
-  maxSize = 200_000_000,
+  maxSize = MAX_FILE_SIZE,
 }: UploadButtonProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const handleButtonClick = () => {
+  function handleButtonClick() {
     fileInputRef.current?.click()
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (file) {
-      onUpload(file)
       if (file.size > maxSize) {
         setError(`File is too large. Maximum size is ${formatFileSize(maxSize)}.`)
         if (fileInputRef.current) fileInputRef.current.value = ''
@@ -42,7 +41,7 @@ export function UploadButton({
   }
 
   return (
-    <Root className="inline-flex flex-col gap-2" onSubmit={(e) => e.preventDefault()}>
+    <Root className="flex flex-col gap-2 items-end" onSubmit={(e) => e.preventDefault()}>
       <FormField name="file">
         <FormControl asChild>
           <input
@@ -55,15 +54,27 @@ export function UploadButton({
           />
         </FormControl>
       </FormField>
-      <Button disabled={isUploading} loading={isUploading} onClick={handleButtonClick} type="button" variant="primary">
-        <div className="flex items-center gap-2">
-          <PlusIcon size={20} />
-          <span>Add file</span>
-        </div>
-      </Button>
-      <FormField name="file">
-        <FormMessage className="text-sm text-red-500 mt-1">{error}</FormMessage>
-      </FormField>
+      <div className="w-content">
+        <Button
+          disabled={isUploading}
+          loading={isUploading}
+          onClick={handleButtonClick}
+          type="button"
+          variant="primary"
+        >
+          <div className="flex items-center gap-2">
+            <PlusIcon size={20} />
+            <span>Add file</span>
+          </div>
+        </Button>
+      </div>
+      <div className="h-3">
+        {error && (
+          <FormField name="file">
+            <FormMessage className="text-sm text-red-500 mt-1 break-words max-w-full">{error}</FormMessage>
+          </FormField>
+        )}
+      </div>
     </Root>
   )
 }
