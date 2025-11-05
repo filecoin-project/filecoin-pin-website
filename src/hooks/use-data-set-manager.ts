@@ -159,19 +159,27 @@ export function useDataSetManager({
 
         // Build provider options for debug/test mode
         const createContextOptions: CreateStorageContextOptions = {}
-        let hasOverrides = false
         if (urlProviderId !== null) {
           createContextOptions.providerId = urlProviderId
-          hasOverrides = true
+        } else {
+          createContextOptions.providerId = 2 // currently only provider 2 is returning successful IPNI advertisements, we are defaulting to this provider temporarily.
         }
         if (effectiveDataSetId !== null) {
+          // Use existing dataset from localStorage or URL override
           createContextOptions.dataset = {
             useExisting: effectiveDataSetId,
           }
-          hasOverrides = true
+          console.debug('[DataSet] Using existing dataset from localStorage or URL override:', effectiveDataSetId)
+        } else {
+          // No stored dataset found - explicitly create a new one
+          // This ensures each unique browser user gets a unique dataset ID
+          createContextOptions.dataset = {
+            createNew: true,
+          }
+          console.debug('[DataSet] No stored dataset found, creating new dataset')
         }
 
-        const result = await createStorageContext(synapse, logger, hasOverrides ? createContextOptions : undefined)
+        const result = await createStorageContext(synapse, logger, createContextOptions)
         const resolvedDataSetId = result.storage.dataSetId ?? effectiveDataSetId ?? null
         setDataSet({
           status: 'ready',

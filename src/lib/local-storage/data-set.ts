@@ -19,7 +19,7 @@
  * Storage format: `filecoin-pin-data-set-id-{version}-{walletAddress}` → `{dataSetId}`
  */
 
-const DATA_SET_ID_KEY = 'filecoin-pin-data-set-id-v1'
+const DATA_SET_ID_KEY = 'filecoin-pin-data-set-id-v2'
 
 /**
  * Get the storage key for a given wallet and optional provider.

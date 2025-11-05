@@ -2,7 +2,9 @@ import { createCarFromFile } from 'filecoin-pin/core/unixfs'
 import { checkUploadReadiness, executeUpload } from 'filecoin-pin/core/upload'
 import pino from 'pino'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { storeDataSetId, storeDataSetIdForProvider } from '../lib/local-storage/data-set.ts'
 import type { StepState } from '../types/upload/step.ts'
+import { getDebugParams } from '../utils/debug-params.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 import { cacheIpniResult } from './use-ipni-check.ts'
@@ -51,7 +53,7 @@ export const INPI_ERROR_MESSAGE =
  * actions so they stay dumb and declarative.
  */
 export const useFilecoinUpload = () => {
-  const { synapse, storageContext, providerInfo, checkIfDatasetExists } = useFilecoinPinContext()
+  const { synapse, storageContext, providerInfo, checkIfDatasetExists, wallet } = useFilecoinPinContext()
 
   // Use refs to track the latest context values, so the upload callback can access them
   // even if the dataset is initialized after the callback is created
@@ -144,9 +146,12 @@ export const useFilecoinUpload = () => {
           throw new Error('Storage context not ready. Failed to initialize storage context. Please try again.')
         }
 
+        // Capture the initial dataset ID (before upload) to detect if it's created during upload
+        const initialDataSetId = currentStorageContext.dataSetId
+
         console.debug('[FilecoinUpload] Using storage context from provider:', {
           providerInfo: currentProviderInfo,
-          dataSetId: currentStorageContext.dataSetId,
+          dataSetId: initialDataSetId,
         })
 
         const synapseService = {
@@ -196,6 +201,19 @@ export const useFilecoinUpload = () => {
               }
 
               case 'onPieceConfirmed': {
+                // Save the dataset ID if it was just created during this upload
+                const currentDataSetId = storageContextRef.current?.dataSetId
+                if (wallet?.status === 'ready' && currentDataSetId !== undefined && initialDataSetId === undefined) {
+                  const debugParams = getDebugParams()
+
+                  // Only use storeDataSetIdForProvider if user explicitly provided providerId in URL
+                  if (debugParams.providerId !== null) {
+                    storeDataSetIdForProvider(wallet.data.address, currentProviderInfo.id, currentDataSetId)
+                  } else {
+                    storeDataSetId(wallet.data.address, currentDataSetId)
+                  }
+                }
+
                 // Complete finalization
                 updateStepState('finalizing-transaction', { status: 'completed', progress: 100 })
                 console.debug('[FilecoinUpload] Upload fully completed and confirmed on chain')
