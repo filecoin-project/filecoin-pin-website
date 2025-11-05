@@ -14,7 +14,18 @@ let synapsePromise: Promise<SynapseService['synapse']> | null = null
 
 export const getSynapseClient = (config: SynapseSetupConfig) => {
   if (!synapsePromise) {
-    synapsePromise = initializeSynapse(config, logger)
+    synapsePromise = initializeSynapse(
+      {
+        ...config,
+        telemetry: {
+          sentrySetTags: {
+            appName: 'filecoinPinWebsite',
+            filecoinPinWebsiteDomain: window.location.origin,
+          },
+        },
+      },
+      logger
+    )
   }
 
   return synapsePromise

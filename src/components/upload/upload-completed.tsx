@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { INPI_ERROR_MESSAGE } from '@/hooks/use-filecoin-upload.ts'
 import {
   getDatasetExplorerLink,
@@ -29,6 +29,7 @@ function UploadCompleted({ cid, fileName, pieceCid, datasetId }: UploadCompleted
   // Get provider info from context via hook
   const providerInfo = useProviderInfo()
   const [hasIpniFailure, setHasIpniFailure] = useState(false)
+  const validateIpniOptions = useMemo(() => ({ maxAttempts: 1 }), [])
 
   /**
    * Get the status of the IPNI check to change how we render the completed state.
@@ -37,11 +38,10 @@ function UploadCompleted({ cid, fileName, pieceCid, datasetId }: UploadCompleted
     cid: cid || null,
     isActive: true,
     onSuccess: () => setHasIpniFailure(false),
-    maxAttempts: 1,
-    onError: (error) => {
-      console.error('[UploadCompleted] IPNI check failed:', error)
+    onError: () => {
       setHasIpniFailure(true)
     },
+    validateIpniAdvertisementOptions: validateIpniOptions,
   })
   // TODO: fix types, datasetId should never be undefined here...
   const datasetIdOrDefault = datasetId || providerInfo?.datasetId || ''
