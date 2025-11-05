@@ -57,8 +57,7 @@ export function getDebugParams(): DebugParams {
   const dataSetId = params.get('dataSetId')
 
   // Use URL providerId if present, otherwise defer to Synapse for selection
-  // Currently only provider 2 is returning successful ipni advertisements, we are defaulting to this provider temporarily.
-  const providerId = parseQueryParamNumber(providerIdParam) ?? 2
+  const providerId = parseQueryParamNumber(providerIdParam)
 
   return {
     providerId,

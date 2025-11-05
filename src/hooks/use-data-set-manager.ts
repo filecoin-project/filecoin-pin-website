@@ -162,7 +162,8 @@ export function useDataSetManager({
         let hasOverrides = false
         if (urlProviderId !== null) {
           createContextOptions.providerId = urlProviderId
-          hasOverrides = true
+        } else {
+          createContextOptions.providerId = 2 // currently only provider 2 is returning successful ipni advertisements, we are defaulting to this provider temporarily.
         }
         if (effectiveDataSetId !== null) {
           // Use existing dataset from localStorage or URL override
