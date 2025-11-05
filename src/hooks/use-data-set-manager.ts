@@ -162,7 +162,7 @@ export function useDataSetManager({
         if (urlProviderId !== null) {
           createContextOptions.providerId = urlProviderId
         } else {
-          createContextOptions.providerId = 2 // currently only provider 2 is returning successful ipni advertisements, we are defaulting to this provider temporarily.
+          createContextOptions.providerId = 2 // currently only provider 2 is returning successful IPNI advertisements, we are defaulting to this provider temporarily.
         }
         if (effectiveDataSetId !== null) {
           // Use existing dataset from localStorage or URL override
