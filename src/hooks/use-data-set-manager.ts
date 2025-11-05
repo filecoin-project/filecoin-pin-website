@@ -165,10 +165,19 @@ export function useDataSetManager({
           hasOverrides = true
         }
         if (effectiveDataSetId !== null) {
+          // Use existing dataset from localStorage or URL override
           createContextOptions.dataset = {
             useExisting: effectiveDataSetId,
           }
           hasOverrides = true
+        } else {
+          // No stored dataset found - explicitly create a new one
+          // This ensures each unique browser user gets a unique dataset ID
+          createContextOptions.dataset = {
+            createNew: true,
+          }
+          hasOverrides = true
+          console.debug('[DataSet] No stored dataset found, creating new dataset')
         }
 
         const result = await createStorageContext(synapse, logger, hasOverrides ? createContextOptions : undefined)
