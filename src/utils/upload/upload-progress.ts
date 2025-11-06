@@ -31,8 +31,6 @@ function getFirstStageState(stepStates: StepState[]) {
   )
 }
 
-
-
 export function getFirstStageStatus(stepStates: StepState[]) {
   const firstStageState = getFirstStageState(stepStates)
 
