@@ -1,5 +1,5 @@
-import type { FilLabel, UsdfcLabel } from '../../../types/network.ts';
-import { PillWrapper } from './pill-wrapper.tsx';
+import type { FilLabel, UsdfcLabel } from '../../../types/network.ts'
+import { PillWrapper } from './pill-wrapper.tsx'
 
 type PillBalanceProps = {
   balances: Array<{ label: FilLabel | UsdfcLabel; value: string }>
