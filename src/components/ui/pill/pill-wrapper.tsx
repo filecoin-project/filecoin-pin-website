@@ -1,14 +1,16 @@
 import { ExternalLink } from '../link.tsx'
+import { cn } from '@/utils/cn.ts'
 
 type PillWrapperProps = {
   children: React.ReactNode
   ariaLabel: string
   href?: string
+  className?: string
 }
 
-function PillWrapper({ children, ariaLabel, href }: PillWrapperProps) {
+function PillWrapper({ children, ariaLabel, href, className }: PillWrapperProps) {
   return (
-    <div className="relative rounded-sm bg-zinc-800 px-3 py-1.5 font-mono text-sm text-zinc-100 focus-within:brand-outline">
+    <div className={cn("relative rounded-sm bg-zinc-800 px-3 py-1.5 font-mono text-sm text-zinc-100 focus-within:brand-outline", className)}>
       {children}
       {href && (
         <ExternalLink

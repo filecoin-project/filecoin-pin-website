@@ -4,7 +4,7 @@ type TextLinkProps = {
 }
 
 function TextLink(props: TextLinkProps) {
-  return <ExternalLink {...props} className="text-brand-500 underline focus:brand-outline" />
+  return <ExternalLink {...props} className="text-brand-500 underline focus:brand-outline hover:text-brand-100" />
 }
 
 type ExternalLinkProps = Omit<React.ComponentProps<'a'>, 'rel' | 'target'>
