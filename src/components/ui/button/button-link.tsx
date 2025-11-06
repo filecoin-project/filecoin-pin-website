@@ -7,7 +7,7 @@ type ButtonLinkProps = Omit<ButtonBaseProps, 'onClick'> & {
 
 function ButtonLink({ href, children, disabled, variant = 'secondary', ...props }: ButtonLinkProps) {
   return (
-    <ExternalLink href={href}>
+    <ExternalLink href={href} className="outline-none">
       <ButtonBase disabled={disabled} variant={variant} {...props}>
         {children}
       </ButtonBase>

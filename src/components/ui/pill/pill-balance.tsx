@@ -1,5 +1,5 @@
-import type { FilLabel, UsdfcLabel } from '../../../types/network.ts'
-import { PillWrapper } from './pill-wrapper.tsx'
+import type { FilLabel, UsdfcLabel } from '../../../types/network.ts';
+import { PillWrapper } from './pill-wrapper.tsx';
 
 type PillBalanceProps = {
   balances: Array<{ label: FilLabel | UsdfcLabel; value: string }>
@@ -7,8 +7,6 @@ type PillBalanceProps = {
 
 function PillBalance({ balances }: PillBalanceProps) {
   const ariaLabel = `Balances: ${balances.map((balance) => `${balance.value} ${balance.label}`).join(', ')}`
-
-  console.log(balances)
 
   return (
     <PillWrapper ariaLabel={ariaLabel}>
