@@ -10,7 +10,7 @@ function DownloadButton({ href, title = 'Download' }: DownloadButtonProps) {
   return (
     <ExternalLink
       aria-label={title}
-      className="text-white inline-flex items-center px-4 py-3 border border-zinc-800 hover:bg-zinc-800 rounded-md"
+      className="text-white inline-flex items-center px-4 py-3 border border-zinc-800 hover:bg-zinc-800 rounded-md focus:brand-outline"
       href={href}
       title={title}
     >
