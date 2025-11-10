@@ -3,7 +3,7 @@ import { cn } from '../../utils/cn.ts'
 
 export type HeadingProps = VariantProps<typeof headingVariants> & {
   tag: 'h1' | 'h2' | 'h3' | 'h4'
-  children: string
+  children: string | React.ReactNode
 }
 
 const headingVariants = cva('text-balance', {
