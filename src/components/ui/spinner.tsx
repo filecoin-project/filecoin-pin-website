@@ -23,7 +23,7 @@ function Spinner({ className, size = 'md', ...props }: SpinnerProps) {
       role="status"
       size={sizeValue}
       {...props}
-      className={cn('text-brand-700 animate-spin', className)}
+      className={cn('text-brand-700 animate-spin flex-shrink-0', className)}
     />
   )
 }

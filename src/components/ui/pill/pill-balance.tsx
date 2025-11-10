@@ -8,8 +8,6 @@ type PillBalanceProps = {
 function PillBalance({ balances }: PillBalanceProps) {
   const ariaLabel = `Balances: ${balances.map((balance) => `${balance.value} ${balance.label}`).join(', ')}`
 
-  console.log(balances)
-
   return (
     <PillWrapper ariaLabel={ariaLabel}>
       <div className="flex gap-3">

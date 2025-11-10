@@ -1,5 +1,6 @@
 import { Root } from '@radix-ui/react-form'
 import { useState } from 'react'
+import { MAX_FILE_SIZE } from '@/constants/files.ts'
 import { FilePicker } from '../file-picker/index.tsx'
 import { ButtonBase as Button } from '../ui/button/button-base.tsx'
 
@@ -32,7 +33,7 @@ export default function DragNDrop({ onFileSelected, onUpload, isUploading }: Dra
     <Root className="space-y-6" onSubmit={(e) => e.preventDefault()}>
       <FilePicker
         file={file}
-        maxSize={200_000_000}
+        maxSize={MAX_FILE_SIZE}
         onChange={(file) => {
           setFile(file)
           if (file && onFileSelected) {

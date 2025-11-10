@@ -31,13 +31,6 @@ function getFirstStageState(stepStates: StepState[]) {
   )
 }
 
-// Calculate combined progress for the  first stage (creating CAR + checking readiness + uploading)
-export function getFirstStageProgress(stepStates: StepState[]) {
-  const { creatingCar, checkingReadiness, uploadingCar } = getFirstStageState(stepStates)
-  const total = creatingCar.progress + checkingReadiness.progress + uploadingCar.progress
-  return Math.round(total / 3)
-}
-
 export function getFirstStageStatus(stepStates: StepState[]) {
   const firstStageState = getFirstStageState(stepStates)
 

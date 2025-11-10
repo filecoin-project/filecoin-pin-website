@@ -1,4 +1,3 @@
-import './app.css'
 import Content from './components/layout/content.tsx'
 import { Header } from './components/layout/header.tsx'
 import { Sidebar } from './components/layout/sidebar.tsx'

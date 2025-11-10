@@ -1,4 +1,6 @@
+import { Dialog } from '../ui/dialog.tsx'
 import { Logo } from '../ui/logo.tsx'
+import SidebarSteps from './sidebar-steps.tsx'
 
 interface SidebarLayoutProps {
   children: React.ReactNode
@@ -15,6 +17,10 @@ export function SidebarLayout({ children, sidebar, header }: SidebarLayoutProps)
       </div>
       <div className="col-span-2 border-b py-4 border-zinc-800 px-10 md:hidden flex">
         <Logo />
+      </div>
+
+      <div className="fixed bottom-8 right-8 z-50 lg:hidden block">
+        <Dialog content={<SidebarSteps />} />
       </div>
 
       {/* Sidebar */}
