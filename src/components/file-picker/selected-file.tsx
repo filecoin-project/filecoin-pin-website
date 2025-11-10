@@ -11,8 +11,8 @@ type SelectedFileProps = {
 export function SelectedFile({ file, onReset }: SelectedFileProps) {
   return (
     <DashedContainer>
-      <div className="flex items-center gap-1">
-        <p className="font-medium text-zinc-50">{file.name}</p>
+      <div className="flex items-center gap-1 min-w-0">
+        <p className="font-medium text-zinc-50 break-words min-w-0">{file.name}</p>
         <button
           className="group/button cursor-pointer rounded-full p-2 focus:outline-none"
           onClick={onReset}
