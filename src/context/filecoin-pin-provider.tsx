@@ -68,7 +68,6 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
         }
       }
 
-
       const snapshot = await fetchWalletSnapshot(synapse)
       setWallet({
         status: 'ready',
