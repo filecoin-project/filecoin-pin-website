@@ -60,15 +60,14 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
       synapseRef.current = synapse
 
       // Expose debugDump method on window object
-      if (synapse.telemetry?.debugDump) {
-        window.debugDump = () => {
-          if (synapse.telemetry?.debugDump) {
-            console.debug(JSON.stringify(synapse.telemetry.debugDump(), null, 2))
-          } else {
-            console.warn('debugDump method not found on synapse.telemetry')
-          }
+      window.debugDump = () => {
+        if (synapse.telemetry?.debugDump) {
+          console.debug(JSON.stringify(synapse.telemetry.debugDump(), null, 2))
+        } else {
+          console.warn('debugDump method not found on synapse.telemetry')
         }
       }
+
 
       const snapshot = await fetchWalletSnapshot(synapse)
       setWallet({
