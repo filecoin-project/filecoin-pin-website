@@ -107,7 +107,7 @@ export const useFilecoinUpload = () => {
 
         // Step 2: Check readiness
         updateStepState('checking-readiness', { status: 'in-progress', progress: 0 })
-
+        updateStepState('uploading-car', { status: 'in-progress', progress: 0 })
         const synapse = await synapseRef.wait()
         updateStepState('checking-readiness', { progress: 50 })
 
@@ -154,7 +154,7 @@ export const useFilecoinUpload = () => {
         }
 
         // Step 3: Upload CAR to Synapse (Filecoin SP)
-        updateStepState('uploading-car', { status: 'in-progress', progress: 0 })
+        // updateStepState('uploading-car', { status: 'in-progress', progress: 0 })
 
         await executeUpload(synapseService, carResult.carBytes, carResult.rootCid, {
           logger,
