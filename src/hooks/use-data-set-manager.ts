@@ -1,11 +1,14 @@
-import { type CreateStorageContextOptions, createStorageContext, type SynapseService } from 'filecoin-pin/core/synapse'
-import pino from 'pino'
+import type { SynapseService } from 'filecoin-pin/core/synapse'
 import { useCallback, useRef, useState } from 'react'
-import { createStorageContextFromDataSetId } from '../lib/filecoin-pin/storage-context-helper.ts'
+import type { StorageContextHelperResult } from '../lib/filecoin-pin/storage-context-helper.ts'
+import {
+  createStorageContextForNewDataSet,
+  createStorageContextFromDataSetId,
+} from '../lib/filecoin-pin/storage-context-helper.ts'
 import { getStoredDataSetId } from '../lib/local-storage/data-set.ts'
 
 type ProviderInfo = SynapseService['providerInfo']
-type StorageContext = NonNullable<Awaited<ReturnType<typeof createStorageContext>>['storage']>
+type StorageContext = StorageContextHelperResult['storage']
 
 export type DataSetState =
   | { status: 'idle'; dataSetId?: number }
@@ -151,13 +154,6 @@ export function useDataSetManager({
       }))
 
       try {
-        const logger = pino({
-          level: 'debug',
-          browser: {
-            asObject: true,
-          },
-        })
-
         if (effectiveDataSetId !== null) {
           if (urlProviderId !== null) {
             console.debug('[DataSet] Ignoring provider override because dataset ID was provided')
@@ -172,26 +168,15 @@ export function useDataSetManager({
           return effectiveDataSetId
         }
 
-        // Build provider options for debug/test mode when creating a new dataset
-        const createContextOptions: CreateStorageContextOptions = {}
-        if (urlProviderId !== null) {
-          createContextOptions.providerId = urlProviderId
-        }
-
-        // No stored dataset found - explicitly create a new one
-        // This ensures each unique browser user gets a unique dataset ID
-        createContextOptions.dataset = {
-          createNew: true,
-        }
-        console.debug('[DataSet] No stored dataset found, creating new dataset')
-
-        const result = await createStorageContext(synapse, logger, createContextOptions)
-        const resolvedDataSetId = result.storage.dataSetId ?? effectiveDataSetId ?? null
+        const { storage, providerInfo } = await createStorageContextForNewDataSet(synapse, {
+          providerId: urlProviderId ?? undefined,
+        })
+        const resolvedDataSetId = storage.dataSetId ?? null
         setDataSet({
           status: 'ready',
           dataSetId: resolvedDataSetId,
-          storageContext: result.storage,
-          providerInfo: result.providerInfo,
+          storageContext: storage,
+          providerInfo,
         })
         return resolvedDataSetId
       } catch (error) {
