@@ -7,7 +7,7 @@ export const SIDEBAR_CONFIG = {
     car: `${GLOSSARY_BASE_URL}#car`,
     filecoinPay: `${GLOSSARY_BASE_URL}#filecoin-pay`,
     filecoinPinLearnMore: `${DOCUMENTATION_BASE_URL}/behind-the-scenes-of-adding-a-file.md`,
-    filecoinWarmStorageService: `${DOCUMENTATION_BASE_URL}/filecoin-warm-storage-service.md`,
+    filecoinWarmStorageService: `${GLOSSARY_BASE_URL}#filecoin-warm-storage-service`,
     ipni: `${GLOSSARY_BASE_URL}#ipni`,
     pieceCid: `${GLOSSARY_BASE_URL}#piece-cid`,
     serviceProvider: `${GLOSSARY_BASE_URL}#service-provider`,
