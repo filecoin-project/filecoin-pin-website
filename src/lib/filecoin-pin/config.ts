@@ -1,3 +1,4 @@
+import { RPC_URLS } from '@filoz/synapse-sdk'
 import type { SynapseSetupConfig } from 'filecoin-pin/core/synapse'
 
 const normalizeEnvValue = (value: string | boolean | number | undefined) => {
@@ -29,10 +30,13 @@ if (hasStandardAuth && hasSessionKeyAuth) {
   )
 }
 
+// Use HTTP RPC URL by default (can be overridden by VITE_FILECOIN_RPC_URL env var)
+const rpcUrl = normalizeEnvValue(import.meta.env.VITE_FILECOIN_RPC_URL) ?? RPC_URLS.calibration.http
+
 export const filecoinPinConfig: SynapseSetupConfig = {
   privateKey: privateKey,
   walletAddress: walletAddress,
   sessionKey: sessionKey,
-  rpcUrl: normalizeEnvValue(import.meta.env.VITE_FILECOIN_RPC_URL),
+  rpcUrl: rpcUrl,
   warmStorageAddress: normalizeEnvValue(import.meta.env.VITE_WARM_STORAGE_ADDRESS),
 }

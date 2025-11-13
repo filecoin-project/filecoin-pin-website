@@ -40,6 +40,14 @@ export const INITIAL_STEP_STATES: StepState[] = [
   { step: 'finalizing-transaction', progress: 0, status: 'pending' },
 ]
 
+// Create a simple logger for the upload
+const logger = pino({
+  level: 'debug',
+  browser: {
+    asObject: true,
+  },
+})
+
 export const INPI_ERROR_MESSAGE =
   "CID not yet indexed by IPNI. It's stored on Filecoin and fetchable now, but may take time to appear on IPFS."
 
@@ -107,9 +115,11 @@ export const useFilecoinUpload = () => {
 
         // Step 2: Check readiness
         updateStepState('checking-readiness', { status: 'in-progress', progress: 0 })
+        logger.info('Waiting for synapse to be initialized')
 
         const synapse = await synapseRef.wait()
         updateStepState('checking-readiness', { progress: 50 })
+        logger.info('Synapse initialized, checking upload readiness')
 
         // validate that we can actually upload the car, passing the autoConfigureAllowances flag to true to automatically configure allowances if needed.
         const readinessCheck = await checkUploadReadiness({
@@ -124,20 +134,14 @@ export const useFilecoinUpload = () => {
         }
 
         updateStepState('checking-readiness', { status: 'completed', progress: 100 })
-
-        // Create a simple logger for the upload
-        const logger = pino({
-          level: 'debug',
-          browser: {
-            asObject: true,
-          },
-        })
+        logger.info('Upload readiness check passed, waiting for storage context and provider info to be initialized')
 
         // Wait for storage context and provider info to be initialized
         const [currentStorageContext, currentProviderInfo] = await Promise.all([
           storageContextRef.wait(),
           providerInfoRef.wait(),
         ])
+        logger.info('Storage context and provider info initialized, capturing initial dataset ID')
 
         // Capture the initial dataset ID (before upload) to detect if it's created during upload
         const initialDataSetId = currentStorageContext.dataSetId
