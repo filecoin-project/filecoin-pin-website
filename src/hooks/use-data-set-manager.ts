@@ -1,9 +1,9 @@
-import type { ProviderInfo } from '@filoz/synapse-sdk'
 import { type CreateStorageContextOptions, createStorageContext, type SynapseService } from 'filecoin-pin/core/synapse'
 import pino from 'pino'
 import { useCallback, useRef, useState } from 'react'
 import { getStoredDataSetId } from '../lib/local-storage/data-set.ts'
 
+type ProviderInfo = SynapseService['providerInfo']
 type StorageContext = NonNullable<Awaited<ReturnType<typeof createStorageContext>>['storage']>
 
 export type DataSetState =
