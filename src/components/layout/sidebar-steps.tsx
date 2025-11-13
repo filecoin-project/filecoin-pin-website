@@ -5,13 +5,24 @@ import { StepItem } from '../ui/step-item.tsx'
 import { StepItemContainer } from '../ui/step-item-container.tsx'
 
 export default function SidebarSteps() {
-  const { car, ipni, filecoinPay, serviceProvider, pieceCid, standardIpfsTooling, filecoinPinAddBehindTheScenes } =
-    SIDEBAR_CONFIG.documentation
+  const {
+    car,
+    ipni,
+    filecoinPay,
+    filecoinPinLearnMore,
+    filecoinWarmStorageService,
+    serviceProvider,
+    pieceCid,
+    standardIpfsTooling,
+  } = SIDEBAR_CONFIG.documentation
 
   return (
     <StepItemContainer>
       <StepItem step={1}>
-        <p>A FIL wallet, a funded <TextLink href={filecoinPay}>Filecoin Pay</TextLink> Account, and <TextLink href={filecoinWarmStorageService}>Warm Storage Service</TextLink> have been set up automatically.</p> 
+        <p>
+          A FIL wallet, a funded <TextLink href={filecoinPay}>Filecoin Pay</TextLink> Account, and{' '}
+          <TextLink href={filecoinWarmStorageService}>Warm Storage Service</TextLink> have been set up automatically.
+        </p>
       </StepItem>
       <StepItem step={2}>
         <p>
