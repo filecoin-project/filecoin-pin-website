@@ -19,6 +19,14 @@ import type { Synapse } from '@filoz/synapse-sdk'
 import { StorageContext } from '@filoz/synapse-sdk'
 import { type ProviderInfo, SPRegistryService } from '@filoz/synapse-sdk/sp-registry'
 import { DEFAULT_DATA_SET_METADATA, DEFAULT_STORAGE_CONTEXT_CONFIG } from 'filecoin-pin/core/synapse'
+import pino from 'pino'
+
+const logger = pino({
+  level: 'debug',
+  browser: {
+    asObject: true,
+  },
+})
 
 export type StorageContextHelperResult = {
   storage: StorageContext
@@ -57,17 +65,22 @@ export async function createStorageContextFromDataSetId(
     warmStorage.getDataSetMetadata(dataSetId),
   ])
 
-  if (providerInfo == null) {
-    throw new Error(`Provider ID ${dataSetInfo.providerId} for data set ${dataSetId} not found in registry`)
-  }
+  const activeProvider = validateProvider(providerInfo, dataSetInfo.providerId)
 
   // Construct storage context directly
   const withCDN = dataSetInfo.cdnRailId > 0
-  const storageContext = new StorageContext(synapse, warmStorage, providerInfo, dataSetId, { withCDN }, dataSetMetadata)
+  const storageContext = new StorageContext(
+    synapse,
+    warmStorage,
+    activeProvider,
+    dataSetId,
+    { withCDN },
+    dataSetMetadata
+  )
 
   return {
     storage: storageContext,
-    providerInfo,
+    providerInfo: activeProvider,
   }
 }
 
@@ -96,16 +109,21 @@ export async function createStorageContextForNewDataSet(
 
   let providerInfo: ProviderInfo | null = null
   if (options.providerId != null) {
-    providerInfo = await spRegistry.getProvider(options.providerId)
+    providerInfo = validateProvider(await spRegistry.getProvider(options.providerId), options.providerId)
   } else if (options.providerAddress) {
-    providerInfo = await spRegistry.getProviderByAddress(options.providerAddress)
-  } else {
-    const providers = await spRegistry.getAllActiveProviders()
-    providerInfo = providers.find((provider) => provider.products.PDP?.data.serviceURL) ?? null
+    providerInfo = validateProvider(await spRegistry.getProviderByAddress(options.providerAddress))
   }
 
   if (providerInfo == null) {
-    throw new Error('Unable to resolve a storage provider for new data set creation')
+    const providers = await spRegistry.getAllActiveProviders()
+    providerInfo = providers.find((provider) => isProviderUsable(provider)) ?? null
+    if (providerInfo == null) {
+      throw new Error('Unable to resolve an approved storage provider for new data set creation')
+    }
+  }
+
+  if (providerInfo == null) {
+    throw new Error('Unable to resolve an approved storage provider for new data set creation')
   }
 
   const mergedMetadata = { ...DEFAULT_DATA_SET_METADATA }
@@ -128,6 +146,36 @@ export async function createStorageContextForNewDataSet(
     storage: storageContext,
     providerInfo,
   }
+}
+
+function validateProvider(providerInfo: ProviderInfo | null, providerId?: number): ProviderInfo {
+  if (providerInfo == null) {
+    throw new Error(
+      providerId != null ? `Provider ID ${providerId} not found in registry` : 'Provider not found in registry'
+    )
+  }
+
+  if (!isProviderUsable(providerInfo)) {
+    logger.debug({ providerInfo }, 'Provider not usable')
+    const providerLabel =
+      (providerInfo as ProviderInfo)?.name ?? (providerInfo as ProviderInfo)?.id ?? providerId ?? 'unknown'
+    throw new Error(`Provider ${providerLabel} is not active or does not expose an active PDP endpoint`)
+  }
+
+  logger.debug({ providerInfo }, 'Provider validated')
+
+  return providerInfo
+}
+
+function isProviderUsable(providerInfo: ProviderInfo | null): providerInfo is ProviderInfo {
+  if (!providerInfo) return false
+  const pdpProduct = providerInfo.products.PDP
+  return (
+    providerInfo.active === true &&
+    pdpProduct?.isActive === true &&
+    typeof pdpProduct.data?.serviceURL === 'string' &&
+    pdpProduct.data.serviceURL.length > 0
+  )
 }
 
 export default createStorageContextFromDataSetId
