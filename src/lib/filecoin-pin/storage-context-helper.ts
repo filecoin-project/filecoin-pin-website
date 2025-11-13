@@ -117,9 +117,6 @@ export async function createStorageContextForNewDataSet(
   if (providerInfo == null) {
     const providers = await spRegistry.getAllActiveProviders()
     providerInfo = providers.find((provider) => isProviderUsable(provider)) ?? null
-    if (providerInfo == null) {
-      throw new Error('Unable to resolve an approved storage provider for new data set creation')
-    }
   }
 
   if (providerInfo == null) {
