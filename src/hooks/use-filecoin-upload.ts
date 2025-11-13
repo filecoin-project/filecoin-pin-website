@@ -196,7 +196,7 @@ export const useFilecoinUpload = () => {
 
               case 'onPieceConfirmed': {
                 // Save the dataset ID if it was just created during this upload
-                const currentDataSetId = currentStorageContext?.dataSetId
+                const currentDataSetId = currentStorageContext.dataSetId
                 if (wallet?.status === 'ready' && currentDataSetId !== undefined && initialDataSetId === undefined) {
                   const debugParams = getDebugParams()
 
