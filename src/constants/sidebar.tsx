@@ -1,12 +1,20 @@
+const FILECOIN_PIN_REPO_URL = 'https://github.com/filecoin-project/filecoin-pin'
+const DOCUMENTATION_BASE_URL = `${FILECOIN_PIN_REPO_URL}/blob/master/documentation`
+const GLOSSARY_BASE_URL = `${DOCUMENTATION_BASE_URL}/glossary.md`
+
 export const SIDEBAR_CONFIG = {
   github: {
-    githubAction: 'https://github.com/filecoin-project/filecoin-pin/tree/master/upload-action',
-    cli: 'https://github.com/filecoin-project/filecoin-pin',
+    githubAction: `${FILECOIN_PIN_REPO_URL}/tree/master/upload-action`,
+    cli: FILECOIN_PIN_REPO_URL,
     cloneDemo: 'https://github.com/filecoin-project/filecoin-pin-website/fork',
   },
   documentation: {
-    car: 'https://docs.ipfs.tech/concepts/glossary/#car',
-    ipni: 'https://docs.ipfs.tech/concepts/ipni',
-    filecoinPin: 'https://filoz.gitbook.io/filoz-filecoin-docs/storage-providers/pdp/developer/filecoin-pin',
+    car: `${GLOSSARY_BASE_URL}#car`,
+    ipni: `${GLOSSARY_BASE_URL}#ipni`,
+    filecoinPay: `${GLOSSARY_BASE_URL}#filecoin-pay`,
+    serviceProvider: `${GLOSSARY_BASE_URL}#service-provider`,
+    pieceCid: `${GLOSSARY_BASE_URL}#piece-cid`,
+    standardIpfsTooling: `${GLOSSARY_BASE_URL}#standard-ipfs-tooling`,
+    filecoinPinAddBehindTheScenes: `${DOCUMENTATION_BASE_URL}/behind-the-scenes-of-adding-a-file.md`,
   },
 } as const
