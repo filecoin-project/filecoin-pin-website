@@ -27,7 +27,7 @@ export default function SidebarSteps() {
       <StepItem step={2}>
         <p>
           Select a file to pin and it will be packed into a <TextLink href={car}>CAR</TextLink>
-          &nbsp;directly in the browser.
+          {' '}directly in the browser.
         </p>
       </StepItem>
       <StepItem step={3}>
