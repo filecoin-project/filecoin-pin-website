@@ -60,6 +60,7 @@ export const useFilecoinUpload = () => {
   // even if the dataset is initialized after the callback is created
   const storageContextRef = useWaitableRef(storageContext)
   const providerInfoRef = useWaitableRef(providerInfo)
+  const synapseRef = useWaitableRef(synapse)
 
   const [uploadState, setUploadState] = useState<UploadState>({
     isUploading: false,
@@ -107,9 +108,7 @@ export const useFilecoinUpload = () => {
         // Step 2: Check readiness
         updateStepState('checking-readiness', { status: 'in-progress', progress: 0 })
 
-        if (!synapse) {
-          throw new Error('Synapse client not initialized. Please check your configuration.')
-        }
+        const synapse = await synapseRef.wait()
         updateStepState('checking-readiness', { progress: 50 })
 
         // validate that we can actually upload the car, passing the autoConfigureAllowances flag to true to automatically configure allowances if needed.
