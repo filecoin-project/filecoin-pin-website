@@ -1,5 +1,5 @@
 const UPLOAD_COMPLETED_LINKS = {
-  ipfsGatewayBaseUrl: 'https://ipfs.io/ipfs/',
+  ipfsGatewayBaseUrl: 'https://dweb.link/ipfs/',
   // TODO: use network elsewhere (links.ts)
   pdpExplorerBaseUrl: 'https://pdp.vxb.ai/calibration/',
 }
