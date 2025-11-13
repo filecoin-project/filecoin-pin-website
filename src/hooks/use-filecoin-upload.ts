@@ -219,7 +219,7 @@ export const useFilecoinUpload = () => {
                 console.debug('[FilecoinUpload] Upload fully completed and confirmed on chain')
                 break
               }
-              case 'ipniAdvertisement.failed': {
+              case 'ipniProviderResults.failed': {
                 // IPNI check failed - mark as error with a helpful message
                 console.warn('[FilecoinUpload] IPNI check failed after max attempts:', event.data.error.message)
                 // Cache the failed result
@@ -231,7 +231,7 @@ export const useFilecoinUpload = () => {
                 })
                 break
               }
-              case 'ipniAdvertisement.complete': {
+              case 'ipniProviderResults.complete': {
                 console.debug('[FilecoinUpload] IPNI check succeeded, marking announcing-cids as completed')
                 // Cache the success result
                 cacheIpniResult(rootCid, 'success')
