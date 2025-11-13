@@ -1,13 +1,14 @@
 import { createCarFromFile } from 'filecoin-pin/core/unixfs'
 import { checkUploadReadiness, executeUpload } from 'filecoin-pin/core/upload'
 import pino from 'pino'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { storeDataSetId, storeDataSetIdForProvider } from '../lib/local-storage/data-set.ts'
 import type { StepState } from '../types/upload/step.ts'
 import { getDebugParams } from '../utils/debug-params.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 import { cacheIpniResult } from './use-ipni-check.ts'
+import { useWaitableRef } from './use-waitable-ref.ts'
 
 interface UploadState {
   isUploading: boolean
@@ -55,15 +56,10 @@ export const INPI_ERROR_MESSAGE =
 export const useFilecoinUpload = () => {
   const { synapse, storageContext, providerInfo, checkIfDatasetExists, wallet } = useFilecoinPinContext()
 
-  // Use refs to track the latest context values, so the upload callback can access them
+  // Use waitable refs to track the latest context values, so the upload callback can access them
   // even if the dataset is initialized after the callback is created
-  const storageContextRef = useRef(storageContext)
-  const providerInfoRef = useRef(providerInfo)
-
-  useEffect(() => {
-    storageContextRef.current = storageContext
-    providerInfoRef.current = providerInfo
-  }, [storageContext, providerInfo])
+  const storageContextRef = useWaitableRef(storageContext)
+  const providerInfoRef = useWaitableRef(providerInfo)
 
   const [uploadState, setUploadState] = useState<UploadState>({
     isUploading: false,
@@ -138,13 +134,11 @@ export const useFilecoinUpload = () => {
           },
         })
 
-        // Get the latest storage context and provider info from refs
-        const currentStorageContext = storageContextRef.current
-        const currentProviderInfo = providerInfoRef.current
-
-        if (!currentStorageContext || !currentProviderInfo) {
-          throw new Error('Storage context not ready. Failed to initialize storage context. Please try again.')
-        }
+        // Wait for storage context and provider info to be initialized
+        const [currentStorageContext, currentProviderInfo] = await Promise.all([
+          storageContextRef.wait(),
+          providerInfoRef.wait(),
+        ])
 
         // Capture the initial dataset ID (before upload) to detect if it's created during upload
         const initialDataSetId = currentStorageContext.dataSetId
@@ -202,7 +196,7 @@ export const useFilecoinUpload = () => {
 
               case 'onPieceConfirmed': {
                 // Save the dataset ID if it was just created during this upload
-                const currentDataSetId = storageContextRef.current?.dataSetId
+                const currentDataSetId = currentStorageContext?.dataSetId
                 if (wallet?.status === 'ready' && currentDataSetId !== undefined && initialDataSetId === undefined) {
                   const debugParams = getDebugParams()
 
