@@ -5,12 +5,13 @@ import { StepItem } from '../ui/step-item.tsx'
 import { StepItemContainer } from '../ui/step-item-container.tsx'
 
 export default function SidebarSteps() {
-  const { car, ipni, filecoinPay, serviceProvider, pieceCid, standardIpfsTooling, filecoinPinAddBehindTheScenes } = SIDEBAR_CONFIG.documentation
+  const { car, ipni, filecoinPay, serviceProvider, pieceCid, standardIpfsTooling, filecoinPinAddBehindTheScenes } =
+    SIDEBAR_CONFIG.documentation
 
   return (
     <StepItemContainer>
       <StepItem step={1}>
-        <p>A FIL wallet, a funded <TextLink href={filecoinPay}>Filecoin Pay</TextLink> Account, and <TextLink href={filecoinPay}>Warm Storage Service</TextLink> have been set up automatically.</p>
+        <p>A FIL wallet, a funded <TextLink href={filecoinPay}>Filecoin Pay</TextLink> Account, and <TextLink href={filecoinWarmStorageService}>Warm Storage Service</TextLink> have been set up automatically.</p> 
       </StepItem>
       <StepItem step={2}>
         <p>
@@ -20,8 +21,9 @@ export default function SidebarSteps() {
       </StepItem>
       <StepItem step={3}>
         <p>
-          Your file is uploaded to a <TextLink href={serviceProvider}>Filecoin SP</TextLink> using its <TextLink href={pieceCid}>Piece CID</TextLink>, and a transaction registers it on the
-          Filecoin Calibration testnet.
+          Your file is uploaded to a <TextLink href={serviceProvider}>Filecoin SP</TextLink> using its{' '}
+          <TextLink href={pieceCid}>Piece CID</TextLink>, and a transaction registers it on the Filecoin Calibration
+          testnet.
         </p>
       </StepItem>
       <StepItem step={4}>
@@ -36,7 +38,7 @@ export default function SidebarSteps() {
           quickly using <TextLink href={standardIpfsTooling}>standard IPFS tooling</TextLink> (e.g., Gateways).
         </p>
       </StepItem>
-      <ButtonLink href={filecoinPinAddBehindTheScenes}>Learn more</ButtonLink>
+      <ButtonLink href={filecoinPinLearnMore}>Learn more</ButtonLink>
     </StepItemContainer>
   )
 }

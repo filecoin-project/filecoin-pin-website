@@ -15,6 +15,7 @@ export const SIDEBAR_CONFIG = {
     serviceProvider: `${GLOSSARY_BASE_URL}#service-provider`,
     pieceCid: `${GLOSSARY_BASE_URL}#piece-cid`,
     standardIpfsTooling: `${GLOSSARY_BASE_URL}#standard-ipfs-tooling`,
-    filecoinPinAddBehindTheScenes: `${DOCUMENTATION_BASE_URL}/behind-the-scenes-of-adding-a-file.md`,
+    filecoinPinLearnMore: `${DOCUMENTATION_BASE_URL}/behind-the-scenes-of-adding-a-file.md`,
+    filecoinWarmStorageService: `${DOCUMENTATION_BASE_URL}/filecoin-warm-storage-service.md`,
   },
 } as const
