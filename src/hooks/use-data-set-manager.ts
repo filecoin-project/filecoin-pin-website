@@ -1,14 +1,10 @@
-import type { SynapseService } from 'filecoin-pin/core/synapse'
+import { type CreateStorageContextOptions, createStorageContext, type SynapseService } from 'filecoin-pin/core/synapse'
+import pino from 'pino'
 import { useCallback, useRef, useState } from 'react'
-import type { StorageContextHelperResult } from '../lib/filecoin-pin/storage-context-helper.ts'
-import {
-  createStorageContextForNewDataSet,
-  createStorageContextFromDataSetId,
-} from '../lib/filecoin-pin/storage-context-helper.ts'
 import { getStoredDataSetId } from '../lib/local-storage/data-set.ts'
 
 type ProviderInfo = SynapseService['providerInfo']
-type StorageContext = StorageContextHelperResult['storage']
+type StorageContext = NonNullable<Awaited<ReturnType<typeof createStorageContext>>['storage']>
 
 export type DataSetState =
   | { status: 'idle'; dataSetId?: number }
@@ -154,29 +150,40 @@ export function useDataSetManager({
       }))
 
       try {
+        const logger = pino({
+          level: 'debug',
+          browser: {
+            asObject: true,
+          },
+        })
+
+        // Build provider options for debug/test mode
+        const createContextOptions: CreateStorageContextOptions = {}
+        if (urlProviderId !== null) {
+          createContextOptions.providerId = urlProviderId
+        }
         if (effectiveDataSetId !== null) {
-          if (urlProviderId !== null) {
-            console.debug('[DataSet] Ignoring provider override because dataset ID was provided')
+          // Use existing dataset from localStorage or URL override
+          createContextOptions.dataset = {
+            useExisting: effectiveDataSetId,
           }
-          const { storage, providerInfo } = await createStorageContextFromDataSetId(synapse, effectiveDataSetId)
-          setDataSet({
-            status: 'ready',
-            dataSetId: effectiveDataSetId,
-            storageContext: storage,
-            providerInfo,
-          })
-          return effectiveDataSetId
+          console.debug('[DataSet] Using existing dataset from localStorage or URL override:', effectiveDataSetId)
+        } else {
+          // No stored dataset found - explicitly create a new one
+          // This ensures each unique browser user gets a unique dataset ID
+          createContextOptions.dataset = {
+            createNew: true,
+          }
+          console.debug('[DataSet] No stored dataset found, creating new dataset')
         }
 
-        const { storage, providerInfo } = await createStorageContextForNewDataSet(synapse, {
-          providerId: urlProviderId ?? undefined,
-        })
-        const resolvedDataSetId = storage.dataSetId ?? null
+        const result = await createStorageContext(synapse, logger, createContextOptions)
+        const resolvedDataSetId = result.storage.dataSetId ?? effectiveDataSetId ?? null
         setDataSet({
           status: 'ready',
           dataSetId: resolvedDataSetId,
-          storageContext: storage,
-          providerInfo,
+          storageContext: result.storage,
+          providerInfo: result.providerInfo,
         })
         return resolvedDataSetId
       } catch (error) {

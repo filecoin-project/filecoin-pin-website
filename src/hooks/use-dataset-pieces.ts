@@ -1,4 +1,4 @@
-import { METADATA_KEYS, PDPServer } from '@filoz/synapse-sdk'
+import { METADATA_KEYS, PDPServer, WarmStorageService } from '@filoz/synapse-sdk'
 import { useCallback, useEffect, useState } from 'react'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 
@@ -75,8 +75,7 @@ export const useDatasetPieces = () => {
        * There are PRs in flight to synapse-sdk for things related to this.
        */
       // Create the warm storage service
-      // @ts-expect-error - Accessing private _warmStorageService temporarily until SDK is updated
-      const warmStorage = synapse.storage._warmStorageService
+      const warmStorage = await WarmStorageService.create(synapse.getProvider(), synapse.getWarmStorageAddress())
 
       // Query the PDP server for the dataset and its pieces
       const pdpServer = new PDPServer(null, serviceURL)
