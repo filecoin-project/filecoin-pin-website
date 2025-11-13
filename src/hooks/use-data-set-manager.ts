@@ -1,6 +1,7 @@
 import { type CreateStorageContextOptions, createStorageContext, type SynapseService } from 'filecoin-pin/core/synapse'
 import pino from 'pino'
 import { useCallback, useRef, useState } from 'react'
+import { createStorageContextFromDataSetId } from '../lib/filecoin-pin/storage-context-helper.ts'
 import { getStoredDataSetId } from '../lib/local-storage/data-set.ts'
 
 type ProviderInfo = SynapseService['providerInfo']
@@ -157,25 +158,32 @@ export function useDataSetManager({
           },
         })
 
-        // Build provider options for debug/test mode
+        if (effectiveDataSetId !== null) {
+          if (urlProviderId !== null) {
+            console.debug('[DataSet] Ignoring provider override because dataset ID was provided')
+          }
+          const { storage, providerInfo } = await createStorageContextFromDataSetId(synapse, effectiveDataSetId)
+          setDataSet({
+            status: 'ready',
+            dataSetId: effectiveDataSetId,
+            storageContext: storage,
+            providerInfo,
+          })
+          return effectiveDataSetId
+        }
+
+        // Build provider options for debug/test mode when creating a new dataset
         const createContextOptions: CreateStorageContextOptions = {}
         if (urlProviderId !== null) {
           createContextOptions.providerId = urlProviderId
         }
-        if (effectiveDataSetId !== null) {
-          // Use existing dataset from localStorage or URL override
-          createContextOptions.dataset = {
-            useExisting: effectiveDataSetId,
-          }
-          console.debug('[DataSet] Using existing dataset from localStorage or URL override:', effectiveDataSetId)
-        } else {
-          // No stored dataset found - explicitly create a new one
-          // This ensures each unique browser user gets a unique dataset ID
-          createContextOptions.dataset = {
-            createNew: true,
-          }
-          console.debug('[DataSet] No stored dataset found, creating new dataset')
+
+        // No stored dataset found - explicitly create a new one
+        // This ensures each unique browser user gets a unique dataset ID
+        createContextOptions.dataset = {
+          createNew: true,
         }
+        console.debug('[DataSet] No stored dataset found, creating new dataset')
 
         const result = await createStorageContext(synapse, logger, createContextOptions)
         const resolvedDataSetId = result.storage.dataSetId ?? effectiveDataSetId ?? null
