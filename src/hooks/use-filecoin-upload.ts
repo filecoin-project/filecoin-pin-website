@@ -19,6 +19,14 @@ interface UploadState {
   transactionHash?: string
 }
 
+// Create a simple logger for the upload
+const logger = pino({
+  level: 'debug',
+  browser: {
+    asObject: true,
+  },
+})
+
 export const INITIAL_STEP_STATES: StepState[] = [
   { step: 'creating-car', progress: 0, status: 'pending' },
   { step: 'checking-readiness', progress: 0, status: 'pending' },
@@ -86,6 +94,7 @@ export const useFilecoinUpload = () => {
       try {
         // Step 1: Create CAR and upload to Filecoin SP
         updateStepState('creating-car', { status: 'in-progress', progress: 0 })
+        logger.info('Creating CAR from file')
 
         // Create CAR from file with progress tracking
         const carResult = await createCarFromFile(file, {
@@ -103,14 +112,18 @@ export const useFilecoinUpload = () => {
         }))
 
         updateStepState('creating-car', { status: 'completed', progress: 100 })
+        logger.info({ carResult }, 'CAR created')
         // creating the car is done, but its not uploaded yet.
 
         // Step 2: Check readiness
         updateStepState('checking-readiness', { status: 'in-progress', progress: 0 })
-
+        updateStepState('uploading-car', { status: 'in-progress', progress: 0 })
+        logger.info('Waiting for synapse to be initialized')
         const synapse = await synapseRef.wait()
+        logger.info('Synapse initialized')
         updateStepState('checking-readiness', { progress: 50 })
 
+        logger.info('Checking upload readiness')
         // validate that we can actually upload the car, passing the autoConfigureAllowances flag to true to automatically configure allowances if needed.
         const readinessCheck = await checkUploadReadiness({
           synapse,
@@ -118,26 +131,22 @@ export const useFilecoinUpload = () => {
           autoConfigureAllowances: true,
         })
 
+        logger.info({ readinessCheck }, 'Upload readiness check')
+
         if (readinessCheck.status === 'blocked') {
           // TODO: show the user the reasons why the upload is blocked, prompt them to fix based on the suggestions.
           throw new Error('Readiness check failed')
         }
 
         updateStepState('checking-readiness', { status: 'completed', progress: 100 })
-
-        // Create a simple logger for the upload
-        const logger = pino({
-          level: 'debug',
-          browser: {
-            asObject: true,
-          },
-        })
-
+        logger.info('Upload readiness check completed')
+        logger.info('Waiting for storage context and provider info to be initialized')
         // Wait for storage context and provider info to be initialized
         const [currentStorageContext, currentProviderInfo] = await Promise.all([
           storageContextRef.wait(),
           providerInfoRef.wait(),
         ])
+        logger.info('Storage context and provider info initialized')
 
         // Capture the initial dataset ID (before upload) to detect if it's created during upload
         const initialDataSetId = currentStorageContext.dataSetId
@@ -154,8 +163,7 @@ export const useFilecoinUpload = () => {
         }
 
         // Step 3: Upload CAR to Synapse (Filecoin SP)
-        updateStepState('uploading-car', { status: 'in-progress', progress: 0 })
-
+        logger.info('Uploading CAR to Synapse')
         await executeUpload(synapseService, carResult.carBytes, carResult.rootCid, {
           logger,
           contextId: `upload-${Date.now()}`,
@@ -236,6 +244,7 @@ export const useFilecoinUpload = () => {
             }
           },
         })
+        logger.info('Upload completed')
 
         // Return the actual CID from the CAR result
         return rootCid
