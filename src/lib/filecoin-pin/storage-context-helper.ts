@@ -163,6 +163,9 @@ async function getApprovedProviderInfo(
   } else {
     // otherwise, get all approved provider ids and randomly select one.
     const approvedProviderIds = await warmStorage.getApprovedProviderIds()
+    if (approvedProviderIds.length === 0) {
+      throw new Error('No approved storage providers available for new data set creation')
+    }
     // select a random approved provider id
     const randomApprovedProviderId = approvedProviderIds[Math.floor(Math.random() * approvedProviderIds.length)]
     providerInfo = await spRegistry.getProvider(randomApprovedProviderId)
