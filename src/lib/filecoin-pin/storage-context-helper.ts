@@ -60,7 +60,7 @@ export async function createStorageContextFromDataSetId(
   const spRegistry = new SPRegistryService(synapse.getProvider(), registryAddress)
 
   /**
-   * If it's not an approved provider, we're going to not re-use this dataset. We will log a warning and create a new one. this should fix any users who may have been using an unapproved provider (due to revert of PR #118)
+   * If it's not an approved provider, we're not going to reuse this dataset. We will log a warning and create a new one. This should fix any users who may have been using an unapproved provider (due to the revert of PR #118)
    */
   const isProviderApproved = await warmStorage.isProviderIdApproved(dataSetInfo.providerId)
   if (!isProviderApproved) {
