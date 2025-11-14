@@ -107,9 +107,8 @@ function UploadCompleted({ cid, fileName, pieceCid, datasetId }: UploadCompleted
         <Card.InfoRow
           subtitle={<TextLink href={getProviderExplorerLink(providerAddress)}>{providerName}</TextLink>}
           title="Provider"
-        >
-          <ButtonLink href={getDatasetExplorerLink(datasetIdOrDefault)}>View proofs</ButtonLink>
-        </Card.InfoRow>
+        ></Card.InfoRow>
+        <ButtonLink href={getDatasetExplorerLink(datasetIdOrDefault)}>View proofs</ButtonLink>
       </Card.Wrapper>
     </>
   )

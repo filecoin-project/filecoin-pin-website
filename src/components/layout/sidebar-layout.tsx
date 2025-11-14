@@ -29,7 +29,7 @@ export function SidebarLayout({ children, sidebar, header }: SidebarLayoutProps)
       </aside>
 
       {/* Main content */}
-      <main className="overflow-y-auto lg:border-l lg:border-zinc-800 px-10 lg:px-15 py-10">{children}</main>
+      <main className="overflow-y-auto lg:border-l lg:border-zinc-800 px-6 lg:px-15 py-6">{children}</main>
     </div>
   )
 }

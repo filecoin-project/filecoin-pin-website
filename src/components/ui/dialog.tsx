@@ -18,7 +18,7 @@ function Dialog({ content }: DialogProps) {
       </RadixDialog.Trigger>
       <RadixDialog.Portal>
         <RadixDialog.Overlay className="fixed inset-0 bg-black/40 animate-in fade-in-0 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-        <RadixDialog.Content className="fixed flex flex-col items-end gap-6 top-1/2 bg-(--color-black) border border-zinc-700 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-[500px] max-h-[85vh] p-6 pt-16 rounded-lg  shadow-lg animate-in fade-in-0 zoom-in-95 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 focus:outline-none">
+        <RadixDialog.Content className="overflow-auto fixed flex flex-col items-end gap-6 top-1/2 bg-(--color-black) border border-zinc-700 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-[500px] max-h-[85vh] p-6 pt-16 rounded-lg  shadow-lg animate-in fade-in-0 zoom-in-95 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 focus:outline-none">
           {content}
           <RadixDialog.Close asChild>
             <button
