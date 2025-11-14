@@ -15,7 +15,7 @@
  * TODO: Replace with synapse.storage.createContextFromDataSetId() once PR #438 is published
  */
 
-import type { Synapse } from '@filoz/synapse-sdk'
+import type { Synapse, WarmStorageService } from '@filoz/synapse-sdk'
 import { StorageContext } from '@filoz/synapse-sdk'
 import { type ProviderInfo, SPRegistryService } from '@filoz/synapse-sdk/sp-registry'
 import { DEFAULT_DATA_SET_METADATA, DEFAULT_STORAGE_CONTEXT_CONFIG } from 'filecoin-pin/core/synapse'
@@ -56,37 +56,46 @@ export async function createStorageContextFromDataSetId(
     throw new Error(`Data set ${dataSetId} is not owned by ${signerAddress} (owned by ${dataSetInfo.payer})`)
   }
 
-  // Get provider info and metadata in parallel
   const registryAddress = warmStorage.getServiceProviderRegistryAddress()
   const spRegistry = new SPRegistryService(synapse.getProvider(), registryAddress)
 
+  /**
+   * If it's not an approved provider, we're going to not re-use this dataset. We will log a warning and create a new one. this should fix any users who may have been using an unapproved provider (due to revert of PR #118)
+   */
+  const isProviderApproved = await warmStorage.isProviderIdApproved(dataSetInfo.providerId)
+  if (!isProviderApproved) {
+    logger.warn(
+      { providerId: dataSetInfo.providerId },
+      `Data set ${dataSetId} is not owned by an approved provider, creating a new one`
+    )
+    return await createStorageContextForNewDataSet(synapse)
+  }
+
+  // Get provider info and metadata in parallel
   const [providerInfo, dataSetMetadata] = await Promise.all([
     spRegistry.getProvider(dataSetInfo.providerId),
     warmStorage.getDataSetMetadata(dataSetId),
   ])
 
-  const activeProvider = validateProvider(providerInfo, dataSetInfo.providerId)
+  if (providerInfo == null) {
+    throw new Error(`Unable to resolve provider info for data set ${dataSetId} and provider ${dataSetInfo.providerId}`)
+  }
 
   // Construct storage context directly
   const withCDN = dataSetInfo.cdnRailId > 0
-  const storageContext = new StorageContext(
-    synapse,
-    warmStorage,
-    activeProvider,
-    dataSetId,
-    { withCDN },
-    dataSetMetadata
-  )
+  const storageContext = new StorageContext(synapse, warmStorage, providerInfo, dataSetId, { withCDN }, dataSetMetadata)
 
   return {
     storage: storageContext,
-    providerInfo: activeProvider,
+    providerInfo,
   }
 }
 
 export type CreateNewStorageContextOptions = {
   providerId?: number
   providerAddress?: string
+  warmStorage?: WarmStorageService
+  spRegistry?: SPRegistryService
 }
 
 /**
@@ -99,29 +108,15 @@ export async function createStorageContextForNewDataSet(
   options: CreateNewStorageContextOptions = {}
 ): Promise<StorageContextHelperResult> {
   // @ts-expect-error - Accessing private _warmStorageService temporarily until SDK is updated
-  const warmStorage = synapse.storage._warmStorageService
+  const warmStorage = options.warmStorage ?? synapse.storage._warmStorageService
   if (!warmStorage) {
     throw new Error('WarmStorageService not available on Synapse instance')
   }
 
   const registryAddress = warmStorage.getServiceProviderRegistryAddress()
-  const spRegistry = new SPRegistryService(synapse.getProvider(), registryAddress)
+  const spRegistry = options.spRegistry ?? new SPRegistryService(synapse.getProvider(), registryAddress)
 
-  let providerInfo: ProviderInfo | null = null
-  if (options.providerId != null) {
-    providerInfo = validateProvider(await spRegistry.getProvider(options.providerId), options.providerId)
-  } else if (options.providerAddress) {
-    providerInfo = validateProvider(await spRegistry.getProviderByAddress(options.providerAddress))
-  }
-
-  if (providerInfo == null) {
-    const providers = await spRegistry.getAllActiveProviders()
-    providerInfo = providers.find((provider) => isProviderUsable(provider)) ?? null
-  }
-
-  if (providerInfo == null) {
-    throw new Error('Unable to resolve an approved storage provider for new data set creation')
-  }
+  const providerInfo = await getApprovedProviderInfo(warmStorage, spRegistry, options.providerId)
 
   const mergedMetadata = { ...DEFAULT_DATA_SET_METADATA }
 
@@ -145,34 +140,39 @@ export async function createStorageContextForNewDataSet(
   }
 }
 
-function validateProvider(providerInfo: ProviderInfo | null, providerId?: number): ProviderInfo {
+/**
+ * getApprovedProviderInfo should only be called from createStorageContextForNewDataSet, which is only called with a providerId if a user has explicitly provided one as a query parameter.
+ */
+async function getApprovedProviderInfo(
+  warmStorage: WarmStorageService,
+  spRegistry: SPRegistryService,
+  providerId?: number
+): Promise<ProviderInfo> {
+  let providerInfo: ProviderInfo | null = null
+
+  if (providerId != null) {
+    // if given a providerId, check if it is approved and log a warning if it's not an approved provider.
+    const isProviderApproved = await warmStorage.isProviderIdApproved(providerId)
+    if (!isProviderApproved) {
+      logger.warn(
+        { providerId },
+        `Presuming given providerId ${providerId} is a queryParam and allowing creation to continue with a non-approved provider`
+      )
+      providerInfo = await spRegistry.getProvider(providerId)
+    }
+  } else {
+    // otherwise, get all approved provider ids and randomly select one.
+    const approvedProviderIds = await warmStorage.getApprovedProviderIds()
+    // select a random approved provider id
+    const randomApprovedProviderId = approvedProviderIds[Math.floor(Math.random() * approvedProviderIds.length)]
+    providerInfo = await spRegistry.getProvider(randomApprovedProviderId)
+  }
+
   if (providerInfo == null) {
-    throw new Error(
-      providerId != null ? `Provider ID ${providerId} not found in registry` : 'Provider not found in registry'
-    )
+    throw new Error(`Unable to resolve an approved storage provider for new data set creation`)
   }
-
-  if (!isProviderUsable(providerInfo)) {
-    logger.debug({ providerInfo }, 'Provider not usable')
-    const providerLabel =
-      (providerInfo as ProviderInfo)?.name ?? (providerInfo as ProviderInfo)?.id ?? providerId ?? 'unknown'
-    throw new Error(`Provider ${providerLabel} is not active or does not expose an active PDP endpoint`)
-  }
-
-  logger.debug({ providerInfo }, 'Provider validated')
 
   return providerInfo
-}
-
-function isProviderUsable(providerInfo: ProviderInfo | null): providerInfo is ProviderInfo {
-  if (!providerInfo) return false
-  const pdpProduct = providerInfo.products.PDP
-  return (
-    providerInfo.active === true &&
-    pdpProduct?.isActive === true &&
-    typeof pdpProduct.data?.serviceURL === 'string' &&
-    pdpProduct.data.serviceURL.length > 0
-  )
 }
 
 export default createStorageContextFromDataSetId
