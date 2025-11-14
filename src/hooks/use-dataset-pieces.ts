@@ -77,6 +77,9 @@ export const useDatasetPieces = () => {
       // Create the warm storage service
       // @ts-expect-error - Accessing private _warmStorageService temporarily until SDK is updated
       const warmStorage = synapse.storage._warmStorageService
+      if (!warmStorage) {
+        throw new Error('[DatasetPieces] Synapse warm storage service is unavailable')
+      }
 
       // Query the PDP server for the dataset and its pieces
       const pdpServer = new PDPServer(null, serviceURL)
