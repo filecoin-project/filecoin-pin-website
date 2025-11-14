@@ -158,8 +158,8 @@ async function getApprovedProviderInfo(
         { providerId },
         `Presuming given providerId ${providerId} is a queryParam and allowing creation to continue with a non-approved provider`
       )
-      providerInfo = await spRegistry.getProvider(providerId)
     }
+    providerInfo = await spRegistry.getProvider(providerId)
   } else {
     // otherwise, get all approved provider ids and randomly select one.
     const approvedProviderIds = await warmStorage.getApprovedProviderIds()
