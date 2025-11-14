@@ -100,8 +100,8 @@ export type CreateNewStorageContextOptions = {
 
 /**
  * Create a StorageContext configured for creating a brand new dataset without scanning all
- * existing datasets. Provider selection favors explicit overrides and otherwise picks the
- * first active provider that exposes a PDP endpoint.
+ * existing datasets. Provider selection favors explicit overrides and otherwise randomly selects
+ * an active provider that exposes a PDP endpoint.
  */
 export async function createStorageContextForNewDataSet(
   synapse: Synapse,
