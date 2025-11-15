@@ -33,7 +33,7 @@ function CardHeader({ title, status, estimatedTime, withSpinner }: CardHeaderPro
   const showSpinner = isInProgress && withSpinner
 
   return (
-    <div className="flex flex-col gap-2 items-start">
+    <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           {showSpinner && <Spinner size="sm" />}
@@ -44,7 +44,7 @@ function CardHeader({ title, status, estimatedTime, withSpinner }: CardHeaderPro
           <BadgeStatus status={status} />
         </div>
       </div>
-      <span aria-live="polite" className="text-sm text-right text-zinc-400" hidden={!isInProgress}>
+      <span aria-live="polite" className="text-sm text-zinc-400 text-left" hidden={!isInProgress}>
         {estimatedTime}
       </span>
     </div>
