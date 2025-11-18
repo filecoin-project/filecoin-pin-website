@@ -3,7 +3,7 @@ import { clsx } from 'clsx'
 import { AlertTriangle, CircleAlert, CircleCheck, Info, type LucideIcon } from 'lucide-react'
 import { ButtonBase } from '@/components/ui/button/button-base.tsx'
 
-const alertVariants = cva('flex items-center gap-3 p-4 rounded-xl border', {
+const alertVariants = cva('flex items-center gap-3 p-4 rounded-xl border flex-wrap', {
   variants: {
     variant: {
       success: 'bg-green-950/60 border-green-900/40 text-green-200',
@@ -112,13 +112,13 @@ export function Alert({ variant = 'neutral', message, description, button, cance
         <Icon size={22} />
       </span>
 
-      <div className="flex-1 flex flex-col gap-0.5">
+      <div className="flex-1 flex flex-col gap-0.5 min-w-0 md:min-w-[200px]">
         <span className={clsx(messageVariants({ variant }), description && 'font-semibold')}>{message}</span>
         {description && <span className={descriptionVariants({ variant })}>{description}</span>}
       </div>
 
       {(button || cancelButton) && (
-        <div className="flex gap-3">
+        <div className="flex gap-3 basis-full md:basis-auto flex-shrink-0">
           {cancelButton && (
             <ButtonBase
               {...cancelButton}
