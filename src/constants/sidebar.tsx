@@ -1,12 +1,21 @@
+const FILECOIN_PIN_REPO_URL = 'https://github.com/filecoin-project/filecoin-pin'
+const DOCUMENTATION_BASE_URL = `${FILECOIN_PIN_REPO_URL}/blob/master/documentation`
+const GLOSSARY_BASE_URL = `${DOCUMENTATION_BASE_URL}/glossary.md`
+
 export const SIDEBAR_CONFIG = {
-  github: {
-    githubAction: 'https://github.com/filecoin-project/filecoin-pin/tree/master/upload-action',
-    cli: 'https://github.com/filecoin-project/filecoin-pin',
-    cloneDemo: 'https://github.com/filecoin-project/filecoin-pin-website/fork',
-  },
   documentation: {
-    car: 'https://docs.ipfs.tech/concepts/glossary/#car',
-    ipni: 'https://docs.ipfs.tech/concepts/ipni',
-    filecoinPin: 'https://filoz.gitbook.io/filoz-filecoin-docs/storage-providers/pdp/developer/filecoin-pin',
+    car: `${GLOSSARY_BASE_URL}#car`,
+    filecoinPay: `${GLOSSARY_BASE_URL}#filecoin-pay`,
+    filecoinPinLearnMore: `${DOCUMENTATION_BASE_URL}/behind-the-scenes-of-adding-a-file.md`,
+    filecoinWarmStorageService: `${GLOSSARY_BASE_URL}#filecoin-warm-storage-service`,
+    ipni: `${GLOSSARY_BASE_URL}#ipni`,
+    pieceCid: `${GLOSSARY_BASE_URL}#piece-cid`,
+    serviceProvider: `${GLOSSARY_BASE_URL}#service-provider`,
+    standardIpfsTooling: `${GLOSSARY_BASE_URL}#standard-ipfs-tooling`,
+  },
+  github: {
+    cli: FILECOIN_PIN_REPO_URL,
+    cloneDemo: 'https://github.com/filecoin-project/filecoin-pin-website/fork',
+    githubAction: `${FILECOIN_PIN_REPO_URL}/tree/master/upload-action`,
   },
 } as const

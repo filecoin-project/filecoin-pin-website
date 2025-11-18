@@ -1,3 +1,4 @@
+import type { SynapseService } from 'filecoin-pin/core/synapse'
 import { useMemo } from 'react'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 
@@ -6,6 +7,7 @@ export interface ProviderInfo {
   providerName: string
   serviceURL: string
   datasetId: string
+  providerInfo: SynapseService['providerInfo'] | null
 }
 
 /**
@@ -47,6 +49,7 @@ export function useProviderInfo(): ProviderInfo | null {
       providerName: providerInfo.name,
       serviceURL: providerInfo.products?.PDP?.data?.serviceURL || '',
       datasetId: String(dataSet.dataSetId),
+      providerInfo,
     }
   }, [dataSet, providerInfo])
 }

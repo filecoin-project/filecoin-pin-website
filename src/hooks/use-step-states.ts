@@ -1,5 +1,4 @@
 import { useMemo } from 'react'
-import { STAGE_STEPS } from '../types/upload/stage.ts'
 import type { StepState } from '../types/upload/step.ts'
 
 /**
@@ -10,18 +9,16 @@ export function useStepStates(stepStates: StepState[]) {
   return useMemo(() => {
     const creatingCarStep = stepStates.find((s) => s.step === 'creating-car')
     const uploadingCarStep = stepStates.find((s) => s.step === 'uploading-car')
+    const checkingReadinessStep = stepStates.find((s) => s.step === 'checking-readiness')
     const announcingCidsStep = stepStates.find((s) => s.step === 'announcing-cids')
     const finalizingStep = stepStates.find((s) => s.step === 'finalizing-transaction')
-    const firstStageStates = stepStates.filter(
-      (stepState) => STAGE_STEPS.firstStage.find((step) => step === stepState.step) !== undefined
-    )
 
     return {
       creatingCarStep,
       uploadingCarStep,
+      checkingReadinessStep,
       announcingCidsStep,
       finalizingStep,
-      firstStageStates,
     }
   }, [stepStates])
 }

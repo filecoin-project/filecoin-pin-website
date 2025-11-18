@@ -4,7 +4,7 @@ export function getStepLabel(step: StepState['step']) {
   switch (step) {
     case 'creating-car':
     case 'checking-readiness':
-      return 'Creating CAR file'
+      return 'Packing for IPFS'
     case 'uploading-car':
       return 'Uploading to Filecoin SP'
     case 'announcing-cids':
