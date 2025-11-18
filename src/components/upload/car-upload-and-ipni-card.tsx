@@ -8,7 +8,6 @@ import { Card } from '../ui/card.tsx'
 import { DownloadButton } from '../ui/download-button.tsx'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
 import { ProgressCard } from './progress-card.tsx'
-import { ProgressCardCombined } from './progress-card-combined.tsx'
 
 interface CarUploadAndIpniCardProps {
   stepStates: StepState[]
@@ -31,7 +30,7 @@ export const CarUploadAndIpniCard = ({ stepStates, cid, fileName }: CarUploadAnd
 
   const { hasIpniAnnounceFailure } = uploadOutcome
 
-  const { announcingCidsStep, uploadingCarStep } = useStepStates(stepStates)
+  const { creatingCarStep, uploadingCarStep, announcingCidsStep } = useStepStates(stepStates)
 
   const shouldShowCidCard =
     uploadingCarStep?.status === 'completed' &&
@@ -59,7 +58,8 @@ export const CarUploadAndIpniCard = ({ stepStates, cid, fileName }: CarUploadAnd
 
   return (
     <>
-      <ProgressCardCombined stepStates={stepStates} />
+      {creatingCarStep && <ProgressCard stepState={creatingCarStep} />}
+      {uploadingCarStep && <ProgressCard stepState={uploadingCarStep} />}
       {announcingCidsStep && <ProgressCard stepState={announcingCidsStep} />}
     </>
   )

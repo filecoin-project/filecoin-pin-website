@@ -1,21 +1,24 @@
+import { cn } from '@/utils/cn.ts'
 import { ExternalLink } from '../link.tsx'
 
 type PillWrapperProps = {
   children: React.ReactNode
   ariaLabel: string
   href?: string
+  className?: string
 }
 
-function PillWrapper({ children, ariaLabel, href }: PillWrapperProps) {
+function PillWrapper({ children, ariaLabel, href, className }: PillWrapperProps) {
   return (
-    <div className="relative rounded-sm bg-zinc-800 px-3 py-1.5 font-mono text-sm text-zinc-100">
+    <div
+      className={cn(
+        'relative rounded-sm bg-zinc-800 px-3 py-1.5 font-mono text-sm text-zinc-100 focus-within:brand-outline',
+        className
+      )}
+    >
       {children}
       {href && (
-        <ExternalLink
-          aria-label={ariaLabel}
-          className="absolute inset-0 outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:ring-offset-2"
-          href={href}
-        >
+        <ExternalLink aria-label={ariaLabel} className="absolute inset-0 outline-none" href={href}>
           <span className="sr-only">{ariaLabel}</span>
         </ExternalLink>
       )}

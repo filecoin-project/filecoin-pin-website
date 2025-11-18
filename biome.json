@@ -33,7 +33,9 @@
       "!**/components.d.ts",
       "!**/mockServiceWorker.js",
       "!**/cars",
-      "!**/*.css"
+      "!**/*.css",
+      "!**/*.html",
+      "!**/storybook-static"
     ]
   },
   "vcs": {

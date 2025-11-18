@@ -21,4 +21,8 @@ declare global {
   interface ImportMeta {
     readonly env: ImportMetaEnv
   }
+
+  interface Window {
+    debugDump?: () => void
+  }
 }
