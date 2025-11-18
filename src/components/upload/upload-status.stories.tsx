@@ -80,6 +80,16 @@ export const PinnedCollapsedLongText: Story = {
 }
 
 export const PinnedShowcase: Story = {
+  args: {
+    fileName: 'bafybeigdwdcezmpydxzqnp6svw43m3gnaw247cmhde5a6a4k2n3rpxxylq',
+    fileSize: '2.13 MB',
+    stepStates: pinnedStepStates,
+    cid: 'bafybeigoflpi43gpwuf2i2srflxdkgtsxmvwqcrfruaceuju3kmlzoigzm',
+    transactionHash: '0xf85d7c38321ce4a4c3d0fac4a5347f20a2f9596da5120df28b1190ac0948ad77',
+    pieceCid: 'baga6ea4seaqfoztqwvslmx6ptxvzopg4g6n5do2br36exlo6ylsyu7akdcm5sdy',
+    datasetId: 'filecoin-saturn-dataset-id-0123456789abcdef',
+    isExpanded: false,
+  },
   render: () => {
     const [containerWidth, setContainerWidth] = useState(640)
 

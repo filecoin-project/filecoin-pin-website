@@ -17,13 +17,11 @@ const meta = {
   // More on argTypes: https://storybook.js.org/docs/api/argtypes
   argTypes: {
     text: { control: 'text' },
-    prefix: { control: 'text' },
     href: { control: 'text' },
   },
   // Use `fn` to spy on the onClick arg, which will appear in the actions panel once invoked: https://storybook.js.org/docs/essentials/actions#story-args
   args: {
     text: 'bafy2bzacec3x7q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q',
-    prefix: 'tx:',
     href: 'https://filecoin-testnet.blockscout.com/tx/bafy2bzacec3x7q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q',
   },
 } satisfies Meta<typeof TextWithCopyToClipboard>
@@ -35,7 +33,6 @@ type Story = StoryObj<typeof meta>
 export const TransactionHash: Story = {
   args: {
     text: 'bafy2bzacec3x7q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q',
-    prefix: 'tx',
     href: 'https://filecoin-testnet.blockscout.com/tx/bafy2bzacec3x7q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q',
   },
 }

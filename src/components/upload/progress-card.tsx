@@ -27,7 +27,6 @@ function ProgressCard({ stepState, transactionHash }: ProgressCardProps) {
         <Card.Content>
           <TextWithCopyToClipboard
             href={`https://filecoin-testnet.blockscout.com/tx/${transactionHash}`}
-            prefix="tx:"
             text={transactionHash}
           />
         </Card.Content>
