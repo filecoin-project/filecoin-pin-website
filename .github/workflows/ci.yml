@@ -58,35 +58,3 @@ jobs:
           name: site-dist
           path: dist
           retention-days: 7
-
-  # Upload built site to Filecoin for permanent storage
-  # This job runs after the test job completes successfully
-  filecoin-upload:
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      checks: write
-      pull-requests: write
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # Download the build artifacts from the test job
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: site-dist
-          path: dist
-
-      # Upload to Filecoin using the downloaded build artifacts
-      # The action will create a CAR file from the downloaded artifacts and upload to Filecoin
-      - name: Upload to Filecoin
-        uses: filecoin-project/filecoin-pin/upload-action@v0.13.0
-        with:
-          path: dist  # Path to the downloaded build artifacts
-          walletPrivateKey: ${{ secrets.WALLET_PRIVATE_KEY }}
-          network: calibration
-          minStorageDays: "30"
-          filecoinPayBalanceLimit: "0.25"

@@ -1,0 +1,65 @@
+name: Filecoin Upload
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:  # Allow manual testing
+
+jobs:
+  # Build job mirrors CI to ensure we have artifacts
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run typecheck and build
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: filecoin-upload-dist
+          path: dist
+          retention-days: 1
+
+  upload:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Download the build artifacts from the build job
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: filecoin-upload-dist
+          path: dist
+
+      # Upload to Filecoin using the downloaded build artifacts
+      # The action will create a CAR file from the downloaded artifacts and upload to Filecoin
+      - name: Upload to Filecoin
+        uses: filecoin-project/filecoin-pin/upload-action@v0.13.0
+        with:
+          path: dist  # Path to the downloaded build artifacts
+          walletPrivateKey: ${{ secrets.WALLET_PRIVATE_KEY }}
+          network: calibration
+          minStorageDays: "30"
+          filecoinPayBalanceLimit: "0.25"
