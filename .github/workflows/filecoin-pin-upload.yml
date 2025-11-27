@@ -32,7 +32,7 @@ jobs:
         with:
           name: filecoin-upload-dist
           path: dist
-          retention-days: 1
+          retention-days: 3
 
   upload:
     needs: build
