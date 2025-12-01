@@ -1,59 +1,36 @@
 name: Filecoin Upload
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_run:
+    workflows: ["CI"]  # Must match the name in ci.yml
+    types:
+      - completed
   workflow_dispatch:  # Allow manual testing
 
 jobs:
-  # Build job mirrors CI to ensure we have artifacts
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 'lts/*'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run typecheck and build
-        run: npm run build
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: filecoin-upload-dist
-          path: dist
-          retention-days: 3
-
   upload:
-    needs: build
+    # Only run if the build workflow succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       checks: write
-      pull-requests: write
+      actions: read  # Required to download artifacts from workflow_run
+      pull-requests: write  # Required to comment on PRs
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Download the build artifacts from the build job
+      # Download the build artifacts from the build workflow
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: filecoin-upload-dist
+          name: site-dist
           path: dist
+          github-token: ${{ github.token }}
+          repository: ${{ github.event.workflow_run.repository.full_name }}
+          run-id: ${{ github.event.workflow_run.id }}
 
       # Upload to Filecoin using the downloaded build artifacts
       # The action will create a CAR file from the downloaded artifacts and upload to Filecoin
