@@ -58,3 +58,11 @@ jobs:
           name: site-dist
           path: dist
           retention-days: 7
+
+  # Call the Filecoin upload workflow
+  # This runs after test completes and reuses the build artifacts
+  filecoin-upload:
+    needs: test
+    uses: ./.github/workflows/filecoin-pin-upload.yml
+    secrets:
+      WALLET_PRIVATE_KEY: ${{ secrets.WALLET_PRIVATE_KEY }}
