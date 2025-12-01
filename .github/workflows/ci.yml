@@ -63,6 +63,10 @@ jobs:
   # This runs after test completes and reuses the build artifacts
   filecoin-upload:
     needs: test
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
     uses: ./.github/workflows/filecoin-pin-upload.yml
     secrets:
       WALLET_PRIVATE_KEY: ${{ secrets.WALLET_PRIVATE_KEY }}
