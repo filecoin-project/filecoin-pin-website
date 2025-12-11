@@ -18,6 +18,7 @@ const meta = {
   argTypes: {
     text: { control: 'text' },
     href: { control: 'text' },
+    prefix: { control: 'text' },
   },
   // Use `fn` to spy on the onClick arg, which will appear in the actions panel once invoked: https://storybook.js.org/docs/essentials/actions#story-args
   args: {
@@ -34,25 +35,13 @@ export const TransactionHash: Story = {
   args: {
     text: 'bafy2bzacec3x7q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q',
     href: 'https://filecoin-testnet.blockscout.com/tx/bafy2bzacec3x7q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q3q5q',
+    prefix: 'tx:',
   },
 }
 
-export const IPFSRootCID: Story = {
-  args: {
-    text: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi',
-    href: 'https://ipfs.io/ipfs/bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi',
-  },
-}
-
-export const PieceCID: Story = {
-  args: {
-    text: 'baga6ea4seaqnqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjq',
-    href: 'https://pdp.vxb.ai/calibration/piece/baga6ea4seaqnqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjqjq',
-  },
-}
-
-export const CIDWithoutLink: Story = {
+export const WithoutLink: Story = {
   args: {
     text: 'bafybeihqokbvl3f3ygley5lwxcmffume5xxon5skwyhvaoykqjw3c6uolu',
+    href: undefined,
   },
 }
