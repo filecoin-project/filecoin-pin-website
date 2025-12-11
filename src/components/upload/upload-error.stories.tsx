@@ -38,7 +38,9 @@ const createMockOrchestration = (
     },
     pendingAutoExpandPieceCids: new Set(),
     dragDropKey: 0,
-    startUpload: () => {},
+    startUpload: () => {
+      console.log('Start upload clicked')
+    },
     retryUpload: () => {
       console.log('Retry upload clicked')
     },
@@ -77,4 +79,3 @@ export const Responsive: Story = {
     )
   },
 }
-
