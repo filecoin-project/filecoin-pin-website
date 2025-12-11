@@ -4,10 +4,11 @@ import { TextLink } from './link.tsx'
 
 type TextWithCopyToClipboardProps = {
   text: string
+  prefix?: string
   href?: string
 }
 
-function TextWithCopyToClipboard({ text, href }: TextWithCopyToClipboardProps) {
+function TextWithCopyToClipboard({ text, prefix, href }: TextWithCopyToClipboardProps) {
   const handleCopyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(text)
@@ -20,6 +21,7 @@ function TextWithCopyToClipboard({ text, href }: TextWithCopyToClipboardProps) {
 
   return (
     <span className="flex items-center gap-2 min-w-0 w-full">
+      {prefix && <span className="text-zinc-400">{prefix}</span>}
       {href ? (
         <TextLink href={href} isTruncated>
           {text}
