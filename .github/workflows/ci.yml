@@ -30,6 +30,9 @@ jobs:
       - name: Run lint and format check
         run: npm run lint
 
+      - name: Run tests
+        run: npm test
+
       - name: Run typecheck and build
         run: npm run build
 
@@ -55,3 +58,15 @@ jobs:
           name: site-dist
           path: dist
           retention-days: 7
+
+  # Call the Filecoin upload workflow
+  # This runs after test completes and reuses the build artifacts
+  filecoin-upload:
+    needs: test
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    uses: ./.github/workflows/filecoin-pin-upload.yml
+    secrets:
+      WALLET_PRIVATE_KEY: ${{ secrets.WALLET_PRIVATE_KEY }}

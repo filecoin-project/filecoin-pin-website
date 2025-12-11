@@ -33,19 +33,20 @@ function CardHeader({ title, status, estimatedTime, withSpinner }: CardHeaderPro
   const showSpinner = isInProgress && withSpinner
 
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        {showSpinner && <Spinner size="sm" />}
-        <Heading tag="h4">{title}</Heading>
-      </div>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          {showSpinner && <Spinner size="sm" />}
+          <Heading tag="h4">{title}</Heading>
+        </div>
 
-      <span aria-live="polite" className="text-sm text-right text-zinc-400" hidden={!isInProgress}>
+        <div hidden={isInProgress}>
+          <BadgeStatus status={status} />
+        </div>
+      </div>
+      <span aria-live="polite" className="text-sm text-zinc-400 text-left" hidden={!isInProgress}>
         {estimatedTime}
       </span>
-
-      <div hidden={isInProgress}>
-        <BadgeStatus status={status} />
-      </div>
     </div>
   )
 }
@@ -56,8 +57,8 @@ function CardContent({ children }: CardContentProps) {
 
 function CardInfoRow({ title, subtitle, children }: CardInfoRowProps) {
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex flex-col gap-2 text-base">
+    <div className="flex items-center justify-between gap-6">
+      <div className="flex flex-col gap-2 text-base min-w-0 flex-1">
         <Heading tag="h4">{title}</Heading>
         <p>{subtitle}</p>
       </div>

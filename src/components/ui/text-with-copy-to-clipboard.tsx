@@ -20,11 +20,17 @@ function TextWithCopyToClipboard({ text, prefix, href }: TextWithCopyToClipboard
   }
 
   return (
-    <span className="flex items-center gap-2">
+    <span className="flex items-center gap-2 min-w-0 w-full">
       {prefix && <span className="text-zinc-400">{prefix}</span>}
-      {href ? <TextLink href={href}>{text}</TextLink> : <span className="text-zinc-400">{text}</span>}
+      {href ? (
+        <TextLink href={href} isTruncated>
+          {text}
+        </TextLink>
+      ) : (
+        <span className="text-zinc-400">{text}</span>
+      )}
       <button
-        className="cursor-pointer text-zinc-400 p-2 -m-2 hover:text-white"
+        className="cursor-pointer text-zinc-400 p-2 -m-2 hover:text-white focus:brand-outline border border-transparent rounded-md flex-shrink-0"
         onClick={handleCopyToClipboard}
         title="Copy to clipboard"
         type="button"

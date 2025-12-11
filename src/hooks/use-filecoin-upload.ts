@@ -1,13 +1,14 @@
 import { createCarFromFile } from 'filecoin-pin/core/unixfs'
 import { checkUploadReadiness, executeUpload } from 'filecoin-pin/core/upload'
 import pino from 'pino'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { storeDataSetId, storeDataSetIdForProvider } from '../lib/local-storage/data-set.ts'
 import type { StepState } from '../types/upload/step.ts'
 import { getDebugParams } from '../utils/debug-params.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 import { cacheIpniResult } from './use-ipni-check.ts'
+import { useWaitableRef } from './use-waitable-ref.ts'
 
 interface UploadState {
   isUploading: boolean
@@ -17,6 +18,14 @@ interface UploadState {
   pieceCid?: string
   transactionHash?: string
 }
+
+// Create a simple logger for the upload
+const logger = pino({
+  level: 'debug',
+  browser: {
+    asObject: true,
+  },
+})
 
 export const INITIAL_STEP_STATES: StepState[] = [
   { step: 'creating-car', progress: 0, status: 'pending' },
@@ -55,15 +64,11 @@ export const INPI_ERROR_MESSAGE =
 export const useFilecoinUpload = () => {
   const { synapse, storageContext, providerInfo, checkIfDatasetExists, wallet } = useFilecoinPinContext()
 
-  // Use refs to track the latest context values, so the upload callback can access them
+  // Use waitable refs to track the latest context values, so the upload callback can access them
   // even if the dataset is initialized after the callback is created
-  const storageContextRef = useRef(storageContext)
-  const providerInfoRef = useRef(providerInfo)
-
-  useEffect(() => {
-    storageContextRef.current = storageContext
-    providerInfoRef.current = providerInfo
-  }, [storageContext, providerInfo])
+  const storageContextRef = useWaitableRef(storageContext)
+  const providerInfoRef = useWaitableRef(providerInfo)
+  const synapseRef = useWaitableRef(synapse)
 
   const [uploadState, setUploadState] = useState<UploadState>({
     isUploading: false,
@@ -89,6 +94,7 @@ export const useFilecoinUpload = () => {
       try {
         // Step 1: Create CAR and upload to Filecoin SP
         updateStepState('creating-car', { status: 'in-progress', progress: 0 })
+        logger.info('Creating CAR from file')
 
         // Create CAR from file with progress tracking
         const carResult = await createCarFromFile(file, {
@@ -106,16 +112,18 @@ export const useFilecoinUpload = () => {
         }))
 
         updateStepState('creating-car', { status: 'completed', progress: 100 })
+        logger.info({ carResult }, 'CAR created')
         // creating the car is done, but its not uploaded yet.
 
         // Step 2: Check readiness
         updateStepState('checking-readiness', { status: 'in-progress', progress: 0 })
-
-        if (!synapse) {
-          throw new Error('Synapse client not initialized. Please check your configuration.')
-        }
+        updateStepState('uploading-car', { status: 'in-progress', progress: 0 })
+        logger.info('Waiting for synapse to be initialized')
+        const synapse = await synapseRef.wait()
+        logger.info('Synapse initialized')
         updateStepState('checking-readiness', { progress: 50 })
 
+        logger.info('Checking upload readiness')
         // validate that we can actually upload the car, passing the autoConfigureAllowances flag to true to automatically configure allowances if needed.
         const readinessCheck = await checkUploadReadiness({
           synapse,
@@ -123,28 +131,22 @@ export const useFilecoinUpload = () => {
           autoConfigureAllowances: true,
         })
 
+        logger.info({ readinessCheck }, 'Upload readiness check')
+
         if (readinessCheck.status === 'blocked') {
           // TODO: show the user the reasons why the upload is blocked, prompt them to fix based on the suggestions.
           throw new Error('Readiness check failed')
         }
 
         updateStepState('checking-readiness', { status: 'completed', progress: 100 })
-
-        // Create a simple logger for the upload
-        const logger = pino({
-          level: 'debug',
-          browser: {
-            asObject: true,
-          },
-        })
-
-        // Get the latest storage context and provider info from refs
-        const currentStorageContext = storageContextRef.current
-        const currentProviderInfo = providerInfoRef.current
-
-        if (!currentStorageContext || !currentProviderInfo) {
-          throw new Error('Storage context not ready. Failed to initialize storage context. Please try again.')
-        }
+        logger.info('Upload readiness check completed')
+        logger.info('Waiting for storage context and provider info to be initialized')
+        // Wait for storage context and provider info to be initialized
+        const [currentStorageContext, currentProviderInfo] = await Promise.all([
+          storageContextRef.wait(),
+          providerInfoRef.wait(),
+        ])
+        logger.info('Storage context and provider info initialized')
 
         // Capture the initial dataset ID (before upload) to detect if it's created during upload
         const initialDataSetId = currentStorageContext.dataSetId
@@ -161,8 +163,7 @@ export const useFilecoinUpload = () => {
         }
 
         // Step 3: Upload CAR to Synapse (Filecoin SP)
-        updateStepState('uploading-car', { status: 'in-progress', progress: 0 })
-
+        logger.info('Uploading CAR to Synapse')
         await executeUpload(synapseService, carResult.carBytes, carResult.rootCid, {
           logger,
           contextId: `upload-${Date.now()}`,
@@ -202,7 +203,7 @@ export const useFilecoinUpload = () => {
 
               case 'onPieceConfirmed': {
                 // Save the dataset ID if it was just created during this upload
-                const currentDataSetId = storageContextRef.current?.dataSetId
+                const currentDataSetId = currentStorageContext.dataSetId
                 if (wallet?.status === 'ready' && currentDataSetId !== undefined && initialDataSetId === undefined) {
                   const debugParams = getDebugParams()
 
@@ -219,7 +220,7 @@ export const useFilecoinUpload = () => {
                 console.debug('[FilecoinUpload] Upload fully completed and confirmed on chain')
                 break
               }
-              case 'ipniAdvertisement.failed': {
+              case 'ipniProviderResults.failed': {
                 // IPNI check failed - mark as error with a helpful message
                 console.warn('[FilecoinUpload] IPNI check failed after max attempts:', event.data.error.message)
                 // Cache the failed result
@@ -231,7 +232,7 @@ export const useFilecoinUpload = () => {
                 })
                 break
               }
-              case 'ipniAdvertisement.complete': {
+              case 'ipniProviderResults.complete': {
                 console.debug('[FilecoinUpload] IPNI check succeeded, marking announcing-cids as completed')
                 // Cache the success result
                 cacheIpniResult(rootCid, 'success')
@@ -243,6 +244,7 @@ export const useFilecoinUpload = () => {
             }
           },
         })
+        logger.info('Upload completed')
 
         // Return the actual CID from the CAR result
         return rootCid

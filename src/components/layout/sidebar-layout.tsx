@@ -1,4 +1,6 @@
+import { Dialog } from '../ui/dialog.tsx'
 import { Logo } from '../ui/logo.tsx'
+import SidebarSteps from './sidebar-steps.tsx'
 
 interface SidebarLayoutProps {
   children: React.ReactNode
@@ -17,13 +19,17 @@ export function SidebarLayout({ children, sidebar, header }: SidebarLayoutProps)
         <Logo />
       </div>
 
+      <div className="fixed bottom-8 right-8 z-50 lg:hidden block">
+        <Dialog content={<SidebarSteps />} />
+      </div>
+
       {/* Sidebar */}
       <aside className="hidden sticky top-0 self-start h-[calc(100vh-var(--spacing-sidebar-height))] overflow-y-auto p-12 py-10 lg:block">
         {sidebar}
       </aside>
 
       {/* Main content */}
-      <main className="overflow-y-auto lg:border-l lg:border-zinc-800 px-10 lg:px-15 py-10">{children}</main>
+      <main className="overflow-y-auto lg:border-l lg:border-zinc-800 px-6 lg:px-15 py-6">{children}</main>
     </div>
   )
 }
