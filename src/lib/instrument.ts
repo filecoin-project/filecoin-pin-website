@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/react'
-import packageLock from '../../package-lock.json' with { type: 'json'} 
+import packageLock from '../../package-lock.json' with { type: 'json' }
 
 Sentry.init({
   dsn: 'https://PH2VByCrdrU9fmwjQe13KuuZ@s1682007.us-east-9.betterstackdata.com/1682007',

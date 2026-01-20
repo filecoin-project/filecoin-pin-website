@@ -18,7 +18,7 @@ if (!root) {
 createRoot(root, {
   // Callback called when an error is thrown and not caught by an ErrorBoundary.
   onUncaughtError: Sentry.reactErrorHandler((error, errorInfo) => {
-    console.warn('Uncaught error', error, errorInfo.componentStack);
+    console.warn('Uncaught error', error, errorInfo.componentStack)
   }),
   // Callback called when React catches an error in an ErrorBoundary.
   onCaughtError: Sentry.reactErrorHandler(),
