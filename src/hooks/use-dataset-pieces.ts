@@ -116,7 +116,7 @@ export const useDatasetPieces = () => {
               transactionHash: piece.metadata.transactionHash || '',
             }
           } catch (err) {
-            console.warn('[DatasetPieces] Failed to fetch metadata for piece:', piece.pieceId, err)
+            console.warn(err)
             // Return minimal data
             return {
               id: `piece-${piece.pieceId}`,
