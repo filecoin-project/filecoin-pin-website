@@ -1,6 +1,7 @@
-import { METADATA_KEYS, PDPServer } from '@filoz/synapse-sdk'
+import { METADATA_KEYS } from '@filoz/synapse-sdk'
 import { useCallback, useEffect, useState } from 'react'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
+import { getDetailedDataSet } from 'filecoin-pin/core/data-set'
 
 export interface DatasetPiece {
   id: string
@@ -70,21 +71,11 @@ export const useDatasetPieces = () => {
         return
       }
 
-      /***
-       * The below warmStorage and pdp server stuff should be migrated into nice API provided by filecoin-pin at some point.
-       * There are PRs in flight to synapse-sdk for things related to this.
-       */
-      // Create the warm storage service
-      // @ts-expect-error - Accessing private _warmStorageService temporarily until SDK is updated
-      const warmStorage = synapse.storage._warmStorageService
-      if (!warmStorage) {
-        throw new Error('[DatasetPieces] Synapse warm storage service is unavailable')
-      }
-
-      // Query the PDP server for the dataset and its pieces
-      const pdpServer = new PDPServer(null, serviceURL)
       console.debug('[DatasetPieces] Fetching pieces for dataSetId:', dataSetId)
-      const dataSetData = await pdpServer.getDataSet(dataSetId)
+      const dataSetData = await getDetailedDataSet(synapse, dataSetId)
+      if (typeof dataSetData.pieces === 'undefined') {
+        throw new Error('[DatasetPieces] Pieces data unavailable')
+      }
 
       console.debug('[DatasetPieces] Found', dataSetData.pieces.length, 'pieces in dataset id: ', dataSetId)
 
@@ -100,14 +91,14 @@ export const useDatasetPieces = () => {
             const pieceId = piece.pieceId
             const pieceCid = piece.pieceCid.toString()
 
-            // Fetch metadata for this piece
-            console.debug('[DatasetPieces] Fetching metadata for piece:', pieceId, 'from dataset:', dataSetId)
-            const metadata = await warmStorage.getPieceMetadata(dataSetId, pieceId)
+            if (typeof piece.metadata === 'undefined') {
+              throw new Error('[DatasetPiece] Piece metadata unavailable')
+            }
 
             // Extract relevant metadata
-            const ipfsRootCid = metadata[METADATA_KEYS.IPFS_ROOT_CID] || ''
-            const fileName = metadata.label || ipfsRootCid || `unknown`
-            const fileSize = metadata.fileSize || 'Unknown'
+            const ipfsRootCid = piece.metadata[METADATA_KEYS.IPFS_ROOT_CID] || ''
+            const fileName = piece.metadata.label || ipfsRootCid || `unknown`
+            const fileSize = piece.metadata.fileSize || 'Unknown'
 
             return {
               id: `piece-${pieceId}`,
@@ -120,12 +111,12 @@ export const useDatasetPieces = () => {
               providerId: providerInfo.id.toString(),
               serviceURL: providerInfo.products?.PDP?.data?.serviceURL ?? '',
               network: wallet?.status === 'ready' ? wallet.data.network : 'calibration',
-              uploadedAt: metadata.uploadedAt ? Number(metadata.uploadedAt) : Date.now(),
+              uploadedAt: piece.metadata.uploadedAt ? Number(piece.metadata.uploadedAt) : Date.now(),
               pieceId,
-              transactionHash: metadata.transactionHash || '',
+              transactionHash: piece.metadata.transactionHash || '',
             }
           } catch (err) {
-            console.warn('[DatasetPieces] Failed to fetch metadata for piece:', piece.pieceId, err)
+            console.warn(err)
             // Return minimal data
             return {
               id: `piece-${piece.pieceId}`,
