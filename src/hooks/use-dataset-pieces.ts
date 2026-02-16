@@ -1,7 +1,7 @@
 import { METADATA_KEYS } from '@filoz/synapse-sdk'
+import { getDetailedDataSet } from 'filecoin-pin/core/data-set'
 import { useCallback, useEffect, useState } from 'react'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
-import { getDetailedDataSet } from 'filecoin-pin/core/data-set'
 
 export interface DatasetPiece {
   id: string
