@@ -7,15 +7,33 @@ import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
 interface ProgressCardProps {
   stepState: StepState
   transactionHash?: string
+  transactionHashes?: string[]
+  confirmedCount?: number
+  expectedCopyCount?: number
 }
 
-function ProgressCard({ stepState, transactionHash }: ProgressCardProps) {
+function ProgressCard({
+  stepState,
+  transactionHash,
+  transactionHashes,
+  confirmedCount,
+  expectedCopyCount,
+}: ProgressCardProps) {
+  const isFinalizing = stepState.step === 'finalizing-transaction'
+  const hashes =
+    transactionHashes && transactionHashes.length > 0 ? transactionHashes : transactionHash ? [transactionHash] : []
+  const showProgress = isFinalizing && expectedCopyCount != null && expectedCopyCount > 1
+
   return (
     <Card.Wrapper>
       <Card.Header
-        estimatedTime={getStepEstimatedTime(stepState.step)}
+        estimatedTime={
+          showProgress && stepState.status === 'in-progress'
+            ? `${confirmedCount ?? 0} of ${expectedCopyCount} transactions confirmed`
+            : getStepEstimatedTime(stepState.step)
+        }
         status={stepState.status}
-        title={getStepLabel(stepState.step)}
+        title={showProgress ? 'Finalizing storage transactions on Calibration testnet' : getStepLabel(stepState.step)}
         withSpinner
       />
 
@@ -23,13 +41,18 @@ function ProgressCard({ stepState, transactionHash }: ProgressCardProps) {
         <Alert message={stepState.error} variant={stepState.step === 'announcing-cids' ? 'warning' : 'error'} />
       )}
 
-      {stepState.step === 'finalizing-transaction' && transactionHash && (
+      {isFinalizing && hashes.length > 0 && (
         <Card.Content>
-          <TextWithCopyToClipboard
-            href={`https://filecoin-testnet.blockscout.com/tx/${transactionHash}`}
-            prefix="tx:"
-            text={transactionHash}
-          />
+          <div className="space-y-1">
+            {hashes.map((hash) => (
+              <TextWithCopyToClipboard
+                href={`https://filecoin-testnet.blockscout.com/tx/${hash}`}
+                key={hash}
+                prefix="tx:"
+                text={hash}
+              />
+            ))}
+          </div>
         </Card.Content>
       )}
     </Card.Wrapper>

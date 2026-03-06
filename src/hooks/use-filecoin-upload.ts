@@ -1,10 +1,9 @@
 import { createCarFromFile } from 'filecoin-pin/core/unixfs'
-import { checkUploadReadiness, executeUpload } from 'filecoin-pin/core/upload'
+import { checkUploadReadiness, executeUpload, type UploadExecutionResult } from 'filecoin-pin/core/upload'
 import pino from 'pino'
 import { useCallback, useState } from 'react'
-import { storeDataSetId, storeDataSetIdForProvider } from '../lib/local-storage/data-set.ts'
+import { storeDataSetId } from '../lib/local-storage/data-set.ts'
 import type { StepState } from '../types/upload/step.ts'
-import { getDebugParams } from '../utils/debug-params.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 import { cacheIpniResult } from './use-ipni-check.ts'
@@ -17,9 +16,14 @@ interface UploadState {
   currentCid?: string
   pieceCid?: string
   transactionHash?: string
+  transactionHashes: string[]
+  confirmedCount: number
+  expectedCopyCount: number
+  copies?: UploadExecutionResult['copies']
+  failures?: UploadExecutionResult['failures']
+  network?: string
 }
 
-// Create a simple logger for the upload
 const logger = pino({
   level: 'debug',
   browser: {
@@ -31,20 +35,8 @@ export const INITIAL_STEP_STATES: StepState[] = [
   { step: 'creating-car', progress: 0, status: 'pending' },
   { step: 'checking-readiness', progress: 0, status: 'pending' },
   { step: 'uploading-car', progress: 0, status: 'pending' },
-  /**
-   * NOT GRANULAR.. only pending, in progress, completed
-   *
-   * This moves from pending to in-progress once the upload is completed.
-   * We then would want to verify that the CID is retrievable via IPNI before
-   * moving to completed.
-   */
+  { step: 'replicating', progress: 0, status: 'pending' },
   { step: 'announcing-cids', progress: 0, status: 'pending' },
-  /**
-   * NOT GRANULAR.. only pending, in progress, completed
-   * This moves from pending to in-progress once the upload is completed.
-   * We then would want to verify that the transaction is on chain before moving to completed.
-   * in-progress->completed is confirmed by the onPieceConfirmed callback to `executeUpload`
-   */
   { step: 'finalizing-transaction', progress: 0, status: 'pending' },
 ]
 
@@ -57,22 +49,18 @@ export const INPI_ERROR_MESSAGE =
  * - Checks upload readiness (allowances, balances)
  * - Executes the upload with progress callbacks
  * - Tracks IPNI availability and on-chain confirmation
- *
- * UI components receive a single `uploadState` object plus `uploadFile`/`resetUpload`
- * actions so they stay dumb and declarative.
  */
 export const useFilecoinUpload = () => {
-  const { synapse, storageContext, providerInfo, checkIfDatasetExists, wallet } = useFilecoinPinContext()
+  const { synapse, wallet, setDataSetId } = useFilecoinPinContext()
 
-  // Use waitable refs to track the latest context values, so the upload callback can access them
-  // even if the dataset is initialized after the callback is created
-  const storageContextRef = useWaitableRef(storageContext)
-  const providerInfoRef = useWaitableRef(providerInfo)
   const synapseRef = useWaitableRef(synapse)
 
   const [uploadState, setUploadState] = useState<UploadState>({
     isUploading: false,
     stepStates: INITIAL_STEP_STATES,
+    transactionHashes: [],
+    confirmedCount: 0,
+    expectedCopyCount: 0,
   })
 
   const updateStepState = useCallback((step: StepState['step'], updates: Partial<StepState>) => {
@@ -89,14 +77,15 @@ export const useFilecoinUpload = () => {
       setUploadState({
         isUploading: true,
         stepStates: INITIAL_STEP_STATES,
+        transactionHashes: [],
+        confirmedCount: 0,
+        expectedCopyCount: 0,
       })
 
       try {
-        // Step 1: Create CAR and upload to Filecoin SP
         updateStepState('creating-car', { status: 'in-progress', progress: 0 })
         logger.info('Creating CAR from file')
 
-        // Create CAR from file with progress tracking
         const carResult = await createCarFromFile(file, {
           onProgress: (bytesProcessed: number, totalBytes: number) => {
             const progressPercent = Math.round((bytesProcessed / totalBytes) * 100)
@@ -104,7 +93,6 @@ export const useFilecoinUpload = () => {
           },
         })
 
-        // Store the CID for IPNI checking
         const rootCid = carResult.rootCid.toString()
         setUploadState((prev) => ({
           ...prev,
@@ -113,9 +101,7 @@ export const useFilecoinUpload = () => {
 
         updateStepState('creating-car', { status: 'completed', progress: 100 })
         logger.info({ carResult }, 'CAR created')
-        // creating the car is done, but its not uploaded yet.
 
-        // Step 2: Check readiness
         updateStepState('checking-readiness', { status: 'in-progress', progress: 0 })
         updateStepState('uploading-car', { status: 'in-progress', progress: 0 })
         logger.info('Waiting for synapse to be initialized')
@@ -124,7 +110,6 @@ export const useFilecoinUpload = () => {
         updateStepState('checking-readiness', { progress: 50 })
 
         logger.info('Checking upload readiness')
-        // validate that we can actually upload the car, passing the autoConfigureAllowances flag to true to automatically configure allowances if needed.
         const readinessCheck = await checkUploadReadiness({
           synapse,
           fileSize: carResult.carBytes.length,
@@ -134,96 +119,102 @@ export const useFilecoinUpload = () => {
         logger.info({ readinessCheck }, 'Upload readiness check')
 
         if (readinessCheck.status === 'blocked') {
-          // TODO: show the user the reasons why the upload is blocked, prompt them to fix based on the suggestions.
           throw new Error('Readiness check failed')
         }
 
         updateStepState('checking-readiness', { status: 'completed', progress: 100 })
         logger.info('Upload readiness check completed')
-        logger.info('Waiting for storage context and provider info to be initialized')
-        // Wait for storage context and provider info to be initialized
-        const [currentStorageContext, currentProviderInfo] = await Promise.all([
-          storageContextRef.wait(),
-          providerInfoRef.wait(),
-        ])
-        logger.info('Storage context and provider info initialized')
 
-        // Capture the initial dataset ID (before upload) to detect if it's created during upload
-        const initialDataSetId = currentStorageContext.dataSetId
-
-        console.debug('[FilecoinUpload] Using storage context from provider:', {
-          providerInfo: currentProviderInfo,
-          dataSetId: initialDataSetId,
-        })
-
-        const synapseService = {
-          storage: currentStorageContext,
-          providerInfo: currentProviderInfo,
-          synapse,
-        }
-
-        // Step 3: Upload CAR to Synapse (Filecoin SP)
         logger.info('Uploading CAR to Synapse')
-        await executeUpload(synapseService, carResult.carBytes, carResult.rootCid, {
+        const result = await executeUpload(synapse, carResult.carBytes, carResult.rootCid, {
           logger,
           contextId: `upload-${Date.now()}`,
-          metadata: {
+          pieceMetadata: {
             ...(metadata ?? {}),
             label: file.name,
             fileSize: formatFileSize(file.size),
           },
           onProgress: (event) => {
             switch (event.type) {
-              case 'onUploadComplete':
-                console.debug('[FilecoinUpload] Upload complete, piece CID:', event.data.pieceCid)
-                // Store the piece CID from the callback
+              case 'onStored':
+                console.debug('[FilecoinUpload] Stored on provider:', String(event.data.providerId))
                 setUploadState((prev) => ({
                   ...prev,
                   pieceCid: event.data.pieceCid.toString(),
                 }))
                 updateStepState('uploading-car', { status: 'completed', progress: 100 })
-                // now the other steps can move to in-progress
+                updateStepState('replicating', { status: 'in-progress', progress: 0 })
+                break
+
+              case 'onCopyComplete':
+                console.debug('[FilecoinUpload] Secondary copy complete on provider:', String(event.data.providerId))
+                updateStepState('replicating', { status: 'completed', progress: 100 })
                 updateStepState('announcing-cids', { status: 'in-progress', progress: 0 })
                 break
 
-              case 'onPieceAdded': {
+              case 'onCopyFailed':
+                console.debug('[FilecoinUpload] Secondary copy failed on provider:', String(event.data.providerId))
+                updateStepState('replicating', {
+                  status: 'error',
+                  progress: 0,
+                  error: 'Secondary copy failed, file stored with reduced redundancy',
+                })
+                updateStepState('announcing-cids', { status: 'in-progress', progress: 0 })
+                break
+
+              case 'onPiecesAdded': {
                 const txHash = event.data.txHash
                 console.debug('[FilecoinUpload] Piece add transaction:', { txHash })
-                // Store the transaction hash if available
-                if (txHash) {
-                  setUploadState((prev) => ({
+                setUploadState((prev) => {
+                  const newHashes = txHash ? [...prev.transactionHashes, txHash] : prev.transactionHashes
+                  const newExpected = prev.expectedCopyCount + 1
+                  // Fallback: complete replicating if still in-progress
+                  const stepStates = prev.stepStates.map((s) =>
+                    s.step === 'replicating' && s.status === 'in-progress'
+                      ? { ...s, status: 'completed' as const, progress: 100 }
+                      : s
+                  )
+                  return {
                     ...prev,
-                    transactionHash: txHash,
-                  }))
-                }
-                // now the finalizing-transaction step can move to in-progress
+                    transactionHash: txHash || prev.transactionHash,
+                    transactionHashes: newHashes,
+                    expectedCopyCount: newExpected,
+                    stepStates,
+                  }
+                })
                 updateStepState('finalizing-transaction', { status: 'in-progress', progress: 0 })
                 break
               }
 
-              case 'onPieceConfirmed': {
-                // Save the dataset ID if it was just created during this upload
-                const currentDataSetId = currentStorageContext.dataSetId
-                if (wallet?.status === 'ready' && currentDataSetId !== undefined && initialDataSetId === undefined) {
-                  const debugParams = getDebugParams()
-
-                  // Only use storeDataSetIdForProvider if user explicitly provided providerId in URL
-                  if (debugParams.providerId !== null) {
-                    storeDataSetIdForProvider(wallet.data.address, currentProviderInfo.id, currentDataSetId)
-                  } else {
-                    storeDataSetId(wallet.data.address, currentDataSetId)
-                  }
+              case 'onPiecesConfirmed': {
+                const confirmedDataSetId = event.data.dataSetId
+                if (wallet?.status === 'ready' && confirmedDataSetId != null) {
+                  storeDataSetId(wallet.data.address, Number(confirmedDataSetId))
+                  setDataSetId(confirmedDataSetId)
                 }
-
-                // Complete finalization
-                updateStepState('finalizing-transaction', { status: 'completed', progress: 100 })
-                console.debug('[FilecoinUpload] Upload fully completed and confirmed on chain')
+                setUploadState((prev) => {
+                  const newConfirmed = prev.confirmedCount + 1
+                  const allConfirmed = newConfirmed >= prev.expectedCopyCount && prev.expectedCopyCount > 0
+                  return {
+                    ...prev,
+                    confirmedCount: newConfirmed,
+                    stepStates: prev.stepStates.map((s) =>
+                      s.step === 'finalizing-transaction'
+                        ? {
+                            ...s,
+                            status: allConfirmed ? ('completed' as const) : ('in-progress' as const),
+                            progress: Math.round((newConfirmed / Math.max(prev.expectedCopyCount, 1)) * 100),
+                          }
+                        : s
+                    ),
+                  }
+                })
+                console.debug('[FilecoinUpload] Upload confirmed on chain, dataSetId:', String(confirmedDataSetId))
                 break
               }
+
               case 'ipniProviderResults.failed': {
-                // IPNI check failed - mark as error with a helpful message
-                console.warn('[FilecoinUpload] IPNI check failed after max attempts:', event.data.error.message)
-                // Cache the failed result
+                console.warn('[FilecoinUpload] IPNI check failed:', event.data.error.message)
                 cacheIpniResult(rootCid, 'failed')
                 updateStepState('announcing-cids', {
                   status: 'error',
@@ -232,13 +223,14 @@ export const useFilecoinUpload = () => {
                 })
                 break
               }
+
               case 'ipniProviderResults.complete': {
-                console.debug('[FilecoinUpload] IPNI check succeeded, marking announcing-cids as completed')
-                // Cache the success result
+                console.debug('[FilecoinUpload] IPNI check succeeded')
                 cacheIpniResult(rootCid, 'success')
                 updateStepState('announcing-cids', { status: 'completed', progress: 100 })
                 break
               }
+
               default:
                 break
             }
@@ -246,7 +238,13 @@ export const useFilecoinUpload = () => {
         })
         logger.info('Upload completed')
 
-        // Return the actual CID from the CAR result
+        setUploadState((prev) => ({
+          ...prev,
+          copies: result.copies,
+          failures: result.failures,
+          network: result.network,
+        }))
+
         return rootCid
       } catch (error) {
         console.error('[FilecoinUpload] Upload failed with error:', error)
@@ -263,16 +261,22 @@ export const useFilecoinUpload = () => {
         }))
       }
     },
-    [updateStepState, synapse, checkIfDatasetExists]
+    [updateStepState, synapse, wallet, setDataSetId]
   )
 
   const resetUpload = useCallback(() => {
     setUploadState({
       isUploading: false,
       stepStates: INITIAL_STEP_STATES,
+      transactionHashes: [],
+      confirmedCount: 0,
+      expectedCopyCount: 0,
       currentCid: undefined,
       pieceCid: undefined,
       transactionHash: undefined,
+      copies: undefined,
+      failures: undefined,
+      network: undefined,
     })
   }, [])
 

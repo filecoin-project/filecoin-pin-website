@@ -19,6 +19,7 @@ const COMPLETED_PROGRESS: StepState[] = [
   { step: 'creating-car', status: 'completed', progress: 100 },
   { step: 'checking-readiness', status: 'completed', progress: 100 },
   { step: 'uploading-car', status: 'completed', progress: 100 },
+  { step: 'replicating', status: 'completed', progress: 100 },
   { step: 'announcing-cids', status: 'completed', progress: 100 },
   { step: 'finalizing-transaction', status: 'completed', progress: 100 },
 ]
@@ -41,7 +42,7 @@ export default function Content() {
   const [activeUploadExpanded, setActiveUploadExpanded] = useState(true)
 
   // Wallet/synapse/dataset status for loading states
-  const { wallet, synapse, dataSet, storageContext } = useFilecoinPinContext()
+  const { wallet, synapse, dataSet } = useFilecoinPinContext()
 
   // Determine if we're still initializing (wallet, synapse, provider)
   // Note: We don't block on isLoadingPieces - users can upload while history loads
@@ -50,7 +51,11 @@ export default function Content() {
   // Check if we've confirmed there's no dataset (wallet/synapse ready, but no dataset found)
   // In this case, we shouldn't show loading because there won't be any pieces/history to load
   const hasConfirmedNoDataset =
-    wallet.status === 'ready' && synapse !== null && dataSet.status === 'idle' && !storageContext && !isInitializing
+    wallet.status === 'ready' &&
+    synapse !== null &&
+    dataSet.status === 'ready' &&
+    dataSet.dataSetId == null &&
+    !isInitializing
 
   // Get loading message based on current state
   const getLoadingMessage = () => {
@@ -99,6 +104,9 @@ export default function Content() {
 
           <UploadStatus
             cid={activeUpload.currentCid}
+            confirmedCount={activeUpload.confirmedCount}
+            copyCount={activeUpload.copies?.length}
+            expectedCopyCount={activeUpload.expectedCopyCount}
             fileName={uploadedFile.file.name}
             fileSize={formatFileSize(uploadedFile.file.size)}
             isExpanded={activeUploadExpanded}
@@ -106,6 +114,7 @@ export default function Content() {
             pieceCid={activeUpload.pieceCid ?? ''}
             stepStates={activeUpload.stepStates}
             transactionHash={activeUpload.transactionHash ?? ''}
+            transactionHashes={activeUpload.transactionHashes}
           />
         </div>
       )}
@@ -122,7 +131,9 @@ export default function Content() {
           {uploadHistory.map((upload) => (
             <UploadStatus
               cid={upload.cid}
+              copyCount={upload.copyCount}
               datasetId={upload.datasetId}
+              datasetIds={upload.datasetIds}
               fileName={upload.fileName}
               fileSize={upload.fileSize}
               isExpanded={isExpanded(upload.id)}

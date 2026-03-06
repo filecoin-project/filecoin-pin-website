@@ -6,7 +6,9 @@ export function getStepLabel(step: StepState['step']) {
     case 'checking-readiness':
       return 'Packing for IPFS'
     case 'uploading-car':
-      return 'Uploading to Filecoin SP'
+      return 'Uploading to Filecoin storage provider'
+    case 'replicating':
+      return 'Replicating across storage providers'
     case 'announcing-cids':
       return 'Announcing IPFS CIDs to IPNI'
     case 'finalizing-transaction':
@@ -16,6 +18,8 @@ export function getStepLabel(step: StepState['step']) {
 
 export function getStepEstimatedTime(step: StepState['step']) {
   switch (step) {
+    case 'replicating':
+      return 'Estimated time: ~10-60 seconds'
     case 'announcing-cids':
       return 'Estimated time: ~30 seconds'
     case 'finalizing-transaction':
