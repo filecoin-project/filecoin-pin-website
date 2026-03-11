@@ -70,6 +70,8 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
     logDebugParams()
   }, [])
 
+  // Proactively check for existing data set when prerequisites are ready,
+  // so we can load upload history before the user interacts
   useEffect(() => {
     if (wallet.status === 'ready' && synapseRef.current && dataSet.status === 'idle') {
       console.debug('[DataSet] Wallet and Synapse ready, proactively checking if data set exists')

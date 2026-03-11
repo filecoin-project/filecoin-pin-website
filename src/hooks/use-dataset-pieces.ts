@@ -97,6 +97,7 @@ export const useDatasetPieces = () => {
               transactionHash: piece.metadata.transactionHash || '',
             }
           } catch (err) {
+            // Return minimal fallback on error
             console.warn(err)
             return {
               id: `piece-${piece.pieceId}`,
@@ -117,6 +118,7 @@ export const useDatasetPieces = () => {
         })
       )
 
+      // Sort by piece ID descending (higher IDs are newer)
       piecesWithMetadata.sort((a, b) => (b.pieceId || 0) - (a.pieceId || 0))
 
       setPieces(piecesWithMetadata)
@@ -143,6 +145,7 @@ export const useDatasetPieces = () => {
     loadPieces()
   }, [loadPieces])
 
+  /** Add a piece to the history without refetching from backend (used after upload completes). */
   const addPiece = useCallback((piece: DatasetPiece) => {
     setPieces((prev) => {
       const updated = [piece, ...prev]

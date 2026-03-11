@@ -11,15 +11,19 @@ interface UploadedFile {
 }
 
 /**
- * Orchestrates the upload lifecycle and state transitions.
+ * Orchestrates the upload lifecycle: active upload -> history transition.
  *
  * Handles:
  * - Starting uploads and tracking uploaded file metadata
- * - Detecting upload completion
- * - Refreshing history when upload completes
+ * - Detecting upload completion and adding to history
  * - Resetting active upload state
  * - Tracking CIDs that should be auto-expanded in history
- * - Auto-clearing upload state on error after timeout
+ *
+ * Does NOT:
+ * - Render UI (that's components' job)
+ * - Store history (that's UploadHistoryContext's job)
+ * - Perform uploads (that's useFilecoinUpload's job)
+ * - Manage expansion state (that's useUploadExpansion's job)
  */
 export function useUploadOrchestration() {
   const { uploadState, uploadFile, resetUpload } = useFilecoinUpload()
@@ -30,7 +34,9 @@ export function useUploadOrchestration() {
   const { isUploadSuccessful } = uploadOutcome
 
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null)
+  // Piece CIDs that should be auto-expanded when they appear in history (consumed by useUploadExpansion)
   const pendingAutoExpandPieceCidsRef = useRef<Set<string>>(new Set())
+  // Key to force DragNDrop remount (clears its internal file state)
   const [dragDropKey, setDragDropKey] = useState(0)
 
   /**
@@ -100,12 +106,14 @@ export function useUploadOrchestration() {
 
       setUploadedFile({ file, cid: '' })
 
+      // Upload in background (not awaited) so handler returns immediately
       uploadFile(file)
         .then((cid) => {
           console.debug('[UploadOrchestration] Upload returned CID:', cid)
           setUploadedFile({ file, cid })
         })
         .catch((error) => {
+          // Keep uploadedFile state so the error shows in the progress view
           console.error('[UploadOrchestration] Upload failed:', error)
         })
     },

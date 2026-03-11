@@ -53,6 +53,7 @@ export const INPI_ERROR_MESSAGE =
 export const useFilecoinUpload = () => {
   const { synapse, wallet, setDataSetId } = useFilecoinPinContext()
 
+  // Waitable ref so the upload callback can access synapse even if initialized after callback creation
   const synapseRef = useWaitableRef(synapse)
 
   const [uploadState, setUploadState] = useState<UploadState>({
