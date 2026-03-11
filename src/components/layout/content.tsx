@@ -104,9 +104,9 @@ export default function Content() {
 
           <UploadStatus
             cid={activeUpload.currentCid}
-            confirmedCount={activeUpload.confirmedCount}
+            confirmedCopies={activeUpload.confirmedCopies}
             copyCount={activeUpload.copies?.length}
-            expectedCopyCount={activeUpload.expectedCopyCount}
+            expectedCopies={activeUpload.expectedCopies}
             fileName={uploadedFile.file.name}
             fileSize={formatFileSize(uploadedFile.file.size)}
             isExpanded={activeUploadExpanded}

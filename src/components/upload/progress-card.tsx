@@ -8,28 +8,28 @@ interface ProgressCardProps {
   stepState: StepState
   transactionHash?: string
   transactionHashes?: string[]
-  confirmedCount?: number
-  expectedCopyCount?: number
+  confirmedCopies?: number
+  expectedCopies?: number
 }
 
 function ProgressCard({
   stepState,
   transactionHash,
   transactionHashes,
-  confirmedCount,
-  expectedCopyCount,
+  confirmedCopies,
+  expectedCopies,
 }: ProgressCardProps) {
   const isFinalizing = stepState.step === 'finalizing-transaction'
   const hashes =
     transactionHashes && transactionHashes.length > 0 ? transactionHashes : transactionHash ? [transactionHash] : []
-  const showProgress = isFinalizing && expectedCopyCount != null && expectedCopyCount > 1
+  const showProgress = isFinalizing && expectedCopies != null && expectedCopies > 1
 
   return (
     <Card.Wrapper>
       <Card.Header
         estimatedTime={
           showProgress && stepState.status === 'in-progress'
-            ? `${confirmedCount ?? 0} of ${expectedCopyCount} transactions confirmed`
+            ? `${confirmedCopies ?? 0} of ${expectedCopies} transactions confirmed`
             : getStepEstimatedTime(stepState.step)
         }
         status={stepState.status}

@@ -7,8 +7,8 @@ interface UploadProgressProps {
   stepStates: Array<StepState>
   transactionHash?: UploadStatusProps['transactionHash']
   transactionHashes?: string[]
-  confirmedCount?: number
-  expectedCopyCount?: number
+  confirmedCopies?: number
+  expectedCopies?: number
   cid?: string
   fileName: string
 }
@@ -16,8 +16,8 @@ function UploadProgress({
   stepStates,
   transactionHash,
   transactionHashes,
-  confirmedCount,
-  expectedCopyCount,
+  confirmedCopies,
+  expectedCopies,
   cid,
   fileName,
 }: UploadProgressProps) {
@@ -27,8 +27,8 @@ function UploadProgress({
       <CarUploadAndIpniCard cid={cid} fileName={fileName} stepStates={stepStates} />
       {finalizingStep && (
         <ProgressCard
-          confirmedCount={confirmedCount}
-          expectedCopyCount={expectedCopyCount}
+          confirmedCopies={confirmedCopies}
+          expectedCopies={expectedCopies}
           stepState={finalizingStep}
           transactionHash={transactionHash}
           transactionHashes={transactionHashes}

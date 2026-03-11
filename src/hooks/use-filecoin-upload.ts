@@ -17,8 +17,8 @@ interface UploadState {
   pieceCid?: string
   transactionHash?: string
   transactionHashes: string[]
-  confirmedCount: number
-  expectedCopyCount: number
+  confirmedCopies: number
+  expectedCopies: number
   copies?: UploadExecutionResult['copies']
   failures?: UploadExecutionResult['failures']
   network?: string
@@ -60,8 +60,8 @@ export const useFilecoinUpload = () => {
     isUploading: false,
     stepStates: INITIAL_STEP_STATES,
     transactionHashes: [],
-    confirmedCount: 0,
-    expectedCopyCount: 0,
+    confirmedCopies: 0,
+    expectedCopies: 0,
   })
 
   const updateStepState = useCallback((step: StepState['step'], updates: Partial<StepState>) => {
@@ -79,8 +79,8 @@ export const useFilecoinUpload = () => {
         isUploading: true,
         stepStates: INITIAL_STEP_STATES,
         transactionHashes: [],
-        confirmedCount: 0,
-        expectedCopyCount: 0,
+        confirmedCopies: 0,
+        expectedCopies: 0,
       })
 
       try {
@@ -168,7 +168,7 @@ export const useFilecoinUpload = () => {
                 console.debug('[FilecoinUpload] Piece add transaction:', { txHash })
                 setUploadState((prev) => {
                   const newHashes = txHash ? [...prev.transactionHashes, txHash] : prev.transactionHashes
-                  const newExpected = prev.expectedCopyCount + 1
+                  const newExpected = prev.expectedCopies + 1
                   // Fallback: complete replicating if still in-progress
                   const stepStates = prev.stepStates.map((s) =>
                     s.step === 'replicating' && s.status === 'in-progress'
@@ -179,7 +179,7 @@ export const useFilecoinUpload = () => {
                     ...prev,
                     transactionHash: txHash || prev.transactionHash,
                     transactionHashes: newHashes,
-                    expectedCopyCount: newExpected,
+                    expectedCopies: newExpected,
                     stepStates,
                   }
                 })
@@ -194,17 +194,17 @@ export const useFilecoinUpload = () => {
                   setDataSetId(confirmedDataSetId)
                 }
                 setUploadState((prev) => {
-                  const newConfirmed = prev.confirmedCount + 1
-                  const allConfirmed = newConfirmed >= prev.expectedCopyCount && prev.expectedCopyCount > 0
+                  const newConfirmed = prev.confirmedCopies + 1
+                  const allConfirmed = newConfirmed >= prev.expectedCopies && prev.expectedCopies > 0
                   return {
                     ...prev,
-                    confirmedCount: newConfirmed,
+                    confirmedCopies: newConfirmed,
                     stepStates: prev.stepStates.map((s) =>
                       s.step === 'finalizing-transaction'
                         ? {
                             ...s,
                             status: allConfirmed ? ('completed' as const) : ('in-progress' as const),
-                            progress: Math.round((newConfirmed / Math.max(prev.expectedCopyCount, 1)) * 100),
+                            progress: Math.round((newConfirmed / Math.max(prev.expectedCopies, 1)) * 100),
                           }
                         : s
                     ),
@@ -270,8 +270,8 @@ export const useFilecoinUpload = () => {
       isUploading: false,
       stepStates: INITIAL_STEP_STATES,
       transactionHashes: [],
-      confirmedCount: 0,
-      expectedCopyCount: 0,
+      confirmedCopies: 0,
+      expectedCopies: 0,
       currentCid: undefined,
       pieceCid: undefined,
       transactionHash: undefined,
