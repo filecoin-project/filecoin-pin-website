@@ -1,4 +1,4 @@
-import { initializeSynapse, type SynapseService } from 'filecoin-pin/core/synapse'
+import { initializeSynapse } from 'filecoin-pin/core/synapse'
 import pino from 'pino'
 
 const logger = pino({
@@ -10,22 +10,18 @@ const logger = pino({
 
 import type { SynapseSetupConfig } from 'filecoin-pin/core/synapse'
 
-let synapsePromise: Promise<SynapseService['synapse']> | null = null
+/**
+ * Synapse type derived from filecoin-pin's re-export to avoid dual-copy
+ * type incompatibility between the website's and filecoin-pin's
+ * @filoz/synapse-sdk installations.
+ */
+export type Synapse = Awaited<ReturnType<typeof initializeSynapse>>
+
+let synapsePromise: Promise<Synapse> | null = null
 
 export const getSynapseClient = (config: SynapseSetupConfig) => {
   if (!synapsePromise) {
-    synapsePromise = initializeSynapse(
-      {
-        ...config,
-        telemetry: {
-          sentrySetTags: {
-            appName: 'filecoinPinWebsite',
-            filecoinPinWebsiteDomain: window.location.origin,
-          },
-        },
-      },
-      logger
-    )
+    synapsePromise = initializeSynapse(config, logger)
   }
 
   return synapsePromise

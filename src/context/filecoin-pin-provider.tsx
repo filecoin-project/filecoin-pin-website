@@ -1,13 +1,9 @@
-import type { SynapseService } from 'filecoin-pin/core/synapse'
 import { createContext, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { type DataSetState, useDataSetManager } from '../hooks/use-data-set-manager.ts'
 import { filecoinPinConfig } from '../lib/filecoin-pin/config.ts'
-import { getSynapseClient } from '../lib/filecoin-pin/synapse.ts'
+import { getSynapseClient, type Synapse } from '../lib/filecoin-pin/synapse.ts'
 import { fetchWalletSnapshot, type WalletSnapshot } from '../lib/filecoin-pin/wallet.ts'
 import { getDebugParams, logDebugParams } from '../utils/debug-params.ts'
-
-type ProviderInfo = SynapseService['providerInfo']
-type StorageContext = NonNullable<ReturnType<typeof useDataSetManager>['storageContext']>
 
 type WalletState =
   | { status: 'idle'; data?: WalletSnapshot }
@@ -18,16 +14,10 @@ type WalletState =
 export interface FilecoinPinContextValue {
   wallet: WalletState
   refreshWallet: () => Promise<void>
-  synapse: SynapseService['synapse'] | null
+  synapse: Synapse | null
   dataSet: DataSetState
-  checkIfDatasetExists: () => Promise<number | null>
-  /**
-   * Storage context for the current data set.
-   * Only available when dataSet.status === 'ready'.
-   * This is created once and reused for all uploads to avoid redundant provider selection.
-   */
-  storageContext: StorageContext | null
-  providerInfo: ProviderInfo | null
+  checkIfDatasetExists: () => Promise<bigint | null>
+  setDataSetId: (id: bigint) => void
 }
 
 export const FilecoinPinContext = createContext<FilecoinPinContextValue | undefined>(undefined)
@@ -36,14 +26,12 @@ const initialWalletState: WalletState = { status: 'idle' }
 
 export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
   const [wallet, setWallet] = useState<WalletState>(initialWalletState)
-  const synapseRef = useRef<SynapseService['synapse'] | null>(null)
+  const synapseRef = useRef<Synapse | null>(null)
   const config = filecoinPinConfig
 
-  // Parse debug parameters from URL (for testing/debugging)
   const debugParams = useMemo(() => getDebugParams(), [])
 
-  // Use the data set manager hook
-  const { dataSet, checkIfDatasetExists, storageContext, providerInfo } = useDataSetManager({
+  const { dataSet, checkIfDatasetExists, setDataSetId } = useDataSetManager({
     synapse: synapseRef.current,
     walletAddress: wallet.status === 'ready' ? wallet.data.address : null,
     debugParams,
@@ -58,15 +46,6 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
     try {
       const synapse = await getSynapseClient(config)
       synapseRef.current = synapse
-
-      // Expose debugDump method on window object
-      window.debugDump = () => {
-        if (synapse.telemetry?.debugDump) {
-          console.debug(JSON.stringify(synapse.telemetry.debugDump(), null, 2))
-        } else {
-          console.warn('debugDump method not found on synapse.telemetry')
-        }
-      }
 
       const snapshot = await fetchWalletSnapshot(synapse)
       setWallet({
@@ -87,18 +66,12 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
     void refreshWallet()
   }, [refreshWallet])
 
-  // Log debug parameters if any are set
   useEffect(() => {
     logDebugParams()
   }, [])
 
-  /**
-   * Proactively check if data set exists when wallet and synapse are ready
-   * We need to check for an existing data set in order to load previously uploaded pieces.
-   *
-   * Keep in mind that in the regular filecoin-pin flow, there is a single user with a single wallet, and synapse/filecoin-pin will select a dataset for you automatically.
-   * Users usually don't need to worry about this, but for our demo, we want to check for existing data sets proactively.
-   */
+  // Proactively check for existing data set when prerequisites are ready,
+  // so we can load upload history before the user interacts
   useEffect(() => {
     if (wallet.status === 'ready' && synapseRef.current && dataSet.status === 'idle') {
       console.debug('[DataSet] Wallet and Synapse ready, proactively checking if data set exists')
@@ -113,10 +86,9 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
       synapse: synapseRef.current,
       dataSet,
       checkIfDatasetExists,
-      storageContext,
-      providerInfo,
+      setDataSetId,
     }),
-    [wallet, refreshWallet, dataSet, checkIfDatasetExists, storageContext, providerInfo]
+    [wallet, refreshWallet, dataSet, checkIfDatasetExists, setDataSetId]
   )
 
   return <FilecoinPinContext.Provider value={value}>{children}</FilecoinPinContext.Provider>

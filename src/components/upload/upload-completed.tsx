@@ -6,16 +6,14 @@ import {
   getIpfsGatewayDownloadLink,
   getIpfsGatewayRenderLink,
   getPieceExplorerLink,
-  getProviderExplorerLink,
-  getSpCarDownloadLink,
 } from '@/utils/links.ts'
+import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { useIpniCheck } from '../../hooks/use-ipni-check.ts'
-import { useProviderInfo } from '../../hooks/use-provider-info.ts'
 import { Alert } from '../ui/alert.tsx'
+import { BadgeReplication } from '../ui/badge-replication.tsx'
 import { ButtonLink } from '../ui/button/button-link.tsx'
 import { Card } from '../ui/card.tsx'
 import { DownloadButton } from '../ui/download-button.tsx'
-import { TextLink } from '../ui/link.tsx'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
 import type { UploadStatusProps } from './upload-status.tsx'
 
@@ -24,22 +22,19 @@ interface UploadCompletedProps {
   fileName: UploadStatusProps['fileName']
   pieceCid?: UploadStatusProps['pieceCid']
   datasetId?: UploadStatusProps['datasetId']
+  datasetIds?: UploadStatusProps['datasetIds']
+  copyCount?: number
 }
 
-function UploadCompleted({ cid, fileName, pieceCid, datasetId }: UploadCompletedProps) {
-  // Get provider info from context via hook
-  const providerInfo = useProviderInfo()
+function UploadCompleted({ cid, fileName, pieceCid, datasetId, datasetIds, copyCount }: UploadCompletedProps) {
+  const { dataSet } = useFilecoinPinContext()
   const [hasIpniFailure, setHasIpniFailure] = useState(false)
   const waitForIpniProviderResultsOptions = useMemo<WaitForIpniProviderResultsOptions>(() => {
-    const result: WaitForIpniProviderResultsOptions = {
+    return {
       maxAttempts: 1,
       expectedProviders: [],
     }
-    if (providerInfo?.providerInfo != null) {
-      result.expectedProviders = [providerInfo.providerInfo]
-    }
-    return result
-  }, [providerInfo?.providerInfo])
+  }, [])
 
   const shouldPerformIpniCheck = useMemo(() => {
     return (
@@ -48,9 +43,6 @@ function UploadCompleted({ cid, fileName, pieceCid, datasetId }: UploadCompleted
     )
   }, [waitForIpniProviderResultsOptions.expectedProviders])
 
-  /**
-   * Get the status of the IPNI check to change how we render the completed state.
-   */
   useIpniCheck({
     cid: cid || null,
     isActive: shouldPerformIpniCheck,
@@ -60,19 +52,11 @@ function UploadCompleted({ cid, fileName, pieceCid, datasetId }: UploadCompleted
     },
     waitForIpniProviderResultsOptions,
   })
-  // TODO: fix types, datasetId should never be undefined here...
-  const datasetIdOrDefault = datasetId || providerInfo?.datasetId || ''
 
-  // If provider info is not ready, show a loading state
-  if (!providerInfo) {
-    return (
-      <Card.Wrapper>
-        <Card.InfoRow subtitle="Loading provider information..." title="Upload Complete" />
-      </Card.Wrapper>
-    )
-  }
-
-  const { providerAddress, providerName, serviceURL } = providerInfo
+  const datasetIdOrDefault =
+    datasetId || (dataSet.status === 'ready' && dataSet.dataSetId ? String(dataSet.dataSetId) : '')
+  const resolvedDatasetIds =
+    datasetIds && datasetIds.length > 0 ? datasetIds : datasetIdOrDefault ? [datasetIdOrDefault] : []
 
   return (
     <>
@@ -97,19 +81,35 @@ function UploadCompleted({ cid, fileName, pieceCid, datasetId }: UploadCompleted
           <Card.InfoRow
             subtitle={<TextWithCopyToClipboard href={getPieceExplorerLink(pieceCid)} text={pieceCid} />}
             title="Filecoin Piece CID"
-          >
-            <DownloadButton href={getSpCarDownloadLink(cid, serviceURL, fileName)} />
-          </Card.InfoRow>
+          />
         </Card.Wrapper>
       )}
 
-      <Card.Wrapper>
-        <Card.InfoRow
-          subtitle={<TextLink href={getProviderExplorerLink(providerAddress)}>{providerName}</TextLink>}
-          title="Provider"
-        ></Card.InfoRow>
-        <ButtonLink href={getDatasetExplorerLink(datasetIdOrDefault)}>View proofs</ButtonLink>
-      </Card.Wrapper>
+      {(resolvedDatasetIds.length > 0 || datasetIdOrDefault) && (
+        <Card.Wrapper>
+          <Card.InfoRow
+            subtitle={
+              resolvedDatasetIds.length > 1
+                ? `Data Sets ${resolvedDatasetIds.join(', ')}`
+                : `Data Set ${datasetIdOrDefault}`
+            }
+            title="Storage"
+          >
+            {copyCount != null && copyCount > 0 && <BadgeReplication copyCount={copyCount} />}
+          </Card.InfoRow>
+          {resolvedDatasetIds.length > 1 ? (
+            <div className="flex gap-2">
+              {resolvedDatasetIds.map((id) => (
+                <ButtonLink href={getDatasetExplorerLink(id)} key={id}>
+                  View proofs (Data Set {id})
+                </ButtonLink>
+              ))}
+            </div>
+          ) : (
+            datasetIdOrDefault && <ButtonLink href={getDatasetExplorerLink(datasetIdOrDefault)}>View proofs</ButtonLink>
+          )}
+        </Card.Wrapper>
+      )}
     </>
   )
 }

@@ -17,6 +17,11 @@ export interface UploadStatusProps {
   transactionHash: DatasetPiece['transactionHash']
   network?: DatasetPiece['network']
   datasetId?: DatasetPiece['datasetId']
+  copyCount?: number
+  datasetIds?: DatasetPiece['datasetIds']
+  transactionHashes?: string[]
+  confirmedCopies?: number
+  expectedCopies?: number
 }
 
 function UploadStatus({
@@ -29,6 +34,11 @@ function UploadStatus({
   datasetId,
   pieceCid,
   transactionHash,
+  copyCount,
+  datasetIds,
+  transactionHashes,
+  confirmedCopies,
+  expectedCopies,
 }: UploadStatusProps) {
   // Use the upload progress hook to calculate all progress-related values
   const { uploadOutcome, uploadBadgeStatus } = useUploadProgress({ stepStates, cid })
@@ -50,9 +60,24 @@ function UploadStatus({
 
         <AccordionContent className="space-y-6 mt-6">
           {isUploadSuccessful && cid ? (
-            <UploadCompleted cid={cid} datasetId={datasetId} fileName={fileName} pieceCid={pieceCid} />
+            <UploadCompleted
+              cid={cid}
+              copyCount={copyCount}
+              datasetId={datasetId}
+              datasetIds={datasetIds}
+              fileName={fileName}
+              pieceCid={pieceCid}
+            />
           ) : (
-            <UploadProgress cid={cid} fileName={fileName} stepStates={stepStates} transactionHash={transactionHash} />
+            <UploadProgress
+              cid={cid}
+              confirmedCopies={confirmedCopies}
+              expectedCopies={expectedCopies}
+              fileName={fileName}
+              stepStates={stepStates}
+              transactionHash={transactionHash}
+              transactionHashes={transactionHashes}
+            />
           )}
         </AccordionContent>
       </AccordionItem>
