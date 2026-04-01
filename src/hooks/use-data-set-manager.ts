@@ -141,10 +141,10 @@ export function useDataSetManager({
       const effectiveDataSetId = urlDataSetId ?? storedDataSetId
       if (urlDataSetId !== null) {
         console.debug('[DataSet] Using data set ID from URL override:', urlDataSetId)
-      } else if (storedDataSetId !== null) {
-        console.debug('[DataSet] Using data set ID from localStorage:', storedDataSetId)
-      } else {
+      } else if (storedDataSetId === null) {
         console.debug('[DataSet] No data set ID overrides found, will create or resolve automatically')
+      } else {
+        console.debug('[DataSet] Using data set ID from localStorage:', storedDataSetId)
       }
 
       // Need to create storage context (either for existing or new data set)
