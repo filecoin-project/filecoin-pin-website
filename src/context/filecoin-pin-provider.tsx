@@ -49,6 +49,7 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
     debugParams,
   })
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `config` can change
   const refreshWallet = useCallback(async () => {
     setWallet((prev) => ({
       status: 'loading',

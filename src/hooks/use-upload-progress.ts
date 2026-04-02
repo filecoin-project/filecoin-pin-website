@@ -67,5 +67,5 @@ export function useUploadProgress({ stepStates, cid }: useUploadProgressProps): 
       },
       uploadBadgeStatus,
     }
-  }, [stepStates, cid])
+  }, [stepStates, cid, announcingCidsStep, finalizingStep])
 }

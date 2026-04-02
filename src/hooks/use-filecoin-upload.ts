@@ -62,7 +62,7 @@ export const INPI_ERROR_MESSAGE =
  * actions so they stay dumb and declarative.
  */
 export const useFilecoinUpload = () => {
-  const { synapse, storageContext, providerInfo, checkIfDatasetExists, wallet } = useFilecoinPinContext()
+  const { synapse, storageContext, providerInfo, wallet } = useFilecoinPinContext()
 
   // Use waitable refs to track the latest context values, so the upload callback can access them
   // even if the dataset is initialized after the callback is created
@@ -208,10 +208,10 @@ export const useFilecoinUpload = () => {
                   const debugParams = getDebugParams()
 
                   // Only use storeDataSetIdForProvider if user explicitly provided providerId in URL
-                  if (debugParams.providerId !== null) {
-                    storeDataSetIdForProvider(wallet.data.address, currentProviderInfo.id, currentDataSetId)
-                  } else {
+                  if (debugParams.providerId === null) {
                     storeDataSetId(wallet.data.address, currentDataSetId)
+                  } else {
+                    storeDataSetIdForProvider(wallet.data.address, currentProviderInfo.id, currentDataSetId)
                   }
                 }
 
@@ -263,7 +263,7 @@ export const useFilecoinUpload = () => {
         }))
       }
     },
-    [updateStepState, synapse, checkIfDatasetExists]
+    [updateStepState, providerInfoRef.wait, storageContextRef.wait, synapseRef.wait, wallet.data, wallet.status]
   )
 
   const resetUpload = useCallback(() => {

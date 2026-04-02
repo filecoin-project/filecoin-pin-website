@@ -149,7 +149,7 @@ export const useDatasetPieces = () => {
       setIsLoading(false)
       setHasLoaded(true)
     }
-  }, [dataSetId, providerInfo, wallet, synapse])
+  }, [dataSetId, providerInfo, wallet, synapse, storageContext])
 
   // Load pieces when storage context is ready
   useEffect(() => {
@@ -159,7 +159,7 @@ export const useDatasetPieces = () => {
       setPieces([])
       setHasLoaded(false)
     }
-  }, [loadPieces])
+  }, [loadPieces, storageContext, providerInfo])
 
   const refreshPieces = useCallback(() => {
     loadPieces()
