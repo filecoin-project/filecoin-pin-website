@@ -208,10 +208,10 @@ export const useFilecoinUpload = () => {
                   const debugParams = getDebugParams()
 
                   // Only use storeDataSetIdForProvider if user explicitly provided providerId in URL
-                  if (debugParams.providerId !== null) {
-                    storeDataSetIdForProvider(wallet.data.address, currentProviderInfo.id, currentDataSetId)
-                  } else {
+                  if (debugParams.providerId === null) {
                     storeDataSetId(wallet.data.address, currentDataSetId)
+                  } else {
+                    storeDataSetIdForProvider(wallet.data.address, currentProviderInfo.id, currentDataSetId)
                   }
                 }
 
