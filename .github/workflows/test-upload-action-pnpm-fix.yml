@@ -17,6 +17,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Diagnose wallet secret flow
+        env:
+          KEY: ${{ secrets.WALLET_PRIVATE_KEY }}
+        run: |
+          echo "secret-len: ${#KEY}"
+          # Expected 66 (0x + 64 hex). 0 = secret not flowing. Anything else = malformed.
+
       - name: Build static dist
         env:
           RUN_ID: ${{ github.run_id }}
