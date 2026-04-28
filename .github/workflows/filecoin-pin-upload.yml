@@ -25,13 +25,14 @@ jobs:
           name: site-dist
           path: dist
 
-      # Upload to Filecoin using the downloaded build artifacts
-      # The action will create a CAR file from the downloaded artifacts and upload to Filecoin
+      # Upload to Filecoin via ipfs-deploy-action fork (testing filecoin-pin CLI integration)
       - name: Upload to Filecoin
-        uses: filecoin-project/filecoin-pin/upload-action@master
+        uses: SgtPooki/ipfs-deploy-action@feat/filecoin-support
         with:
-          path: dist  # Path to the downloaded build artifacts
-          walletPrivateKey: ${{ secrets.WALLET_PRIVATE_KEY }}
-          network: calibration
-          minStorageDays: "30"
-          filecoinPayBalanceLimit: "0.25"
+          path-to-deploy: dist
+          filecoin-wallet-private-key: ${{ secrets.WALLET_PRIVATE_KEY }}
+          filecoin-network: calibration
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          set-github-status: 'false'
+          set-pr-comment: 'false'
+          upload-car-artifact: 'false'
