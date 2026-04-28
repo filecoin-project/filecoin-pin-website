@@ -150,7 +150,16 @@ async function getApprovedProviderInfo(
 ): Promise<ProviderInfo> {
   let providerInfo: ProviderInfo | null = null
 
-  if (providerId != null) {
+  if (providerId == null) {
+    // otherwise, get all approved provider ids and randomly select one.
+    const approvedProviderIds = await warmStorage.getApprovedProviderIds()
+    if (approvedProviderIds.length === 0) {
+      throw new Error('No approved storage providers available for new data set creation')
+    }
+    // select a random approved provider id
+    const randomApprovedProviderId = approvedProviderIds[Math.floor(Math.random() * approvedProviderIds.length)]
+    providerInfo = await spRegistry.getProvider(randomApprovedProviderId)
+  } else {
     // if given a providerId, check if it is approved and log a warning if it's not an approved provider.
     const isProviderApproved = await warmStorage.isProviderIdApproved(providerId)
     if (!isProviderApproved) {
@@ -160,15 +169,6 @@ async function getApprovedProviderInfo(
       )
     }
     providerInfo = await spRegistry.getProvider(providerId)
-  } else {
-    // otherwise, get all approved provider ids and randomly select one.
-    const approvedProviderIds = await warmStorage.getApprovedProviderIds()
-    if (approvedProviderIds.length === 0) {
-      throw new Error('No approved storage providers available for new data set creation')
-    }
-    // select a random approved provider id
-    const randomApprovedProviderId = approvedProviderIds[Math.floor(Math.random() * approvedProviderIds.length)]
-    providerInfo = await spRegistry.getProvider(randomApprovedProviderId)
   }
 
   if (providerInfo == null) {
