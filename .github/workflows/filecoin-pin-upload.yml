@@ -18,20 +18,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Download the build artifacts from the calling workflow
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          name: site-dist
-          path: dist
+          node-version: 'lts/*'
+          cache: 'npm'
 
-      # Upload to Filecoin using the downloaded build artifacts
-      # The action will create a CAR file from the downloaded artifacts and upload to Filecoin
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build site
+        run: npm run build
+
+      # Upload to Filecoin via ipfs-deploy-action fork (testing filecoin-pin CLI integration)
       - name: Upload to Filecoin
-        uses: filecoin-project/filecoin-pin/upload-action@master
+        uses: SgtPooki/ipfs-deploy-action@feat/filecoin-support
         with:
-          path: dist  # Path to the downloaded build artifacts
-          walletPrivateKey: ${{ secrets.WALLET_PRIVATE_KEY }}
-          network: calibration
-          minStorageDays: "30"
-          filecoinPayBalanceLimit: "0.25"
+          path-to-deploy: dist
+          filecoin-wallet-private-key: ${{ secrets.WALLET_PRIVATE_KEY }}
+          filecoin-network: calibration
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          set-github-status: 'false'
+          set-pr-comment: 'false'
+          upload-car-artifact: 'false'
