@@ -263,7 +263,14 @@ export const useFilecoinUpload = () => {
         }))
       }
     },
-    [updateStepState, providerInfoRef.wait, synapseRef.wait, storageContextRef.wait, wallet?.status, wallet?.data?.address]
+    [
+      updateStepState,
+      providerInfoRef.wait,
+      synapseRef.wait,
+      storageContextRef.wait,
+      wallet?.status,
+      wallet?.data?.address,
+    ]
   )
 
   const resetUpload = useCallback(() => {

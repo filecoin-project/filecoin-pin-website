@@ -22,12 +22,12 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@/components': path.resolve(__dirname, './src/components'),
-      '@/context': path.resolve(__dirname, './src/context'),
-      '@/hooks': path.resolve(__dirname, './src/hooks'),
-      '@/lib': path.resolve(__dirname, './src/lib'),
-      '@/utils': path.resolve(__dirname, './src/utils'),
+      '@': path.resolve(dirname, './src'),
+      '@/components': path.resolve(dirname, './src/components'),
+      '@/context': path.resolve(dirname, './src/context'),
+      '@/hooks': path.resolve(dirname, './src/hooks'),
+      '@/lib': path.resolve(dirname, './src/lib'),
+      '@/utils': path.resolve(dirname, './src/utils'),
       process: 'process/browser',
       buffer: 'buffer',
     },
