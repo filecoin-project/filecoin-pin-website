@@ -1,0 +1,40 @@
+name: Test upload-action pnpm fix
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/test-upload-action-pnpm-fix.yml
+  workflow_dispatch:
+
+jobs:
+  test-upload:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build static dist
+        env:
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          mkdir -p dist
+          {
+            echo '<!doctype html>'
+            echo '<html><head><meta charset="utf-8"><title>upload-action pnpm fix test</title></head>'
+            echo "<body><h1>upload-action pnpm cache fix test</h1><p>Run: ${RUN_ID}-${RUN_ATTEMPT}</p></body></html>"
+          } > dist/index.html
+          ls -la dist
+
+      - name: Upload to Filecoin (PR fix branch)
+        uses: filecoin-project/filecoin-pin/upload-action@fix/upload-action-pnpm-cache
+        with:
+          path: dist
+          walletPrivateKey: ${{ secrets.WALLET_PRIVATE_KEY }}
+          network: calibration
+          minStorageDays: "30"
+          filecoinPayBalanceLimit: "0.25"
