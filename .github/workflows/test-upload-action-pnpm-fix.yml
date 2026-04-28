@@ -31,6 +31,10 @@ jobs:
           ls -la dist
 
       - name: Upload to Filecoin (PR fix branch)
+        # Treat upload failures as non-fatal: this job exists to exercise the
+        # pnpm cache restore/save path, not to validate the upload itself.
+        # Without this the job fails before actions/cache saves the store.
+        continue-on-error: true
         uses: filecoin-project/filecoin-pin/upload-action@fix/upload-action-pnpm-cache
         with:
           path: dist
