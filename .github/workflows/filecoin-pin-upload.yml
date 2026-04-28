@@ -18,12 +18,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Download the build artifacts from the calling workflow
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          name: site-dist
-          path: dist
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build site
+        run: npm run build
 
       # Upload to Filecoin via ipfs-deploy-action fork (testing filecoin-pin CLI integration)
       - name: Upload to Filecoin

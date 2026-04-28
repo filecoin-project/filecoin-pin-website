@@ -62,7 +62,6 @@ jobs:
   # Call the Filecoin upload workflow
   # This runs after test completes and reuses the build artifacts
   filecoin-upload:
-    needs: test
     permissions:
       contents: read
       checks: write
