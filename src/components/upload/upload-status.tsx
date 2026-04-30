@@ -19,9 +19,13 @@ export interface UploadStatusProps {
   datasetId?: DatasetPiece['datasetId']
   copyCount?: number
   datasetIds?: DatasetPiece['datasetIds']
+  providerIds?: DatasetPiece['providerIds']
+  providerNames?: DatasetPiece['providerNames']
+  serviceURLs?: DatasetPiece['serviceURLs']
   transactionHashes?: string[]
   confirmedCopies?: number
   expectedCopies?: number
+  uploadNetwork?: string
 }
 
 function UploadStatus({
@@ -36,9 +40,14 @@ function UploadStatus({
   transactionHash,
   copyCount,
   datasetIds,
+  providerIds,
+  providerNames,
+  serviceURLs,
   transactionHashes,
   confirmedCopies,
   expectedCopies,
+  uploadNetwork,
+  network,
 }: UploadStatusProps) {
   // Use the upload progress hook to calculate all progress-related values
   const { uploadOutcome, uploadBadgeStatus } = useUploadProgress({ stepStates, cid })
@@ -67,6 +76,9 @@ function UploadStatus({
               datasetIds={datasetIds}
               fileName={fileName}
               pieceCid={pieceCid}
+              providerIds={providerIds}
+              providerNames={providerNames}
+              serviceURLs={serviceURLs}
             />
           ) : (
             <UploadProgress
@@ -74,6 +86,7 @@ function UploadStatus({
               confirmedCopies={confirmedCopies}
               expectedCopies={expectedCopies}
               fileName={fileName}
+              network={uploadNetwork ?? network}
               stepStates={stepStates}
               transactionHash={transactionHash}
               transactionHashes={transactionHashes}

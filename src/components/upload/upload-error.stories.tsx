@@ -34,6 +34,7 @@ const createMockOrchestration = (
       transactionHashes: [],
       confirmedCopies: 0,
       expectedCopies: 0,
+      providersById: {},
       currentCid: undefined,
       pieceCid: undefined,
       transactionHash: undefined,

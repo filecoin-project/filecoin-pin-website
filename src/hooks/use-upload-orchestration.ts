@@ -62,22 +62,32 @@ export function useUploadOrchestration() {
 
     pendingAutoExpandPieceCidsRef.current = new Set(pendingAutoExpandPieceCidsRef.current).add(uploadState.pieceCid)
 
+    const providersById = uploadState.providersById
+    const orderedCopies = [primary, ...copies.filter((c) => c.role !== 'primary')]
+    const providerNameFor = (providerId: bigint | string) => providersById[String(providerId)]?.name ?? ''
+    const serviceUrlFor = (c: (typeof copies)[number]) =>
+      providersById[String(c.providerId)]?.pdp?.serviceURL ?? c.retrievalUrl ?? ''
+
     const newPiece = {
       id: `piece-${uploadState.pieceCid}`,
       fileName: uploadedFile.file.name,
       fileSize: formatFileSize(uploadedFile.file.size),
       cid: uploadState.currentCid || '',
       pieceCid: uploadState.pieceCid,
-      providerName: '',
+      providerName: providerNameFor(primary.providerId),
       datasetId: String(primary.dataSetId),
       providerId: String(primary.providerId),
-      serviceURL: primary.retrievalUrl || '',
-      transactionHash: uploadState.transactionHash || '',
+      serviceURL: serviceUrlFor(primary),
+      transactionHash: uploadState.transactionHashes[0] || uploadState.transactionHash || '',
       network: uploadState.network || (wallet?.status === 'ready' ? wallet.data.network : 'calibration'),
       uploadedAt: Date.now(),
       pieceId: Number(primary.pieceId),
       copyCount: copies.length,
-      datasetIds: copies.map((c) => String(c.dataSetId)),
+      datasetIds: orderedCopies.map((c) => String(c.dataSetId)),
+      providerIds: orderedCopies.map((c) => String(c.providerId)),
+      providerNames: orderedCopies.map((c) => providerNameFor(c.providerId)),
+      serviceURLs: orderedCopies.map(serviceUrlFor),
+      transactionHashes: uploadState.transactionHashes.slice(),
     }
 
     addUpload(newPiece)
@@ -92,6 +102,8 @@ export function useUploadOrchestration() {
     uploadState.transactionHash,
     uploadState.copies,
     uploadState.network,
+    uploadState.providersById,
+    uploadState.transactionHashes,
     uploadedFile,
     wallet,
     addUpload,

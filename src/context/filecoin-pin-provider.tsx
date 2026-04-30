@@ -16,8 +16,8 @@ export interface FilecoinPinContextValue {
   refreshWallet: () => Promise<void>
   synapse: Synapse | null
   dataSet: DataSetState
-  checkIfDatasetExists: () => Promise<bigint | null>
-  setDataSetId: (id: bigint) => void
+  checkIfDatasetExists: () => Promise<bigint[]>
+  addDataSetId: (id: bigint) => void
 }
 
 export const FilecoinPinContext = createContext<FilecoinPinContextValue | undefined>(undefined)
@@ -31,7 +31,7 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
 
   const debugParams = useMemo(() => getDebugParams(), [])
 
-  const { dataSet, checkIfDatasetExists, setDataSetId } = useDataSetManager({
+  const { dataSet, checkIfDatasetExists, addDataSetId } = useDataSetManager({
     synapse: synapseRef.current,
     walletAddress: wallet.status === 'ready' ? wallet.data.address : null,
     debugParams,
@@ -86,9 +86,9 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
       synapse: synapseRef.current,
       dataSet,
       checkIfDatasetExists,
-      setDataSetId,
+      addDataSetId,
     }),
-    [wallet, refreshWallet, dataSet, checkIfDatasetExists, setDataSetId]
+    [wallet, refreshWallet, dataSet, checkIfDatasetExists, addDataSetId]
   )
 
   return <FilecoinPinContext.Provider value={value}>{children}</FilecoinPinContext.Provider>

@@ -1,8 +1,9 @@
+import type { PDPProvider } from '@filoz/synapse-sdk'
 import { createCarFromFile } from 'filecoin-pin/core/unixfs'
 import { checkUploadReadiness, executeUpload, type UploadExecutionResult } from 'filecoin-pin/core/upload'
 import pino from 'pino'
 import { useCallback, useState } from 'react'
-import { storeDataSetId } from '../lib/local-storage/data-set.ts'
+import { addStoredDataSetId } from '../lib/local-storage/data-set.ts'
 import type { StepState } from '../types/upload/step.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
@@ -20,6 +21,8 @@ interface UploadState {
   confirmedCopies: number
   expectedCopies: number
   copies?: UploadExecutionResult['copies']
+  /** Provider info collected during upload, keyed by providerId.toString(). */
+  providersById: Record<string, PDPProvider>
   network?: string
 }
 
@@ -50,7 +53,7 @@ export const INPI_ERROR_MESSAGE =
  * - Tracks IPNI availability and on-chain confirmation
  */
 export const useFilecoinUpload = () => {
-  const { synapse, wallet, setDataSetId } = useFilecoinPinContext()
+  const { synapse, wallet, addDataSetId } = useFilecoinPinContext()
 
   // Waitable ref so the upload callback can access synapse even if initialized after callback creation
   const synapseRef = useWaitableRef(synapse)
@@ -61,6 +64,7 @@ export const useFilecoinUpload = () => {
     transactionHashes: [],
     confirmedCopies: 0,
     expectedCopies: 0,
+    providersById: {},
   })
 
   const updateStepState = useCallback((step: StepState['step'], updates: Partial<StepState>) => {
@@ -80,6 +84,7 @@ export const useFilecoinUpload = () => {
         transactionHashes: [],
         confirmedCopies: 0,
         expectedCopies: 0,
+        providersById: {},
       })
 
       try {
@@ -136,6 +141,24 @@ export const useFilecoinUpload = () => {
           },
           onProgress: (event) => {
             switch (event.type) {
+              case 'onProviderSelected': {
+                const provider = event.data.provider
+                setUploadState((prev) => ({
+                  ...prev,
+                  providersById: { ...prev.providersById, [String(provider.id)]: provider },
+                }))
+                break
+              }
+
+              case 'onDataSetResolved': {
+                const provider = event.data.provider
+                setUploadState((prev) => ({
+                  ...prev,
+                  providersById: { ...prev.providersById, [String(provider.id)]: provider },
+                }))
+                break
+              }
+
               case 'onStored':
                 console.debug('[FilecoinUpload] Stored on provider:', String(event.data.providerId))
                 setUploadState((prev) => ({
@@ -189,8 +212,8 @@ export const useFilecoinUpload = () => {
               case 'onPiecesConfirmed': {
                 const confirmedDataSetId = event.data.dataSetId
                 if (wallet?.status === 'ready' && confirmedDataSetId != null) {
-                  storeDataSetId(wallet.data.address, Number(confirmedDataSetId))
-                  setDataSetId(confirmedDataSetId)
+                  addStoredDataSetId(wallet.data.address, Number(confirmedDataSetId))
+                  addDataSetId(confirmedDataSetId)
                 }
                 setUploadState((prev) => {
                   const newConfirmed = prev.confirmedCopies + 1
@@ -260,7 +283,7 @@ export const useFilecoinUpload = () => {
         }))
       }
     },
-    [updateStepState, synapseRef, wallet, setDataSetId]
+    [updateStepState, synapseRef, wallet, addDataSetId]
   )
 
   const resetUpload = useCallback(() => {
@@ -274,6 +297,7 @@ export const useFilecoinUpload = () => {
       pieceCid: undefined,
       transactionHash: undefined,
       copies: undefined,
+      providersById: {},
       network: undefined,
     })
   }, [])

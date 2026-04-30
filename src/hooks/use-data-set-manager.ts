@@ -1,12 +1,12 @@
 import { useCallback, useRef, useState } from 'react'
 import type { Synapse } from '../lib/filecoin-pin/synapse.ts'
-import { getStoredDataSetId } from '../lib/local-storage/data-set.ts'
+import { getStoredDataSetIds } from '../lib/local-storage/data-set.ts'
 
 export type DataSetState =
-  | { status: 'idle'; dataSetId?: bigint }
-  | { status: 'initializing'; dataSetId?: bigint }
-  | { status: 'ready'; dataSetId: bigint | null }
-  | { status: 'error'; error: string; dataSetId?: bigint }
+  | { status: 'idle'; dataSetIds?: bigint[] }
+  | { status: 'initializing'; dataSetIds?: bigint[] }
+  | { status: 'ready'; dataSetIds: bigint[] }
+  | { status: 'error'; error: string; dataSetIds?: bigint[] }
 
 interface UseDataSetManagerProps {
   synapse: Synapse | null
@@ -19,15 +19,26 @@ interface UseDataSetManagerProps {
 
 interface UseDataSetManagerReturn {
   dataSet: DataSetState
-  checkIfDatasetExists: () => Promise<bigint | null>
-  setDataSetId: (id: bigint) => void
+  checkIfDatasetExists: () => Promise<bigint[]>
+  addDataSetId: (id: bigint) => void
+}
+
+const dedupeBigInts = (ids: bigint[]): bigint[] => {
+  const set = new Set<string>()
+  const out: bigint[] = []
+  for (const id of ids) {
+    const k = id.toString()
+    if (set.has(k)) continue
+    set.add(k)
+    out.push(id)
+  }
+  return out
 }
 
 /**
- * Hook to track data set ID for a wallet.
- *
- * In 0.38+, StorageContext and provider info are handled by the SDK internally
- * during upload. This hook only tracks the dataSetId for history loading.
+ * Tracks the set of data set IDs known for the active wallet so the history
+ * view can fetch pieces from every dataset that participated in a multi-copy
+ * upload (not just the most recent one).
  */
 export function useDataSetManager({
   synapse,
@@ -37,27 +48,23 @@ export function useDataSetManager({
   const [dataSet, setDataSet] = useState<DataSetState>({ status: 'idle' })
   const isCheckingDataSetRef = useRef<boolean>(false)
 
-  const checkIfDatasetExists = useCallback(async (): Promise<bigint | null> => {
+  const checkIfDatasetExists = useCallback(async (): Promise<bigint[]> => {
     if (isCheckingDataSetRef.current) {
-      return new Promise<bigint | null>((resolve) => {
+      return new Promise<bigint[]>((resolve) => {
         setDataSet((current) => {
-          resolve(current.dataSetId ?? null)
+          resolve(current.dataSetIds ?? [])
           return current
         })
       })
     }
 
-    if (!walletAddress) {
-      return null
-    }
-
-    if (!synapse) {
-      return null
+    if (!walletAddress || !synapse) {
+      return []
     }
 
     const shouldProceed = await new Promise<boolean>((resolve) => {
       setDataSet((current) => {
-        if (current.status === 'ready' && current.dataSetId) {
+        if (current.status === 'ready' && (current.dataSetIds?.length ?? 0) > 0) {
           resolve(false)
           return current
         }
@@ -71,9 +78,9 @@ export function useDataSetManager({
     })
 
     if (!shouldProceed) {
-      return new Promise<bigint | null>((resolve) => {
+      return new Promise<bigint[]>((resolve) => {
         setDataSet((current) => {
-          resolve(current.dataSetId ?? null)
+          resolve(current.dataSetIds ?? [])
           return current
         })
       })
@@ -85,36 +92,38 @@ export function useDataSetManager({
       const urlDataSetId = debugParams?.dataSetId ?? null
       const hasUrlOverrides = urlDataSetId !== null
 
-      const storedDataSetId = hasUrlOverrides ? null : getStoredDataSetId(walletAddress)
+      const storedIds = hasUrlOverrides ? [] : getStoredDataSetIds(walletAddress)
 
-      const effectiveDataSetId = urlDataSetId ?? storedDataSetId
+      const effective = urlDataSetId === null ? storedIds : [urlDataSetId]
 
-      if (effectiveDataSetId !== null) {
-        const bigIntId = BigInt(effectiveDataSetId)
-        setDataSet({ status: 'ready', dataSetId: bigIntId })
-        return bigIntId
-      }
-
-      // No stored data set found - return null, upload will create one
-      setDataSet({ status: 'ready', dataSetId: null })
-      return null
+      const bigIntIds = effective.map((n) => BigInt(n))
+      setDataSet({ status: 'ready', dataSetIds: bigIntIds })
+      return bigIntIds
     } catch (error) {
       console.error('[DataSet] Failed to check data set:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to check data set'
       setDataSet({ status: 'error', error: errorMessage })
-      return null
+      return []
     } finally {
       isCheckingDataSetRef.current = false
     }
   }, [walletAddress, synapse, debugParams])
 
-  const setDataSetId = useCallback((id: bigint) => {
-    setDataSet({ status: 'ready', dataSetId: id })
+  const addDataSetId = useCallback((id: bigint) => {
+    setDataSet((current) => {
+      const existing = current.dataSetIds ?? []
+      const next = dedupeBigInts([...existing, id])
+      // No-op when the id is already known to avoid render thrash mid-upload
+      if (next.length === existing.length) {
+        return current.status === 'ready' ? current : { status: 'ready', dataSetIds: next }
+      }
+      return { status: 'ready', dataSetIds: next }
+    })
   }, [])
 
   return {
     dataSet,
     checkIfDatasetExists,
-    setDataSetId,
+    addDataSetId,
   }
 }

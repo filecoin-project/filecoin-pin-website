@@ -54,7 +54,7 @@ export default function Content() {
     wallet.status === 'ready' &&
     synapse !== null &&
     dataSet.status === 'ready' &&
-    dataSet.dataSetId == null &&
+    dataSet.dataSetIds.length === 0 &&
     !isInitializing
 
   // Get loading message based on current state
@@ -115,6 +115,7 @@ export default function Content() {
             stepStates={activeUpload.stepStates}
             transactionHash={activeUpload.transactionHash ?? ''}
             transactionHashes={activeUpload.transactionHashes}
+            uploadNetwork={activeUpload.network}
           />
         </div>
       )}
@@ -140,8 +141,12 @@ export default function Content() {
               key={upload.id}
               onToggleExpanded={() => toggleExpansion(upload.id)}
               pieceCid={upload.pieceCid}
+              providerIds={upload.providerIds}
+              providerNames={upload.providerNames}
+              serviceURLs={upload.serviceURLs}
               stepStates={COMPLETED_PROGRESS}
               transactionHash={upload.transactionHash}
+              transactionHashes={upload.transactionHashes}
             />
           ))}
         </div>

@@ -11,6 +11,7 @@ interface UploadProgressProps {
   expectedCopies?: number
   cid?: string
   fileName: string
+  network?: string
 }
 function UploadProgress({
   stepStates,
@@ -20,6 +21,7 @@ function UploadProgress({
   expectedCopies,
   cid,
   fileName,
+  network,
 }: UploadProgressProps) {
   const finalizingStep = stepStates.find((stepState) => stepState.step === 'finalizing-transaction')
   return (
@@ -29,6 +31,7 @@ function UploadProgress({
         <ProgressCard
           confirmedCopies={confirmedCopies}
           expectedCopies={expectedCopies}
+          network={network}
           stepState={finalizingStep}
           transactionHash={transactionHash}
           transactionHashes={transactionHashes}

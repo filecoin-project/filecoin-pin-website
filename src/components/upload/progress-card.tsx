@@ -1,4 +1,6 @@
+import { getNetworkLabel } from '../../lib/filecoin-pin/network.ts'
 import type { StepState } from '../../types/upload/step.ts'
+import { getTxExplorerLink } from '../../utils/links.ts'
 import { getStepEstimatedTime, getStepLabel } from '../../utils/upload/step-utils.ts'
 import { Alert } from '../ui/alert.tsx'
 import { Card } from '../ui/card.tsx'
@@ -10,6 +12,7 @@ interface ProgressCardProps {
   transactionHashes?: string[]
   confirmedCopies?: number
   expectedCopies?: number
+  network?: string
 }
 
 function ProgressCard({
@@ -18,6 +21,7 @@ function ProgressCard({
   transactionHashes,
   confirmedCopies,
   expectedCopies,
+  network,
 }: ProgressCardProps) {
   const isFinalizing = stepState.step === 'finalizing-transaction'
   const hashes =
@@ -33,7 +37,9 @@ function ProgressCard({
             : getStepEstimatedTime(stepState.step)
         }
         status={stepState.status}
-        title={showProgress ? 'Finalizing storage transactions on Calibration testnet' : getStepLabel(stepState.step)}
+        title={
+          showProgress ? `Finalizing storage transactions on ${getNetworkLabel(network)}` : getStepLabel(stepState.step)
+        }
         withSpinner
       />
 
@@ -45,12 +51,7 @@ function ProgressCard({
         <Card.Content>
           <div className="space-y-1">
             {hashes.map((hash) => (
-              <TextWithCopyToClipboard
-                href={`https://filecoin-testnet.blockscout.com/tx/${hash}`}
-                key={hash}
-                prefix="tx:"
-                text={hash}
-              />
+              <TextWithCopyToClipboard href={getTxExplorerLink(hash, network)} key={hash} prefix="tx:" text={hash} />
             ))}
           </div>
         </Card.Content>
