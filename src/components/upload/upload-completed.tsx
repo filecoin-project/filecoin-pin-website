@@ -16,6 +16,7 @@ import { BadgeReplication } from '../ui/badge-replication.tsx'
 import { ButtonLink } from '../ui/button/button-link.tsx'
 import { Card } from '../ui/card.tsx'
 import { DownloadButton } from '../ui/download-button.tsx'
+import { Heading } from '../ui/heading.tsx'
 import { TextLink } from '../ui/link.tsx'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
 import type { UploadStatusProps } from './upload-status.tsx'
@@ -110,42 +111,38 @@ function UploadCompleted({
         </Card.Wrapper>
       )}
 
-      {(resolvedDatasetIds.length > 0 || datasetIdOrDefault) && (
-        <Card.Wrapper>
-          <Card.InfoRow
-            subtitle={
-              resolvedDatasetIds.length > 1
-                ? `Data Sets ${resolvedDatasetIds.join(', ')}`
-                : `Data Set ${datasetIdOrDefault}`
-            }
-            title="Storage"
-          >
+      {copyRows.length > 0 && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between gap-3">
+            <Heading tag="h3">Storage</Heading>
             {copyCount != null && copyCount > 0 && <BadgeReplication copyCount={copyCount} />}
-          </Card.InfoRow>
-        </Card.Wrapper>
-      )}
+          </div>
 
-      {copyRows.map((row, index) => (
-        <Card.Wrapper key={`${row.dsId}-${row.providerId || index}`}>
-          <Card.InfoRow
-            subtitle={
-              row.providerId ? (
-                <TextLink href={getProviderExplorerLink(row.providerId)}>
-                  {row.providerName || `Provider ${row.providerId}`}
-                </TextLink>
-              ) : (
-                row.providerName || 'Unknown provider'
-              )
-            }
-            title={resolvedDatasetIds.length > 1 ? `Provider ${index + 1} (Data Set ${row.dsId})` : 'Provider'}
-          >
-            {row.serviceURL && cid && <DownloadButton href={getSpCarDownloadLink(cid, row.serviceURL, fileName)} />}
-          </Card.InfoRow>
-          <ButtonLink href={getDatasetExplorerLink(row.dsId)}>
-            {resolvedDatasetIds.length > 1 ? `View proofs (Data Set ${row.dsId})` : 'View proofs'}
-          </ButtonLink>
-        </Card.Wrapper>
-      ))}
+          {copyRows.map((row, index) => {
+            const providerLabel =
+              row.providerName || (row.providerId ? `Provider ${row.providerId}` : 'Unknown provider')
+            return (
+              <Card.Wrapper key={`${row.dsId}-${row.providerId || index}`}>
+                <Card.InfoRow
+                  subtitle={
+                    row.providerId ? (
+                      <TextLink href={getProviderExplorerLink(row.providerId)}>{providerLabel}</TextLink>
+                    ) : (
+                      providerLabel
+                    )
+                  }
+                  title={`Data Set ${row.dsId}`}
+                >
+                  {row.serviceURL && cid && (
+                    <DownloadButton href={getSpCarDownloadLink(cid, row.serviceURL, fileName)} />
+                  )}
+                </Card.InfoRow>
+                <ButtonLink href={getDatasetExplorerLink(row.dsId)}>View proofs</ButtonLink>
+              </Card.Wrapper>
+            )
+          })}
+        </div>
+      )}
     </>
   )
 }
