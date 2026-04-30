@@ -139,7 +139,7 @@ export const useDatasetPieces = () => {
       setPieces([])
       setHasLoaded(false)
     }
-  }, [loadPieces])
+  }, [loadPieces, synapse, dataSetId])
 
   const refreshPieces = useCallback(() => {
     loadPieces()

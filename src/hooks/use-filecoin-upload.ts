@@ -20,7 +20,6 @@ interface UploadState {
   confirmedCopies: number
   expectedCopies: number
   copies?: UploadExecutionResult['copies']
-  failures?: UploadExecutionResult['failures']
   network?: string
 }
 
@@ -242,7 +241,6 @@ export const useFilecoinUpload = () => {
         setUploadState((prev) => ({
           ...prev,
           copies: result.copies,
-          failures: result.failures,
           network: result.network,
         }))
 
@@ -262,7 +260,7 @@ export const useFilecoinUpload = () => {
         }))
       }
     },
-    [updateStepState, synapse, wallet, setDataSetId]
+    [updateStepState, synapseRef, wallet, setDataSetId]
   )
 
   const resetUpload = useCallback(() => {
@@ -276,7 +274,6 @@ export const useFilecoinUpload = () => {
       pieceCid: undefined,
       transactionHash: undefined,
       copies: undefined,
-      failures: undefined,
       network: undefined,
     })
   }, [])

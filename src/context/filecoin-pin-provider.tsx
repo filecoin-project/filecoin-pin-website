@@ -60,7 +60,7 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
         data: prev.data,
       }))
     }
-  }, [config])
+  }, [])
 
   useEffect(() => {
     void refreshWallet()
