@@ -1,7 +1,9 @@
-import { METADATA_KEYS } from '@filoz/synapse-sdk'
 import { getDetailedDataSet } from 'filecoin-pin/core/data-set'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
+
+// Inlined from @filoz/synapse-sdk METADATA_KEYS to avoid dual-copy type issues
+const IPFS_ROOT_CID_KEY = 'ipfsRootCID'
 
 export interface DatasetPiece {
   id: string
@@ -9,21 +11,37 @@ export interface DatasetPiece {
   fileSize: string
   cid: string
   pieceCid: string
+  /** Primary provider name. */
   providerName: string
+  /** Primary dataset id. */
   datasetId: string
+  /** Primary provider id. */
   providerId: string
+  /** Primary provider service URL. */
   serviceURL: string
+  /** Primary transaction hash. */
   transactionHash: string
   network: string
   uploadedAt: number // timestamp
   pieceId: number
+  /** Total copies (1 for un-replicated). */
+  copyCount?: number
+  /** Datasets that hold a copy of this piece (primary first). */
+  datasetIds?: string[]
+  /** Provider ids per copy (primary first). */
+  providerIds?: string[]
+  /** Provider names per copy (primary first). */
+  providerNames?: string[]
+  /** Provider service URLs per copy (primary first). */
+  serviceURLs?: string[]
+  /** Per-copy piece-add transaction hashes. */
+  transactionHashes?: string[]
 }
 
 /**
- * Fetches and normalizes dataset pieces for the active wallet/provider combo.
+ * Fetches and normalizes dataset pieces for the active wallet.
  *
- * Abstracts away Synapse warm storage + PDP interactions so UI components
- * simply call this hook and render the returned list.
+ * Uses getDetailedDataSet which only needs Synapse + dataSetId.
  */
 export const useDatasetPieces = () => {
   const [pieces, setPieces] = useState<DatasetPiece[]>([])
@@ -31,20 +49,17 @@ export const useDatasetPieces = () => {
   const [error, setError] = useState<string | null>(null)
   const [hasLoaded, setHasLoaded] = useState(false)
 
-  const { storageContext, providerInfo, wallet, synapse } = useFilecoinPinContext()
+  const { wallet, synapse, dataSet } = useFilecoinPinContext()
 
-  const dataSetId = storageContext?.dataSetId
+  const dataSetIdsKey = dataSet.status === 'ready' ? dataSet.dataSetIds.map((id) => String(id)).join(',') : ''
+  const dataSetIds = useMemo<bigint[]>(
+    () => (dataSetIdsKey ? dataSetIdsKey.split(',').map((s) => BigInt(s)) : []),
+    [dataSetIdsKey]
+  )
 
   const loadPieces = useCallback(async () => {
-    if (!storageContext || !providerInfo || !synapse) {
-      console.debug(
-        '[DatasetPieces] Missing dependencies - storageContext:',
-        !!storageContext,
-        'providerInfo:',
-        !!providerInfo,
-        'synapse:',
-        !!synapse
-      )
+    if (!synapse || dataSetIds.length === 0) {
+      console.debug('[DatasetPieces] Missing dependencies - synapse:', !!synapse, 'dataSetIds:', dataSetIds.length)
       setPieces([])
       setHasLoaded(false)
       return
@@ -55,92 +70,85 @@ export const useDatasetPieces = () => {
     setError(null)
 
     try {
-      console.debug('[DatasetPieces] Loading pieces from dataset:', storageContext.dataSetId)
-      console.debug('[DatasetPieces] Wallet address:', wallet?.status === 'ready' ? wallet.data.address : 'not ready')
+      console.debug('[DatasetPieces] Loading pieces from datasets:', dataSetIds.map(String).join(','))
 
-      // Get the PDP service URL from the provider
-      const serviceURL = providerInfo.products?.PDP?.data?.serviceURL
-      if (!serviceURL) {
-        console.warn('[DatasetPieces] Provider does not expose a PDP service URL')
-        setPieces([])
-        return
-      }
-      if (!dataSetId) {
-        console.warn('[DatasetPieces] Storage context does not have a data set ID')
-        setPieces([])
-        return
-      }
-
-      console.debug('[DatasetPieces] Fetching pieces for dataSetId:', dataSetId)
-      const dataSetData = await getDetailedDataSet(synapse, dataSetId)
-      if (typeof dataSetData.pieces === 'undefined') {
-        throw new Error('[DatasetPieces] Pieces data unavailable')
-      }
-
-      console.debug('[DatasetPieces] Found', dataSetData.pieces.length, 'pieces in dataset id: ', dataSetId)
-
-      if (dataSetData.pieces.length === 0) {
-        setPieces([])
-        return
-      }
-
-      // For each piece, fetch its metadata
-      const piecesWithMetadata: DatasetPiece[] = await Promise.all(
-        dataSetData.pieces.map(async (piece) => {
+      const datasets = await Promise.all(
+        dataSetIds.map(async (id) => {
           try {
-            const pieceId = piece.pieceId
-            const pieceCid = piece.pieceCid.toString()
-
-            if (typeof piece.metadata === 'undefined') {
-              throw new Error('[DatasetPiece] Piece metadata unavailable')
-            }
-
-            // Extract relevant metadata
-            const ipfsRootCid = piece.metadata[METADATA_KEYS.IPFS_ROOT_CID] || ''
-            const fileName = piece.metadata.label || ipfsRootCid || `unknown`
-            const fileSize = piece.metadata.fileSize || 'Unknown'
-
-            return {
-              id: `piece-${pieceId}`,
-              fileName,
-              fileSize,
-              cid: ipfsRootCid,
-              pieceCid,
-              providerName: providerInfo.name || 'unknown',
-              datasetId: String(dataSetId),
-              providerId: providerInfo.id.toString(),
-              serviceURL: providerInfo.products?.PDP?.data?.serviceURL ?? '',
-              network: wallet?.status === 'ready' ? wallet.data.network : 'calibration',
-              uploadedAt: piece.metadata.uploadedAt ? Number(piece.metadata.uploadedAt) : Date.now(),
-              pieceId,
-              transactionHash: piece.metadata.transactionHash || '',
-            }
+            const data = await getDetailedDataSet(synapse, id)
+            return { id, data }
           } catch (err) {
-            console.warn(err)
-            // Return minimal data
-            return {
-              id: `piece-${piece.pieceId}`,
-              fileName: `Piece ${piece.pieceId}`,
-              fileSize: 'Unknown',
-              cid: '',
-              pieceCid: piece.pieceCid.toString(),
-              providerName: providerInfo.name || 'unknown',
-              datasetId: String(dataSetId),
-              providerId: providerInfo.id.toString(),
-              serviceURL: providerInfo.products?.PDP?.data?.serviceURL ?? '',
-              network: wallet?.status === 'ready' ? wallet.data.network : 'calibration',
-              uploadedAt: Date.now(),
-              pieceId: piece.pieceId,
-              transactionHash: '',
-            }
+            console.warn('[DatasetPieces] Failed to load dataset', String(id), err)
+            return null
           }
         })
       )
 
-      // Sort by piece ID (newest first, assuming higher IDs are newer)
-      piecesWithMetadata.sort((a, b) => (b.pieceId || 0) - (a.pieceId || 0))
+      const network = wallet?.status === 'ready' ? wallet.data.network : 'calibration'
+      // Group by pieceCid so the same piece replicated across N datasets renders as one entry
+      const piecesByCid = new Map<string, DatasetPiece>()
 
-      setPieces(piecesWithMetadata)
+      for (const entry of datasets) {
+        if (!entry?.data) continue
+        const pieces = entry.data.pieces
+        if (!pieces) continue
+        const { id: dsId, data: dataSetData } = entry
+        const provider = dataSetData.provider
+        const dsIdStr = String(dsId)
+        const providerName = provider?.name || 'unknown'
+        const providerId = provider ? String(provider.id) : ''
+        const serviceURL = provider?.pdp?.serviceURL ?? ''
+
+        for (const piece of pieces) {
+          const pieceCid = piece.pieceCid.toString()
+          const meta = piece.metadata ?? {}
+          const ipfsRootCid = meta[IPFS_ROOT_CID_KEY] || ''
+          const fileName = meta.label || ipfsRootCid || 'unknown'
+          const fileSize = meta.fileSize || 'Unknown'
+          const transactionHash = meta.transactionHash || ''
+          const uploadedAt = meta.uploadedAt ? Number(meta.uploadedAt) : Date.now()
+          const pieceId = Number(piece.pieceId)
+
+          const existing = piecesByCid.get(pieceCid)
+          if (existing) {
+            // Append this dataset/copy info; keep the primary (first seen) as the primary fields
+            existing.datasetIds = [...(existing.datasetIds ?? []), dsIdStr]
+            existing.providerIds = [...(existing.providerIds ?? []), providerId]
+            existing.providerNames = [...(existing.providerNames ?? []), providerName]
+            existing.serviceURLs = [...(existing.serviceURLs ?? []), serviceURL]
+            existing.transactionHashes = [...(existing.transactionHashes ?? []), transactionHash]
+            existing.copyCount = (existing.copyCount ?? 1) + 1
+          } else {
+            piecesByCid.set(pieceCid, {
+              id: `piece-${pieceCid}`,
+              fileName,
+              fileSize,
+              cid: ipfsRootCid,
+              pieceCid,
+              providerName,
+              datasetId: dsIdStr,
+              providerId,
+              serviceURL,
+              transactionHash,
+              network,
+              uploadedAt,
+              pieceId,
+              copyCount: 1,
+              datasetIds: [dsIdStr],
+              providerIds: [providerId],
+              providerNames: [providerName],
+              serviceURLs: [serviceURL],
+              transactionHashes: [transactionHash],
+            })
+          }
+        }
+      }
+
+      const merged = [...piecesByCid.values()]
+      merged.sort((a, b) => (b.pieceId || 0) - (a.pieceId || 0))
+
+      console.debug('[DatasetPieces] Merged', merged.length, 'unique pieces across', dataSetIds.length, 'datasets')
+      setPieces(merged)
     } catch (err) {
       console.error('[DatasetPieces] Failed to load pieces:', err)
       setError(err instanceof Error ? err.message : 'Failed to load pieces')
@@ -149,29 +157,24 @@ export const useDatasetPieces = () => {
       setIsLoading(false)
       setHasLoaded(true)
     }
-  }, [storageContext, dataSetId, providerInfo, wallet, synapse])
+  }, [dataSetIds, wallet, synapse])
 
-  // Load pieces when storage context is ready
   useEffect(() => {
-    if (storageContext && providerInfo) {
+    if (synapse && dataSetIds.length > 0) {
       loadPieces()
     } else {
       setPieces([])
       setHasLoaded(false)
     }
-  }, [loadPieces, storageContext, providerInfo])
+  }, [loadPieces, synapse, dataSetIds.length])
 
   const refreshPieces = useCallback(() => {
     loadPieces()
   }, [loadPieces])
 
-  /**
-   * Add a new piece to the history without refetching from backend.
-   * This is used when an upload completes and we already have all the data.
-   */
+  /** Add a piece to the history without refetching from backend (used after upload completes). */
   const addPiece = useCallback((piece: DatasetPiece) => {
     setPieces((prev) => {
-      // Add new piece at the beginning (newest first)
       const updated = [piece, ...prev]
       return updated
     })
