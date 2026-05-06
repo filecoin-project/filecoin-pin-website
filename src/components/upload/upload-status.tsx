@@ -17,6 +17,15 @@ export interface UploadStatusProps {
   transactionHash: DatasetPiece['transactionHash']
   network?: DatasetPiece['network']
   datasetId?: DatasetPiece['datasetId']
+  copyCount?: number
+  datasetIds?: DatasetPiece['datasetIds']
+  providerIds?: DatasetPiece['providerIds']
+  providerNames?: DatasetPiece['providerNames']
+  serviceURLs?: DatasetPiece['serviceURLs']
+  transactionHashes?: string[]
+  confirmedCopies?: number
+  expectedCopies?: number
+  uploadNetwork?: string
 }
 
 function UploadStatus({
@@ -29,6 +38,16 @@ function UploadStatus({
   datasetId,
   pieceCid,
   transactionHash,
+  copyCount,
+  datasetIds,
+  providerIds,
+  providerNames,
+  serviceURLs,
+  transactionHashes,
+  confirmedCopies,
+  expectedCopies,
+  uploadNetwork,
+  network,
 }: UploadStatusProps) {
   // Use the upload progress hook to calculate all progress-related values
   const { uploadOutcome, uploadBadgeStatus } = useUploadProgress({ stepStates, cid })
@@ -50,9 +69,28 @@ function UploadStatus({
 
         <AccordionContent className="space-y-6 mt-6">
           {isUploadSuccessful && cid ? (
-            <UploadCompleted cid={cid} datasetId={datasetId} fileName={fileName} pieceCid={pieceCid} />
+            <UploadCompleted
+              cid={cid}
+              copyCount={copyCount}
+              datasetId={datasetId}
+              datasetIds={datasetIds}
+              fileName={fileName}
+              pieceCid={pieceCid}
+              providerIds={providerIds}
+              providerNames={providerNames}
+              serviceURLs={serviceURLs}
+            />
           ) : (
-            <UploadProgress cid={cid} fileName={fileName} stepStates={stepStates} transactionHash={transactionHash} />
+            <UploadProgress
+              cid={cid}
+              confirmedCopies={confirmedCopies}
+              expectedCopies={expectedCopies}
+              fileName={fileName}
+              network={uploadNetwork ?? network}
+              stepStates={stepStates}
+              transactionHash={transactionHash}
+              transactionHashes={transactionHashes}
+            />
           )}
         </AccordionContent>
       </AccordionItem>

@@ -20,6 +20,9 @@
  */
 
 const DATA_SET_ID_KEY = 'filecoin-pin-data-set-id-v2'
+const DATA_SET_IDS_KEY = 'filecoin-pin-data-set-ids-v1'
+
+const getDataSetIdsKey = (walletAddress: string): string => `${DATA_SET_IDS_KEY}-${walletAddress}`
 
 /**
  * Get the storage key for a given wallet and optional provider.
@@ -66,6 +69,45 @@ export const storeDataSetId = (walletAddress: string, dataSetId: number): void =
     console.debug('[DataSetStorage] Stored dataSetId:', dataSetId, 'to key:', key)
   } catch (error) {
     console.warn('[DataSetStorage] Failed to store data set ID in localStorage:', error)
+  }
+}
+
+/**
+ * Get all stored data set IDs for a wallet (multi-copy aware).
+ *
+ * Reads the v1 multi-id list. Falls back to the legacy single-id key for
+ * existing users so their history is preserved across the upgrade.
+ */
+export const getStoredDataSetIds = (walletAddress: string): number[] => {
+  try {
+    const raw = localStorage.getItem(getDataSetIdsKey(walletAddress))
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        return parsed.map((n) => Number(n)).filter((n) => Number.isFinite(n))
+      }
+    }
+    const legacy = getStoredDataSetId(walletAddress)
+    return legacy == null ? [] : [legacy]
+  } catch (error) {
+    console.warn('[DataSetStorage] Failed to read data set IDs from localStorage:', error)
+    return []
+  }
+}
+
+/**
+ * Add a data set ID to the wallet's stored set. Idempotent.
+ * Also keeps the legacy single-id key in sync (set to the most recent id).
+ */
+export const addStoredDataSetId = (walletAddress: string, dataSetId: number): void => {
+  try {
+    const current = new Set(getStoredDataSetIds(walletAddress))
+    if (current.has(dataSetId)) return
+    current.add(dataSetId)
+    localStorage.setItem(getDataSetIdsKey(walletAddress), JSON.stringify([...current]))
+    storeDataSetId(walletAddress, dataSetId)
+  } catch (error) {
+    console.warn('[DataSetStorage] Failed to add data set ID to localStorage:', error)
   }
 }
 
