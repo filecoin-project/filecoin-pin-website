@@ -183,14 +183,10 @@ function buildScript(config: FlowConfig): Array<(s: FlowState) => FlowState> {
       const newHashes = [...s.transactionHashes, TX_HASHES[i] ?? TX_HASHES[0]]
       const newExpected = s.expectedCopies + 1
       const stepStates = setStep(
-        setStep(
-          s.stepStates.map((step) =>
-            step.step === 'replicating' && step.status === 'in-progress'
-              ? { ...step, status: 'completed' as const, progress: 100 }
-              : step
-          ),
-          'finalizing-transaction',
-          { status: 'in-progress', progress: 0 }
+        s.stepStates.map((step) =>
+          step.step === 'replicating' && step.status === 'in-progress'
+            ? { ...step, status: 'completed' as const, progress: 100 }
+            : step
         ),
         'finalizing-transaction',
         { status: 'in-progress', progress: 0 }
@@ -290,7 +286,7 @@ function Walkthrough({ copies, failureMode, autoPlay, tickMs, network }: Walkthr
   // Reset on config change
   useEffect(() => {
     reset()
-  }, [reset])
+  }, [reset, script])
 
   // Auto-play timer
   useEffect(() => {
