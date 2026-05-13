@@ -31,21 +31,21 @@ export default function SidebarSteps() {
       </StepItem>
       <StepItem step={3}>
         <p>
-          Your file is uploaded to a <TextLink href={serviceProvider}>Filecoin SP</TextLink> using its{' '}
-          <TextLink href={pieceCid}>Piece CID</TextLink>, and a transaction registers it on the Filecoin Calibration
-          testnet.
+          Your file is uploaded to a <TextLink href={serviceProvider}>Filecoin storage provider</TextLink> using its{' '}
+          <TextLink href={pieceCid}>Piece CID</TextLink>, then replicated to a second provider for durability.
         </p>
       </StepItem>
       <StepItem step={4}>
         <p>
-          The Filecoin SP indexes your file and announces it to <TextLink href={ipni}>IPNI</TextLink>, making it
-          discoverable by other IPFS nodes.
+          Storage transactions are registered on the Filecoin Calibration testnet and your file is announced to{' '}
+          <TextLink href={ipni}>IPNI</TextLink>, making it discoverable by other IPFS nodes.
         </p>
       </StepItem>
       <StepItem step={5}>
         <p>
-          Your data is safely and verifiably stored. You can audit onchain Filecoin storage proofs and retrieve files
-          quickly using <TextLink href={standardIpfsTooling}>standard IPFS tooling</TextLink> (e.g., Gateways).
+          Your data is safely and verifiably stored across multiple providers. You can audit onchain Filecoin storage
+          proofs and retrieve files quickly using <TextLink href={standardIpfsTooling}>standard IPFS tooling</TextLink>{' '}
+          (e.g., Gateways).
         </p>
       </StepItem>
       <ButtonLink href={filecoinPinLearnMore}>Learn more</ButtonLink>
