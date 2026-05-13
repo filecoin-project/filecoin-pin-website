@@ -10,6 +10,7 @@ export function useStepStates(stepStates: StepState[]) {
     const creatingCarStep = stepStates.find((s) => s.step === 'creating-car')
     const uploadingCarStep = stepStates.find((s) => s.step === 'uploading-car')
     const checkingReadinessStep = stepStates.find((s) => s.step === 'checking-readiness')
+    const replicatingStep = stepStates.find((s) => s.step === 'replicating')
     const announcingCidsStep = stepStates.find((s) => s.step === 'announcing-cids')
     const finalizingStep = stepStates.find((s) => s.step === 'finalizing-transaction')
 
@@ -17,6 +18,7 @@ export function useStepStates(stepStates: StepState[]) {
       creatingCarStep,
       uploadingCarStep,
       checkingReadinessStep,
+      replicatingStep,
       announcingCidsStep,
       finalizingStep,
     }
