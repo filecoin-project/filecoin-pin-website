@@ -3,7 +3,7 @@ import { type DataSetState, useDataSetManager } from '../hooks/use-data-set-mana
 import { filecoinPinConfig } from '../lib/filecoin-pin/config.ts'
 import { getSynapseClient, type Synapse } from '../lib/filecoin-pin/synapse.ts'
 import { fetchWalletSnapshot, type WalletSnapshot } from '../lib/filecoin-pin/wallet.ts'
-import { getDebugParams, logDebugParams } from '../utils/debug-params.ts'
+import { type DebugParams, getDebugParams, logDebugParams } from '../utils/debug-params.ts'
 
 type WalletState =
   | { status: 'idle'; data?: WalletSnapshot }
@@ -18,6 +18,7 @@ export interface FilecoinPinContextValue {
   dataSet: DataSetState
   checkIfDatasetExists: () => Promise<bigint[]>
   addDataSetId: (id: bigint) => void
+  debugParams: DebugParams
 }
 
 export const FilecoinPinContext = createContext<FilecoinPinContextValue | undefined>(undefined)
@@ -87,8 +88,9 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
       dataSet,
       checkIfDatasetExists,
       addDataSetId,
+      debugParams,
     }),
-    [wallet, refreshWallet, dataSet, checkIfDatasetExists, addDataSetId]
+    [wallet, refreshWallet, dataSet, checkIfDatasetExists, addDataSetId, debugParams]
   )
 
   return <FilecoinPinContext.Provider value={value}>{children}</FilecoinPinContext.Provider>
