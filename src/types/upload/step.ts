@@ -2,6 +2,7 @@ export type StepName =
   | 'creating-car'
   | 'checking-readiness'
   | 'uploading-car'
+  | 'replicating'
   | 'announcing-cids'
   | 'finalizing-transaction'
 

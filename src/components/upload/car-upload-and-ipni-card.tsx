@@ -30,10 +30,11 @@ export const CarUploadAndIpniCard = ({ stepStates, cid, fileName }: CarUploadAnd
 
   const { hasIpniAnnounceFailure } = uploadOutcome
 
-  const { creatingCarStep, uploadingCarStep, announcingCidsStep } = useStepStates(stepStates)
+  const { creatingCarStep, uploadingCarStep, replicatingStep, announcingCidsStep } = useStepStates(stepStates)
 
   const shouldShowCidCard =
     uploadingCarStep?.status === 'completed' &&
+    (replicatingStep?.status === 'completed' || replicatingStep?.status === 'error') &&
     (announcingCidsStep?.status === 'completed' || announcingCidsStep?.status === 'error') &&
     cid
 
@@ -60,6 +61,7 @@ export const CarUploadAndIpniCard = ({ stepStates, cid, fileName }: CarUploadAnd
     <>
       {creatingCarStep && <ProgressCard stepState={creatingCarStep} />}
       {uploadingCarStep && <ProgressCard stepState={uploadingCarStep} />}
+      {replicatingStep && <ProgressCard stepState={replicatingStep} />}
       {announcingCidsStep && <ProgressCard stepState={announcingCidsStep} />}
     </>
   )
