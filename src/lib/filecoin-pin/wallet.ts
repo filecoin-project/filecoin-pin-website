@@ -1,6 +1,6 @@
 import { getPaymentStatus, type PaymentStatus } from 'filecoin-pin/core/payments'
-import type { SynapseService } from 'filecoin-pin/core/synapse'
 import { formatFIL, formatUSDFC } from 'filecoin-pin/core/utils'
+import type { Synapse } from './synapse.ts'
 
 export const shortenAddress = (address: string, visibleChars = 4) => {
   if (address.length <= visibleChars * 2) return address
@@ -21,7 +21,7 @@ export interface WalletSnapshot {
   raw: PaymentStatus
 }
 
-export const fetchWalletSnapshot = async (synapse: SynapseService['synapse']): Promise<WalletSnapshot> => {
+export const fetchWalletSnapshot = async (synapse: Synapse): Promise<WalletSnapshot> => {
   const status = await getPaymentStatus(synapse)
   const isCalibration = status.network === 'calibration'
   const usdfcLabel = isCalibration ? 'tUSDFC' : 'USDFC'
