@@ -42,3 +42,9 @@ export const getDatasetExplorerLink = (datasetId: string): string => {
 export const getSpCarDownloadLink = (ipfsRootCid: string, serviceUrl: string, fileName: string): string => {
   return `${serviceUrl}/ipfs/${ipfsRootCid}?filename=${fileName}.car`
 }
+
+/** Block explorer link for a Filecoin transaction hash, network-aware. */
+export const getTxExplorerLink = (txHash: string, network?: string): string => {
+  const base = network === 'mainnet' ? 'https://filecoin.blockscout.com' : 'https://filecoin-testnet.blockscout.com'
+  return `${base}/tx/${txHash}`
+}
