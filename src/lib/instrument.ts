@@ -10,6 +10,10 @@ Sentry.init({
   tracesSampleRate: 1.0, // Capture 100% of transactions for development (adjust in production)
 })
 
-Sentry.setTags({
-  synapseSdkVersion: `@filoz/synapse-sdk@v${packageLock.packages['node_modules/@filoz/synapse-sdk'].version}`,
-})
+const packages = packageLock.packages as Record<string, { version?: string }>
+const synapseSdkVersion = packages['node_modules/@filoz/synapse-sdk']?.version
+if (synapseSdkVersion) {
+  Sentry.setTags({
+    synapseSdkVersion: `@filoz/synapse-sdk@v${synapseSdkVersion}`,
+  })
+}

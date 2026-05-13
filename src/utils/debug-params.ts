@@ -75,8 +75,8 @@ export function logDebugParams(): void {
   if (params.providerId !== null || params.dataSetId !== null) {
     console.warn(
       '[DEBUG MODE] URL parameters detected:',
-      params.providerId !== null ? `providerId=${params.providerId}` : '',
-      params.dataSetId !== null ? `dataSetId=${params.dataSetId}` : ''
+      params.providerId === null ? '' : `providerId=${params.providerId}`,
+      params.dataSetId === null ? '' : `dataSetId=${params.dataSetId}`
     )
   }
 }

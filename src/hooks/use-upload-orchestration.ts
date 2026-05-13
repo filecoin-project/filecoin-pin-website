@@ -11,159 +11,134 @@ interface UploadedFile {
 }
 
 /**
- * Orchestrates the upload lifecycle and state transitions.
- *
- * Single Responsibility: Coordinate active upload → history transition
+ * Orchestrates the upload lifecycle: active upload -> history transition.
  *
  * Handles:
  * - Starting uploads and tracking uploaded file metadata
- * - Detecting upload completion
- * - Refreshing history when upload completes
+ * - Detecting upload completion and adding to history
  * - Resetting active upload state
  * - Tracking CIDs that should be auto-expanded in history
- * - Auto-clearing upload state on error after timeout
  *
  * Does NOT:
  * - Render UI (that's components' job)
  * - Store history (that's UploadHistoryContext's job)
  * - Perform uploads (that's useFilecoinUpload's job)
  * - Manage expansion state (that's useUploadExpansion's job)
- *
- * @example
- * ```tsx
- * function Content() {
- *   const { startUpload, uploadedFile, activeUpload } = useUploadOrchestration()
- *
- *   return (
- *     <>
- *       <DragNDrop onUpload={startUpload} />
- *       {uploadedFile && (
- *         <UploadProgress
- *           fileName={uploadedFile.file.name}
- *           progresses={activeUpload.progress}
- *         />
- *       )}
- *     </>
- *   )
- * }
- * ```
  */
 export function useUploadOrchestration() {
   const { uploadState, uploadFile, resetUpload } = useFilecoinUpload()
   const { addUpload } = useUploadHistory()
-  const { storageContext, providerInfo, wallet } = useFilecoinPinContext()
+  const { wallet } = useFilecoinPinContext()
   const { uploadOutcome } = useUploadProgress({ stepStates: uploadState.stepStates, cid: uploadState.currentCid })
 
   const { isUploadSuccessful } = uploadOutcome
 
-  // Track the file being uploaded (for displaying metadata like fileName)
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null)
-
-  // Track piece CIDs that should be auto-expanded when they appear in history
+  // Piece CIDs that should be auto-expanded when they appear in history (consumed by useUploadExpansion)
   const pendingAutoExpandPieceCidsRef = useRef<Set<string>>(new Set())
-
-  // Key to force DragNDrop component to remount (clears internal file state)
+  // Key to force DragNDrop remount (clears its internal file state)
   const [dragDropKey, setDragDropKey] = useState(0)
 
   /**
    * Handle upload completion:
-   * 1. Mark piece CID for auto-expansion in history
-   * 2. Add the upload to history (without refetching from backend)
-   * 3. Clear active upload state
-   * 4. Force DragNDrop remount to clear its state
+   * Build DatasetPiece from the primary copy result and add to history.
    */
   useEffect(() => {
-    if (isUploadSuccessful && uploadState.pieceCid && uploadedFile && storageContext && providerInfo) {
-      console.debug('[UploadOrchestration] Upload completed, adding to history')
-
-      // Mark this piece CID to be auto-expanded when it appears in history
-      pendingAutoExpandPieceCidsRef.current = new Set(pendingAutoExpandPieceCidsRef.current).add(uploadState.pieceCid)
-
-      // Build a DatasetPiece from the upload data we have
-      const newPiece = {
-        id: `piece-${uploadState.pieceCid}`,
-        fileName: uploadedFile.file.name,
-        fileSize: formatFileSize(uploadedFile.file.size),
-        cid: uploadState.currentCid || '',
-        pieceCid: uploadState.pieceCid,
-        providerName: providerInfo.name || 'unknown',
-        datasetId: String(storageContext.dataSetId),
-        providerId: providerInfo.id.toString(),
-        serviceURL: providerInfo.products?.PDP?.data?.serviceURL ?? '',
-        transactionHash: uploadState.transactionHash || '',
-        network: wallet?.status === 'ready' ? wallet.data.network : 'calibration',
-        uploadedAt: Date.now(),
-        pieceId: 0, // Placeholder - we don't have the backend pieceId yet
-      }
-
-      // Add to history without refetching
-      addUpload(newPiece)
-
-      // Clear the uploadedFile after adding to history so the upload form shows again
-      setUploadedFile(null)
-      resetUpload()
-      // Increment key to force DragNDrop to remount and clear its state
-      setDragDropKey((prev) => prev + 1)
+    if (!isUploadSuccessful || !uploadState.pieceCid || !uploadedFile) {
+      return
     }
+
+    const copies = uploadState.copies
+    if (!copies) {
+      return
+    }
+    const primary = copies.find((c) => c.role === 'primary')
+
+    if (!primary) {
+      return
+    }
+
+    console.debug('[UploadOrchestration] Upload completed, adding to history')
+
+    pendingAutoExpandPieceCidsRef.current = new Set(pendingAutoExpandPieceCidsRef.current).add(uploadState.pieceCid)
+
+    const providersById = uploadState.providersById
+    const orderedCopies = [primary, ...copies.filter((c) => c.role !== 'primary')]
+    const providerNameFor = (providerId: bigint | string) => providersById[String(providerId)]?.name ?? ''
+    const serviceUrlFor = (c: (typeof copies)[number]) =>
+      providersById[String(c.providerId)]?.pdp?.serviceURL ?? c.retrievalUrl ?? ''
+
+    const newPiece = {
+      id: `piece-${uploadState.pieceCid}`,
+      fileName: uploadedFile.file.name,
+      fileSize: formatFileSize(uploadedFile.file.size),
+      cid: uploadState.currentCid || '',
+      pieceCid: uploadState.pieceCid,
+      providerName: providerNameFor(primary.providerId),
+      datasetId: String(primary.dataSetId),
+      providerId: String(primary.providerId),
+      serviceURL: serviceUrlFor(primary),
+      transactionHash: uploadState.transactionHashes[0] || uploadState.transactionHash || '',
+      network: uploadState.network || (wallet?.status === 'ready' ? wallet.data.network : 'calibration'),
+      uploadedAt: Date.now(),
+      pieceId: Number(primary.pieceId),
+      copyCount: copies.length,
+      datasetIds: orderedCopies.map((c) => String(c.dataSetId)),
+      providerIds: orderedCopies.map((c) => String(c.providerId)),
+      providerNames: orderedCopies.map((c) => providerNameFor(c.providerId)),
+      serviceURLs: orderedCopies.map(serviceUrlFor),
+      transactionHashes: uploadState.transactionHashes.slice(),
+    }
+
+    addUpload(newPiece)
+
+    setUploadedFile(null)
+    resetUpload()
+    setDragDropKey((prev) => prev + 1)
   }, [
     isUploadSuccessful,
     uploadState.pieceCid,
     uploadState.currentCid,
     uploadState.transactionHash,
+    uploadState.copies,
+    uploadState.network,
+    uploadState.providersById,
+    uploadState.transactionHashes,
     uploadedFile,
-    storageContext,
-    providerInfo,
     wallet,
     addUpload,
     resetUpload,
   ])
 
-  /**
-   * Start an upload and track the file metadata.
-   * Sets uploadedFile immediately to switch UI to progress view.
-   * Uploads in the background and updates with actual CID when complete.
-   */
   const handleUpload = useCallback(
     (file: File) => {
       console.debug('[UploadOrchestration] Starting upload for file:', file.name)
 
-      // Clear any pending auto-expand piece CIDs from previous uploads
       pendingAutoExpandPieceCidsRef.current = new Set()
 
-      // Set uploadedFile immediately to switch to progress view
       setUploadedFile({ file, cid: '' })
 
-      // Start upload in the background without blocking the handler
+      // Upload in background (not awaited) so handler returns immediately
       uploadFile(file)
         .then((cid) => {
           console.debug('[UploadOrchestration] Upload returned CID:', cid)
-          // Update with actual CID when upload completes
           setUploadedFile({ file, cid })
         })
         .catch((error) => {
+          // Keep uploadedFile state so the error shows in the progress view
           console.error('[UploadOrchestration] Upload failed:', error)
-          // Keep the uploadedFile state so the error message shows in the progress view
         })
     },
     [uploadFile]
   )
 
-  /**
-   * Clear upload state and reset to upload form.
-   * Called when user dismisses an error or cancels an upload.
-   */
   const cancelUpload = useCallback(() => {
     console.debug('[UploadOrchestration] Canceling upload')
     setUploadedFile(null)
     resetUpload()
-    // Increment key to force DragNDrop to remount and clear its state
     setDragDropKey((prev) => prev + 1)
   }, [resetUpload])
 
-  /**
-   * Retry a failed upload with the same file.
-   * Only works if there's an uploadedFile and an error state.
-   */
   const retryUpload = useCallback(() => {
     if (!uploadedFile) {
       console.warn('[UploadOrchestration] Cannot retry: no file in uploadedFile state')
@@ -174,46 +149,12 @@ export function useUploadOrchestration() {
   }, [uploadedFile, handleUpload])
 
   return {
-    /**
-     * The file currently being uploaded (with metadata like name, size)
-     * null when no active upload
-     */
     uploadedFile,
-
-    /**
-     * The current upload state (progress, CID, error, etc.)
-     * This is the state from useFilecoinUpload
-     */
     activeUpload: uploadState,
-
-    /**
-     * Set of piece CIDs that are pending auto-expansion in history
-     * Used by useUploadExpansion to auto-expand newly uploaded items
-     */
     pendingAutoExpandPieceCids: pendingAutoExpandPieceCidsRef.current,
-
-    /**
-     * Key to force DragNDrop component to remount
-     * Increment this to clear the drag-n-drop internal state
-     */
     dragDropKey,
-
-    /**
-     * Start uploading a file
-     * @param file - File to upload
-     */
     startUpload: handleUpload,
-
-    /**
-     * Retry the current failed upload
-     * Re-uploads the same file that previously failed
-     */
     retryUpload,
-
-    /**
-     * Cancel the current upload and clear error state
-     * Returns user to the upload form
-     */
     cancelUpload,
   }
 }
