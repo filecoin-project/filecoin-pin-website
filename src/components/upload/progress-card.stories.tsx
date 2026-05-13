@@ -96,3 +96,74 @@ export const AnnouncingCidsWithWarning: Story = {
     } satisfies StepState,
   },
 }
+
+export const Replicating: Story = {
+  args: {
+    stepState: {
+      step: 'replicating',
+      status: 'in-progress',
+      progress: 0,
+    } satisfies StepState,
+  },
+}
+
+export const ReplicatingFailed: Story = {
+  args: {
+    stepState: {
+      step: 'replicating',
+      status: 'error',
+      progress: 0,
+      error: 'Secondary copy failed, file stored with reduced redundancy',
+    } satisfies StepState,
+  },
+}
+
+export const FinalizingMultiCopyHalf: Story = {
+  args: {
+    stepState: {
+      step: 'finalizing-transaction',
+      status: 'in-progress',
+      progress: 50,
+    } satisfies StepState,
+    confirmedCopies: 1,
+    expectedCopies: 2,
+    transactionHashes: [
+      '0xf85d7c38321ce4a4c3d0fac4a5347f20a2f9596da5120df28b1190ac0948ad77',
+      '0xfb3d2a9b2aa5f83aca1f8235f8c5e215aa2cc1cb8e7c7a57f8b7e5d49f74e51d',
+    ],
+  },
+}
+
+export const FinalizingMultiCopyDone: Story = {
+  args: {
+    stepState: {
+      step: 'finalizing-transaction',
+      status: 'completed',
+      progress: 100,
+    } satisfies StepState,
+    confirmedCopies: 3,
+    expectedCopies: 3,
+    transactionHashes: [
+      '0xf85d7c38321ce4a4c3d0fac4a5347f20a2f9596da5120df28b1190ac0948ad77',
+      '0xfb3d2a9b2aa5f83aca1f8235f8c5e215aa2cc1cb8e7c7a57f8b7e5d49f74e51d',
+      '0x4b7d0124e5a1d2c398cba4fb3e8adf7a1c2ccc7ab9ca5559a53fba6d04d332ef',
+    ],
+  },
+}
+
+export const FinalizingMainnet: Story = {
+  args: {
+    stepState: {
+      step: 'finalizing-transaction',
+      status: 'in-progress',
+      progress: 50,
+    } satisfies StepState,
+    confirmedCopies: 1,
+    expectedCopies: 2,
+    network: 'mainnet',
+    transactionHashes: [
+      '0xf85d7c38321ce4a4c3d0fac4a5347f20a2f9596da5120df28b1190ac0948ad77',
+      '0xfb3d2a9b2aa5f83aca1f8235f8c5e215aa2cc1cb8e7c7a57f8b7e5d49f74e51d',
+    ],
+  },
+}
