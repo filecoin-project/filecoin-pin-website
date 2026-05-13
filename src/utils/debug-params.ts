@@ -24,7 +24,7 @@
  * multiple providers without losing your default data set.
  */
 
-interface DebugParams {
+export interface DebugParams {
   providerId: number | null
   dataSetId: number | null
 }

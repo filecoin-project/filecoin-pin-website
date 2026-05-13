@@ -53,7 +53,7 @@ export const INPI_ERROR_MESSAGE =
  * - Tracks IPNI availability and on-chain confirmation
  */
 export const useFilecoinUpload = () => {
-  const { synapse, wallet, addDataSetId } = useFilecoinPinContext()
+  const { synapse, wallet, addDataSetId, debugParams } = useFilecoinPinContext()
 
   // Waitable ref so the upload callback can access synapse even if initialized after callback creation
   const synapseRef = useWaitableRef(synapse)
@@ -134,6 +134,7 @@ export const useFilecoinUpload = () => {
         const result = await executeUpload(synapse, carResult.carBytes, carResult.rootCid, {
           logger,
           contextId: `upload-${Date.now()}`,
+          ...(debugParams.providerId != null && { providerIds: [BigInt(debugParams.providerId)] }),
           pieceMetadata: {
             ...(metadata ?? {}),
             label: file.name,
@@ -283,7 +284,7 @@ export const useFilecoinUpload = () => {
         }))
       }
     },
-    [updateStepState, synapseRef, wallet, addDataSetId]
+    [updateStepState, synapseRef, wallet, addDataSetId, debugParams]
   )
 
   const resetUpload = useCallback(() => {
