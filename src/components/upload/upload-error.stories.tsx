@@ -31,6 +31,10 @@ const createMockOrchestration = (
     activeUpload: {
       isUploading: false,
       stepStates: [],
+      transactionHashes: [],
+      confirmedCopies: 0,
+      expectedCopies: 0,
+      providersById: {},
       currentCid: undefined,
       pieceCid: undefined,
       transactionHash: undefined,

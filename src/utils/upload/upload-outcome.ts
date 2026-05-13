@@ -15,13 +15,17 @@ export function getUploadOutcome({ stepStates, cid }: getUploadOutcomeProps) {
     stepStates.find((stepState) => stepState.step === 'announcing-cids')?.status === 'error'
 
   const isUploadFailure = stepStates.some(
-    (stepState) => stepState.status === 'error' && stepState.step !== 'announcing-cids'
+    (stepState) =>
+      stepState.status === 'error' && stepState.step !== 'announcing-cids' && stepState.step !== 'replicating'
   )
 
   const isUploadSuccessful =
     Boolean(cid) &&
     stepStates.every((stepState) => {
-      return stepState.status === 'completed' || (stepState.step === 'announcing-cids' && stepState.status === 'error')
+      if (stepState.step === 'announcing-cids' || stepState.step === 'replicating') {
+        return stepState.status === 'completed' || stepState.status === 'error'
+      }
+      return stepState.status === 'completed'
     })
 
   return { hasIpniAnnounceFailure, isUploadSuccessful, isUploadFailure }
