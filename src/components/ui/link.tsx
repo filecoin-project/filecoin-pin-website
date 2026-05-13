@@ -23,4 +23,4 @@ function ExternalLink(props: ExternalLinkProps) {
   return <a {...props} rel="noopener noreferrer" target="_blank" />
 }
 
-export { TextLink, ExternalLink }
+export { ExternalLink, TextLink }

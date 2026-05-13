@@ -6,15 +6,37 @@ import type { UploadStatusProps } from './upload-status.tsx'
 interface UploadProgressProps {
   stepStates: Array<StepState>
   transactionHash?: UploadStatusProps['transactionHash']
+  transactionHashes?: string[]
+  confirmedCopies?: number
+  expectedCopies?: number
   cid?: string
   fileName: string
+  network?: string
 }
-function UploadProgress({ stepStates, transactionHash, cid, fileName }: UploadProgressProps) {
+function UploadProgress({
+  stepStates,
+  transactionHash,
+  transactionHashes,
+  confirmedCopies,
+  expectedCopies,
+  cid,
+  fileName,
+  network,
+}: UploadProgressProps) {
   const finalizingStep = stepStates.find((stepState) => stepState.step === 'finalizing-transaction')
   return (
     <>
       <CarUploadAndIpniCard cid={cid} fileName={fileName} stepStates={stepStates} />
-      {finalizingStep && <ProgressCard stepState={finalizingStep} transactionHash={transactionHash} />}
+      {finalizingStep && (
+        <ProgressCard
+          confirmedCopies={confirmedCopies}
+          expectedCopies={expectedCopies}
+          network={network}
+          stepState={finalizingStep}
+          transactionHash={transactionHash}
+          transactionHashes={transactionHashes}
+        />
+      )}
     </>
   )
 }

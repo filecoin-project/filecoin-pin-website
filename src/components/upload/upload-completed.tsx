@@ -9,12 +9,14 @@ import {
   getProviderExplorerLink,
   getSpCarDownloadLink,
 } from '@/utils/links.ts'
+import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { useIpniCheck } from '../../hooks/use-ipni-check.ts'
-import { useProviderInfo } from '../../hooks/use-provider-info.ts'
 import { Alert } from '../ui/alert.tsx'
+import { BadgeReplication } from '../ui/badge-replication.tsx'
 import { ButtonLink } from '../ui/button/button-link.tsx'
 import { Card } from '../ui/card.tsx'
 import { DownloadButton } from '../ui/download-button.tsx'
+import { Heading } from '../ui/heading.tsx'
 import { TextLink } from '../ui/link.tsx'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
 import type { UploadStatusProps } from './upload-status.tsx'
@@ -24,22 +26,32 @@ interface UploadCompletedProps {
   fileName: UploadStatusProps['fileName']
   pieceCid?: UploadStatusProps['pieceCid']
   datasetId?: UploadStatusProps['datasetId']
+  datasetIds?: UploadStatusProps['datasetIds']
+  copyCount?: number
+  providerIds?: string[]
+  providerNames?: string[]
+  serviceURLs?: string[]
 }
 
-function UploadCompleted({ cid, fileName, pieceCid, datasetId }: UploadCompletedProps) {
-  // Get provider info from context via hook
-  const providerInfo = useProviderInfo()
+function UploadCompleted({
+  cid,
+  fileName,
+  pieceCid,
+  datasetId,
+  datasetIds,
+  copyCount,
+  providerIds,
+  providerNames,
+  serviceURLs,
+}: UploadCompletedProps) {
+  const { dataSet } = useFilecoinPinContext()
   const [hasIpniFailure, setHasIpniFailure] = useState(false)
   const waitForIpniProviderResultsOptions = useMemo<WaitForIpniProviderResultsOptions>(() => {
-    const result: WaitForIpniProviderResultsOptions = {
+    return {
       maxAttempts: 1,
       expectedProviders: [],
     }
-    if (providerInfo?.providerInfo != null) {
-      result.expectedProviders = [providerInfo.providerInfo]
-    }
-    return result
-  }, [providerInfo?.providerInfo])
+  }, [])
 
   const shouldPerformIpniCheck = useMemo(() => {
     return (
@@ -48,9 +60,6 @@ function UploadCompleted({ cid, fileName, pieceCid, datasetId }: UploadCompleted
     )
   }, [waitForIpniProviderResultsOptions.expectedProviders])
 
-  /**
-   * Get the status of the IPNI check to change how we render the completed state.
-   */
   useIpniCheck({
     cid: cid || null,
     isActive: shouldPerformIpniCheck,
@@ -60,19 +69,20 @@ function UploadCompleted({ cid, fileName, pieceCid, datasetId }: UploadCompleted
     },
     waitForIpniProviderResultsOptions,
   })
-  // TODO: fix types, datasetId should never be undefined here...
-  const datasetIdOrDefault = datasetId || providerInfo?.datasetId || ''
 
-  // If provider info is not ready, show a loading state
-  if (!providerInfo) {
-    return (
-      <Card.Wrapper>
-        <Card.InfoRow subtitle="Loading provider information..." title="Upload Complete" />
-      </Card.Wrapper>
-    )
-  }
+  const fallbackDatasetId =
+    dataSet.status === 'ready' && dataSet.dataSetIds.length > 0 ? String(dataSet.dataSetIds[0]) : ''
+  const datasetIdOrDefault = datasetId || fallbackDatasetId
+  const resolvedDatasetIds =
+    datasetIds && datasetIds.length > 0 ? datasetIds : datasetIdOrDefault ? [datasetIdOrDefault] : []
 
-  const { providerAddress, providerName, serviceURL } = providerInfo
+  // Build per-copy provider rows aligned with resolvedDatasetIds
+  const copyRows = resolvedDatasetIds.map((dsId, i) => ({
+    dsId,
+    providerId: providerIds?.[i] ?? '',
+    providerName: providerNames?.[i] ?? '',
+    serviceURL: serviceURLs?.[i] ?? '',
+  }))
 
   return (
     <>
@@ -97,19 +107,42 @@ function UploadCompleted({ cid, fileName, pieceCid, datasetId }: UploadCompleted
           <Card.InfoRow
             subtitle={<TextWithCopyToClipboard href={getPieceExplorerLink(pieceCid)} text={pieceCid} />}
             title="Filecoin Piece CID"
-          >
-            <DownloadButton href={getSpCarDownloadLink(cid, serviceURL, fileName)} />
-          </Card.InfoRow>
+          />
         </Card.Wrapper>
       )}
 
-      <Card.Wrapper>
-        <Card.InfoRow
-          subtitle={<TextLink href={getProviderExplorerLink(providerAddress)}>{providerName}</TextLink>}
-          title="Provider"
-        ></Card.InfoRow>
-        <ButtonLink href={getDatasetExplorerLink(datasetIdOrDefault)}>View proofs</ButtonLink>
-      </Card.Wrapper>
+      {copyRows.length > 0 && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between gap-3">
+            <Heading tag="h3">Storage</Heading>
+            {copyCount != null && copyCount > 0 && <BadgeReplication copyCount={copyCount} />}
+          </div>
+
+          {copyRows.map((row, index) => {
+            const providerLabel =
+              row.providerName || (row.providerId ? `Provider ${row.providerId}` : 'Unknown provider')
+            return (
+              <Card.Wrapper key={`${row.dsId}-${row.providerId || index}`}>
+                <Card.InfoRow
+                  subtitle={
+                    row.providerId ? (
+                      <TextLink href={getProviderExplorerLink(row.providerId)}>{providerLabel}</TextLink>
+                    ) : (
+                      providerLabel
+                    )
+                  }
+                  title={`Data Set ${row.dsId}`}
+                >
+                  {row.serviceURL && cid && (
+                    <DownloadButton href={getSpCarDownloadLink(cid, row.serviceURL, fileName)} />
+                  )}
+                </Card.InfoRow>
+                <ButtonLink href={getDatasetExplorerLink(row.dsId)}>View proofs</ButtonLink>
+              </Card.Wrapper>
+            )
+          })}
+        </div>
+      )}
     </>
   )
 }
