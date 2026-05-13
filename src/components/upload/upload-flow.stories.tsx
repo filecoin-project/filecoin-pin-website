@@ -283,7 +283,7 @@ function Walkthrough({ copies, failureMode, autoPlay, tickMs, network }: Walkthr
     setRunning(autoPlay)
   }, [autoPlay])
 
-  // Reset on config change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `reset` identity only changes with `autoPlay`; `script` is needed in deps so config changes (copies/failureMode/tickMs/network) re-trigger the reset.
   useEffect(() => {
     reset()
   }, [reset, script])
