@@ -33,6 +33,12 @@ interface UploadCompletedProps {
   serviceURLs?: string[]
 }
 
+function resolveDatasetIds(datasetIds: string[] | undefined, fallback: string): string[] {
+  if (datasetIds != null && datasetIds.length > 0) return datasetIds
+  if (fallback) return [fallback]
+  return []
+}
+
 function UploadCompleted({
   cid,
   fileName,
@@ -73,8 +79,7 @@ function UploadCompleted({
   const fallbackDatasetId =
     dataSet.status === 'ready' && dataSet.dataSetIds.length > 0 ? String(dataSet.dataSetIds[0]) : ''
   const datasetIdOrDefault = datasetId || fallbackDatasetId
-  const resolvedDatasetIds =
-    datasetIds && datasetIds.length > 0 ? datasetIds : datasetIdOrDefault ? [datasetIdOrDefault] : []
+  const resolvedDatasetIds = resolveDatasetIds(datasetIds, datasetIdOrDefault)
 
   // Build per-copy provider rows aligned with resolvedDatasetIds
   const copyRows = resolvedDatasetIds.map((dsId, i) => ({
