@@ -12,17 +12,21 @@ const DEFAULT_WALLET_ADDRESS: Hex = '0x44f08D1beFe61255b3C3A349C392C560FA333759'
 const DEFAULT_SESSION_KEY: Hex = '0xca3c92749c4c31beb64ea4334a719b813af1b54b8449a12c81d583018a252af8'
 
 const privateKey = normalizeEnvValue(import.meta.env.VITE_FILECOIN_PRIVATE_KEY) as Hex | undefined
-const walletAddress = (normalizeEnvValue(import.meta.env.VITE_WALLET_ADDRESS) ?? DEFAULT_WALLET_ADDRESS) as Hex
-const sessionKey = (normalizeEnvValue(import.meta.env.VITE_SESSION_KEY) ?? DEFAULT_SESSION_KEY) as Hex
+const envWalletAddress = normalizeEnvValue(import.meta.env.VITE_WALLET_ADDRESS) as Hex | undefined
+const envSessionKey = normalizeEnvValue(import.meta.env.VITE_SESSION_KEY) as Hex | undefined
 
-const hasStandardAuth = privateKey != null
-const hasSessionKeyAuth = walletAddress != null && sessionKey != null
+// Only treat session-key auth as user-supplied when at least one of the env vars is set.
+// Hardcoded defaults must not trigger the conflict check when a private key is provided.
+const hasUserSessionKeyAuth = envWalletAddress != null || envSessionKey != null
 
-if (hasStandardAuth && hasSessionKeyAuth) {
+if (privateKey != null && hasUserSessionKeyAuth) {
   throw new Error(
     'Conflicting authentication: provide either VITE_FILECOIN_PRIVATE_KEY or (VITE_WALLET_ADDRESS + VITE_SESSION_KEY), not both'
   )
 }
+
+const walletAddress = (envWalletAddress ?? DEFAULT_WALLET_ADDRESS) as Hex
+const sessionKey = (envSessionKey ?? DEFAULT_SESSION_KEY) as Hex
 
 export const filecoinPinConfig: SynapseSetupConfig = privateKey
   ? { privateKey, rpcUrl: normalizeEnvValue(import.meta.env.VITE_FILECOIN_RPC_URL) }
