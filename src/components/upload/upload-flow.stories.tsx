@@ -21,6 +21,7 @@ const MOCK_CONTEXT: FilecoinPinContextValue = {
   addDataSetId: () => {
     /* noop */
   },
+  debugParams: { providerId: null, dataSetId: null },
 }
 
 const FILE_NAME = 'demo-data.car'
