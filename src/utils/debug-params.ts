@@ -25,8 +25,39 @@
  */
 
 export interface DebugParams {
-  providerId: number | null
+  providerId: bigint | null
   dataSetId: number | null
+}
+
+/** Decimal integer string only; avoids Number precision loss for large provider IDs. */
+const PROVIDER_ID_PATTERN = /^\d+$/
+
+const parseQueryParamBigInt = (value: string | null): bigint | null => {
+  if (value === null) {
+    return null
+  }
+
+  const trimmed = value.trim()
+  if (trimmed === '') {
+    return null
+  }
+
+  if (!PROVIDER_ID_PATTERN.test(trimmed)) {
+    console.warn(`[DEBUG PARAMS] Invalid providerId: ${value}`)
+    return null
+  }
+
+  try {
+    const parsed = BigInt(trimmed)
+    if (parsed <= 0n) {
+      console.warn(`[DEBUG PARAMS] providerId must be > 0: ${value}`)
+      return null
+    }
+    return parsed
+  } catch {
+    console.warn(`[DEBUG PARAMS] Invalid providerId: ${value}`)
+    return null
+  }
 }
 
 const parseQueryParamNumber = (value: string | null): number | null => {
@@ -57,7 +88,7 @@ export function getDebugParams(): DebugParams {
   const dataSetId = params.get('dataSetId')
 
   // Use URL providerId if present, otherwise defer to Synapse for selection
-  const providerId = parseQueryParamNumber(providerIdParam)
+  const providerId = parseQueryParamBigInt(providerIdParam)
 
   return {
     providerId,
