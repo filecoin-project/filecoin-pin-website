@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDebugParams } from './debug-params.ts'
 
-const UNSAFE_INTEGER_PROVIDER_ID = String(Number.MAX_SAFE_INTEGER + 1)
+const UNSAFE_INTEGER_PROVIDER_ID = '9007199254740993'
 
 describe('getDebugParams providerId', () => {
   const originalLocation = window.location
