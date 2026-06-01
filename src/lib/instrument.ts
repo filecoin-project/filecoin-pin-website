@@ -1,5 +1,8 @@
 import * as Sentry from '@sentry/react'
+import { configureTelemetry } from 'filecoin-pin/core/telemetry'
 import packageLock from '../../package-lock.json' with { type: 'json' }
+
+configureTelemetry({ affordance: 'pin.filecoin.cloud' })
 
 Sentry.init({
   dsn: 'https://PH2VByCrdrU9fmwjQe13KuuZ@s1682007.us-east-9.betterstackdata.com/1682007',
