@@ -11,9 +11,27 @@ import { defineConfig } from 'vite'
 
 const dirname = typeof __dirname === 'undefined' ? path.dirname(fileURLToPath(import.meta.url)) : __dirname
 
+// filecoin-pin's `common/get-rpc-url.js` statically imports node:fs/os/path for
+// devnet support and cannot be bundled for the browser. It is only reached via a
+// guarded lazy import in resolveChainFromRpc for devnet chain ids — a path this
+// app never takes — so redirect it to a browser-safe stub during bundling.
+function stubFilecoinPinDevnetRpc() {
+  const stub = path.resolve(dirname, './src/lib/filecoin-pin/get-rpc-url-browser-stub.ts')
+  return {
+    name: 'stub-filecoin-pin-devnet-rpc',
+    enforce: 'pre' as const,
+    resolveId(source: string, importer?: string) {
+      if (source.endsWith('common/get-rpc-url.js') && importer?.includes('filecoin-pin')) {
+        return stub
+      }
+      return null
+    },
+  }
+}
+
 // More info at: https://storybook.js.org/docs/writing-tests/integrations/vitest-addon
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [stubFilecoinPinDevnetRpc(), react(), tailwindcss()],
   define: {
     'process.env': {
       PROVIDER_ADDRESS: process.env.PROVIDER_ADDRESS,

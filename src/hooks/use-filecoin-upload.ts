@@ -142,7 +142,7 @@ export const useFilecoinUpload = () => {
           },
           onProgress: (event) => {
             switch (event.type) {
-              case 'onProviderSelected': {
+              case 'providerSelected': {
                 const provider = event.data.provider
                 setUploadState((prev) => ({
                   ...prev,
@@ -151,7 +151,7 @@ export const useFilecoinUpload = () => {
                 break
               }
 
-              case 'onDataSetResolved': {
+              case 'dataSetResolved': {
                 const provider = event.data.provider
                 setUploadState((prev) => ({
                   ...prev,
@@ -160,7 +160,7 @@ export const useFilecoinUpload = () => {
                 break
               }
 
-              case 'onStored':
+              case 'stored':
                 console.debug('[FilecoinUpload] Stored on provider:', String(event.data.providerId))
                 setUploadState((prev) => ({
                   ...prev,
@@ -170,13 +170,13 @@ export const useFilecoinUpload = () => {
                 updateStepState('replicating', { status: 'in-progress', progress: 0 })
                 break
 
-              case 'onCopyComplete':
+              case 'copyComplete':
                 console.debug('[FilecoinUpload] Secondary copy complete on provider:', String(event.data.providerId))
                 updateStepState('replicating', { status: 'completed', progress: 100 })
                 updateStepState('announcing-cids', { status: 'in-progress', progress: 0 })
                 break
 
-              case 'onCopyFailed':
+              case 'copyFailed':
                 console.debug('[FilecoinUpload] Secondary copy failed on provider:', String(event.data.providerId))
                 updateStepState('replicating', {
                   status: 'error',
@@ -186,7 +186,7 @@ export const useFilecoinUpload = () => {
                 updateStepState('announcing-cids', { status: 'in-progress', progress: 0 })
                 break
 
-              case 'onPiecesAdded': {
+              case 'piecesAdded': {
                 const txHash = event.data.txHash
                 console.debug('[FilecoinUpload] Piece add transaction:', { txHash })
                 setUploadState((prev) => {
@@ -210,7 +210,7 @@ export const useFilecoinUpload = () => {
                 break
               }
 
-              case 'onPiecesConfirmed': {
+              case 'piecesConfirmed': {
                 const confirmedDataSetId = event.data.dataSetId
                 if (wallet?.status === 'ready' && confirmedDataSetId != null) {
                   addStoredDataSetId(wallet.data.address, Number(confirmedDataSetId))
@@ -237,7 +237,7 @@ export const useFilecoinUpload = () => {
                 break
               }
 
-              case 'ipniProviderResults.failed': {
+              case 'ipniProviderResults:failed': {
                 console.warn('[FilecoinUpload] IPNI check failed:', event.data.error.message)
                 cacheIpniResult(rootCid, 'failed')
                 updateStepState('announcing-cids', {
@@ -248,7 +248,7 @@ export const useFilecoinUpload = () => {
                 break
               }
 
-              case 'ipniProviderResults.complete': {
+              case 'ipniProviderResults:complete': {
                 console.debug('[FilecoinUpload] IPNI check succeeded')
                 cacheIpniResult(rootCid, 'success')
                 updateStepState('announcing-cids', { status: 'completed', progress: 100 })
