@@ -131,7 +131,7 @@ function buildScript(config: FlowConfig): Array<(s: FlowState) => FlowState> {
     ),
   }))
 
-  // onStored: uploading-car complete, replicating in-progress, pieceCid available
+  // stored: uploading-car complete, replicating in-progress, pieceCid available
   script.push((s) => ({
     ...s,
     pieceCid: PIECE_CID,
@@ -141,7 +141,7 @@ function buildScript(config: FlowConfig): Array<(s: FlowState) => FlowState> {
     }),
   }))
 
-  // onCopyComplete or onCopyFailed
+  // copyComplete or copyFailed
   if (copies >= 2) {
     if (failureMode === 'replicating-failed') {
       script.push((s) => ({
@@ -170,14 +170,14 @@ function buildScript(config: FlowConfig): Array<(s: FlowState) => FlowState> {
       }))
     }
   } else {
-    // single-copy fallback path: no onCopyComplete; replicating done via onPiecesAdded fallback later
+    // single-copy fallback path: no copyComplete; replicating done via piecesAdded fallback later
     script.push((s) => ({
       ...s,
       stepStates: setStep(s.stepStates, 'announcing-cids', { status: 'in-progress', progress: 0 }),
     }))
   }
 
-  // onPiecesAdded × N (one per copy attempted)
+  // piecesAdded × N (one per copy attempted)
   const piecesAddedCount = failureMode === 'replicating-failed' ? 1 : copies
   for (let i = 0; i < piecesAddedCount; i++) {
     script.push((s) => {
@@ -196,7 +196,7 @@ function buildScript(config: FlowConfig): Array<(s: FlowState) => FlowState> {
     })
   }
 
-  // onPiecesConfirmed × N — accumulate per-copy data so the completed view
+  // piecesConfirmed × N — accumulate per-copy data so the completed view
   // already has the full picture once isUploadSuccessful flips on.
   for (let i = 0; i < piecesAddedCount; i++) {
     script.push((s) => {
