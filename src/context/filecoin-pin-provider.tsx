@@ -3,6 +3,7 @@ import { type DataSetState, useDataSetManager } from '../hooks/use-data-set-mana
 import { filecoinPinConfig } from '../lib/filecoin-pin/config.ts'
 import { getSynapseClient, type Synapse } from '../lib/filecoin-pin/synapse.ts'
 import { fetchWalletSnapshot, type WalletSnapshot } from '../lib/filecoin-pin/wallet.ts'
+import { getOrCreateClientId } from '../lib/local-storage/client-id.ts'
 import { type DebugParams, getDebugParams, logDebugParams } from '../utils/debug-params.ts'
 
 type WalletState =
@@ -26,6 +27,11 @@ export const FilecoinPinContext = createContext<FilecoinPinContextValue | undefi
 const initialWalletState: WalletState = { status: 'idle' }
 
 export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
+  // Ensure this browser has a stable client id (and run the one-time legacy
+  // shared-data-set cleanup) synchronously on first render, before the history
+  // effect reads stored data set ids.
+  useState(getOrCreateClientId)
+
   const [wallet, setWallet] = useState<WalletState>(initialWalletState)
   const synapseRef = useRef<Synapse | null>(null)
   const config = filecoinPinConfig
