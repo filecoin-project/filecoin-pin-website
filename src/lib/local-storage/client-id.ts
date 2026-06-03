@@ -23,16 +23,18 @@ const CLIENT_ID_KEY = 'filecoin-pin-client-id'
  */
 export const getOrCreateClientId = (): string => {
   try {
-    let id = localStorage.getItem(CLIENT_ID_KEY)
-    if (!id) {
-      id = crypto.randomUUID()
-      localStorage.setItem(CLIENT_ID_KEY, id)
+    const existing = localStorage.getItem(CLIENT_ID_KEY)
+    if (existing) return existing
+
+    const id = crypto.randomUUID()
+    localStorage.setItem(CLIENT_ID_KEY, id)
+    try {
       clearLegacyDataSetIds()
+    } catch (error) {
+      console.warn('[ClientId] Failed to clear legacy data set ids:', error)
     }
     return id
   } catch (error) {
-    // localStorage/crypto unavailable (e.g. SSR or locked-down browser):
-    // fall back to an ephemeral id so uploads still get their own data set.
     console.warn('[ClientId] Falling back to ephemeral client id:', error)
     return crypto.randomUUID()
   }
