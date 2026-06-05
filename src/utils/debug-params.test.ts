@@ -3,7 +3,7 @@ import { getDebugParams } from './debug-params.ts'
 
 const UNSAFE_INTEGER_PROVIDER_ID = '9007199254740993'
 
-describe('getDebugParams providerId', () => {
+describe('getDebugParams', () => {
   const originalLocation = window.location
 
   beforeEach(() => {
