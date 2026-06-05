@@ -134,7 +134,7 @@ export const useFilecoinUpload = () => {
         const result = await executeUpload(synapse, carResult.carBytes, carResult.rootCid, {
           logger,
           contextId: `upload-${Date.now()}`,
-          ...(debugParams.providerId != null && { providerIds: [BigInt(debugParams.providerId)] }),
+          ...(debugParams.providerId != null && { providerIds: [debugParams.providerId] }),
           pieceMetadata: {
             ...(metadata ?? {}),
             label: file.name,

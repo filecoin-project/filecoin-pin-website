@@ -12,7 +12,7 @@ interface UseDataSetManagerProps {
   synapse: Synapse | null
   walletAddress: string | null
   debugParams?: {
-    providerId?: number | null
+    providerId?: bigint | null
     dataSetId?: number | null
   }
 }

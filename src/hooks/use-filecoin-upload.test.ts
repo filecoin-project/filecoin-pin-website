@@ -54,7 +54,7 @@ describe('useFilecoinUpload providerId debug param', () => {
   it('forwards debugParams.providerId to executeUpload as providerIds=[BigInt(n)]', async () => {
     useFilecoinPinContextMock.mockReturnValue({
       ...baseContext,
-      debugParams: { providerId: 6, dataSetId: null },
+      debugParams: { providerId: 6n, dataSetId: null },
     })
 
     const { result } = renderHook(() => useFilecoinUpload())
