@@ -3,6 +3,7 @@ import { createCarFromFile } from 'filecoin-pin/core/unixfs'
 import { checkUploadReadiness, executeUpload, type UploadExecutionResult } from 'filecoin-pin/core/upload'
 import pino from 'pino'
 import { useCallback, useState } from 'react'
+import { getOrCreateClientId } from '../lib/local-storage/client-id.ts'
 import { addStoredDataSetId } from '../lib/local-storage/data-set.ts'
 import type { StepState } from '../types/upload/step.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
@@ -135,6 +136,10 @@ export const useFilecoinUpload = () => {
           logger,
           contextId: `upload-${Date.now()}`,
           ...(debugParams.providerId != null && { providerIds: [debugParams.providerId] }),
+          // Per-browser metadata so Synapse smart-select gives this browser its
+          // own data set instead of sharing the demo wallet's data sets with
+          // every other visitor (avoids cross-user file visibility + RPC blowup).
+          metadata: { clientId: getOrCreateClientId() },
           pieceMetadata: {
             ...(metadata ?? {}),
             label: file.name,
