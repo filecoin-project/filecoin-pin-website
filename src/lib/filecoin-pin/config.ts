@@ -7,9 +7,9 @@ const normalizeEnvValue = (value: string | boolean | number | undefined) => {
   return trimmed.length === 0 ? undefined : trimmed
 }
 
-// Hardcoded defaults (can be overridden by env vars) expires: 2026-02-01 16:37:53
+// Hardcoded defaults (can be overridden by env vars) expires: 2026-08-15 09:24:22
 const DEFAULT_WALLET_ADDRESS: Hex = '0x44f08D1beFe61255b3C3A349C392C560FA333759'
-const DEFAULT_SESSION_KEY: Hex = '0xca3c92749c4c31beb64ea4334a719b813af1b54b8449a12c81d583018a252af8'
+const DEFAULT_SESSION_KEY: Hex = '0x416dc827726298c032acf086ddf45c1de79b8e62f3af2ffe0377afe08862deb3'
 
 const privateKey = normalizeEnvValue(import.meta.env.VITE_FILECOIN_PRIVATE_KEY) as Hex | undefined
 const envWalletAddress = normalizeEnvValue(import.meta.env.VITE_WALLET_ADDRESS) as Hex | undefined
