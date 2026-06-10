@@ -1,5 +1,6 @@
 import { getDetailedDataSet } from 'filecoin-pin/core/data-set'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { addCachedPiece, getCachedPieces, setCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 
 // Inlined from @filoz/synapse-sdk METADATA_KEYS to avoid dual-copy type issues
@@ -41,7 +42,10 @@ export interface DatasetPiece {
 /**
  * Fetches and normalizes dataset pieces for the active wallet.
  *
- * Uses getDetailedDataSet which only needs Synapse + dataSetId.
+ * Renders from the localStorage piece cache when available (zero RPC calls);
+ * only falls back to chain enumeration (getDetailedDataSet) when no cache
+ * exists or the caller explicitly refreshes. Chain enumeration is expensive:
+ * several eth_calls per dataset plus one eth_call per piece for metadata.
  */
 export const useDatasetPieces = () => {
   const [pieces, setPieces] = useState<DatasetPiece[]>([])
@@ -50,6 +54,9 @@ export const useDatasetPieces = () => {
   const [hasLoaded, setHasLoaded] = useState(false)
 
   const { wallet, synapse, dataSet } = useFilecoinPinContext()
+
+  const walletAddress = wallet.status === 'ready' ? wallet.data.address : null
+  const network = wallet.status === 'ready' ? wallet.data.network : 'calibration'
 
   const dataSetIdsKey = dataSet.status === 'ready' ? dataSet.dataSetIds.map((id) => String(id)).join(',') : ''
   const dataSetIds = useMemo<bigint[]>(
@@ -84,7 +91,6 @@ export const useDatasetPieces = () => {
         })
       )
 
-      const network = wallet?.status === 'ready' ? wallet.data.network : 'calibration'
       // Group by pieceCid so the same piece replicated across N datasets renders as one entry
       const piecesByCid = new Map<string, DatasetPiece>()
 
@@ -149,6 +155,12 @@ export const useDatasetPieces = () => {
 
       console.debug('[DatasetPieces] Merged', merged.length, 'unique pieces across', dataSetIds.length, 'datasets')
       setPieces(merged)
+      // A failed dataset fetch yields a partial list; caching it would
+      // silently drop those pieces from history on every later visit.
+      const hadFailures = datasets.some((entry) => entry == null)
+      if (walletAddress && !hadFailures) {
+        setCachedPieces(walletAddress, merged)
+      }
     } catch (err) {
       console.error('[DatasetPieces] Failed to load pieces:', err)
       setError(err instanceof Error ? err.message : 'Failed to load pieces')
@@ -157,28 +169,50 @@ export const useDatasetPieces = () => {
       setIsLoading(false)
       setHasLoaded(true)
     }
-  }, [dataSetIds, wallet, synapse])
+  }, [dataSetIds, network, walletAddress, synapse])
 
+  // Load history at most once per page visit: from the localStorage cache when
+  // available (zero RPC calls), falling back to one chain enumeration when the
+  // cache is missing (e.g. cleared storage). Deliberately NOT re-run when the
+  // wallet object refreshes or when an upload appends a new dataset id —
+  // uploads update history locally via addPiece.
+  const autoLoadedRef = useRef(false)
   useEffect(() => {
-    if (synapse && dataSetIds.length > 0) {
-      loadPieces()
-    } else {
-      setPieces([])
-      setHasLoaded(false)
+    if (autoLoadedRef.current) return
+    if (!walletAddress || dataSetIds.length === 0) return
+
+    const cached = getCachedPieces(walletAddress)
+    if (cached) {
+      autoLoadedRef.current = true
+      console.debug('[DatasetPieces] Loaded', cached.length, 'pieces from cache (no RPC)')
+      setPieces(cached)
+      setHasLoaded(true)
+      return
     }
-  }, [loadPieces, synapse, dataSetIds.length])
+
+    if (synapse) {
+      autoLoadedRef.current = true
+      loadPieces()
+    }
+  }, [walletAddress, dataSetIds.length, synapse, loadPieces])
 
   const refreshPieces = useCallback(() => {
     loadPieces()
   }, [loadPieces])
 
   /** Add a piece to the history without refetching from backend (used after upload completes). */
-  const addPiece = useCallback((piece: DatasetPiece) => {
-    setPieces((prev) => {
-      const updated = [piece, ...prev]
-      return updated
-    })
-  }, [])
+  const addPiece = useCallback(
+    (piece: DatasetPiece) => {
+      setPieces((prev) => {
+        const updated = [piece, ...prev]
+        return updated
+      })
+      if (walletAddress) {
+        addCachedPiece(walletAddress, piece)
+      }
+    },
+    [walletAddress]
+  )
 
   return {
     pieces,

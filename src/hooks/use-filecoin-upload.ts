@@ -1,10 +1,18 @@
 import type { PDPProvider } from '@filoz/synapse-sdk'
 import { createCarFromFile } from 'filecoin-pin/core/unixfs'
-import { checkUploadReadiness, executeUpload, type UploadExecutionResult } from 'filecoin-pin/core/upload'
+import {
+  checkUploadReadiness,
+  executeUpload,
+  type UploadExecutionOptions,
+  type UploadExecutionResult,
+} from 'filecoin-pin/core/upload'
 import pino from 'pino'
 import { useCallback, useState } from 'react'
+import { createFreshUploadContexts } from '../lib/filecoin-pin/fresh-contexts.ts'
+import { ensureSessionKeyPermissions } from '../lib/filecoin-pin/synapse.ts'
 import { getOrCreateClientId } from '../lib/local-storage/client-id.ts'
-import { addStoredDataSetId } from '../lib/local-storage/data-set.ts'
+import { addStoredDataSetId, clearStoredDataSetIds, getStoredDataSetIds } from '../lib/local-storage/data-set.ts'
+import { clearCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import type { StepState } from '../types/upload/step.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
@@ -45,6 +53,18 @@ export const INITIAL_STEP_STATES: StepState[] = [
 
 export const INPI_ERROR_MESSAGE =
   "CID not yet indexed by IPNI. It's stored on Filecoin and fetchable now, but may take time to appear on IPFS."
+
+/**
+ * True when executeUpload failed while resolving explicitly-passed dataset ids
+ * (deleted dataset, wrong owner, two datasets on the same provider). Callers
+ * must also confirm no upload progress events fired: dataset resolution
+ * happens before any bytes are uploaded, so message matching alone could
+ * misclassify a later provider or payments error that shares these phrases.
+ */
+const isDataSetResolutionError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error)
+  return /does not exist|not owned by|duplicate providers|not found in registry|resolved to/i.test(message)
+}
 
 /**
  * Handles the end-to-end upload workflow with filecoin-pin:
@@ -113,6 +133,9 @@ export const useFilecoinUpload = () => {
         logger.info('Waiting for synapse to be initialized')
         const synapse = await synapseRef.wait()
         logger.info('Synapse initialized')
+        // Session-key permission checks are deferred from page load to here so
+        // read-only visits make no permission-related RPC calls.
+        await ensureSessionKeyPermissions()
         updateStepState('checking-readiness', { progress: 50 })
 
         logger.info('Checking upload readiness')
@@ -132,20 +155,19 @@ export const useFilecoinUpload = () => {
         logger.info('Upload readiness check completed')
 
         logger.info('Uploading CAR to Synapse')
-        const result = await executeUpload(synapse, carResult.carBytes, carResult.rootCid, {
+        // Distinguishes resolution failures (safe to retry into fresh data
+        // sets) from errors after the upload started.
+        let sawUploadProgress = false
+        const baseOptions: UploadExecutionOptions = {
           logger,
           contextId: `upload-${Date.now()}`,
-          ...(debugParams.providerId != null && { providerIds: [debugParams.providerId] }),
-          // Per-browser metadata so Synapse smart-select gives this browser its
-          // own data set instead of sharing the demo wallet's data sets with
-          // every other visitor (avoids cross-user file visibility + RPC blowup).
-          metadata: { clientId: getOrCreateClientId() },
           pieceMetadata: {
             ...(metadata ?? {}),
             label: file.name,
             fileSize: formatFileSize(file.size),
           },
           onProgress: (event) => {
+            sawUploadProgress = true
             switch (event.type) {
               case 'providerSelected': {
                 const provider = event.data.provider
@@ -264,7 +286,69 @@ export const useFilecoinUpload = () => {
                 break
             }
           },
-        })
+        }
+
+        const walletAddress = wallet?.status === 'ready' ? wallet.data.address : null
+        const storedDataSetIds =
+          debugParams.providerId == null && walletAddress ? getStoredDataSetIds(walletAddress) : []
+
+        // Select providers directly from the registry and create fresh
+        // per-browser datasets during the upload commit, skipping the SDK's
+        // smart-select (which enumerates every dataset on the shared demo
+        // wallet). Falls back to smart-select with per-browser metadata when
+        // no provider is reachable. The created dataset ids are stored on
+        // `piecesConfirmed`, so later uploads take the resume path.
+        const uploadIntoFreshDataSets = async (): Promise<UploadExecutionResult> => {
+          let contexts: Awaited<ReturnType<typeof createFreshUploadContexts>> | null = null
+          try {
+            contexts = await createFreshUploadContexts(synapse, getOrCreateClientId())
+            for (const context of contexts) {
+              const provider = context.provider
+              setUploadState((prev) => ({
+                ...prev,
+                providersById: { ...prev.providersById, [String(provider.id)]: provider },
+              }))
+            }
+          } catch (error) {
+            console.warn('[FilecoinUpload] Fresh context selection failed, falling back to smart-select:', error)
+          }
+          return executeUpload(
+            synapse,
+            carResult.carBytes,
+            carResult.rootCid,
+            contexts == null
+              ? { ...baseOptions, metadata: { clientId: getOrCreateClientId() } }
+              : { ...baseOptions, contexts }
+          )
+        }
+
+        let result: UploadExecutionResult
+        if (debugParams.providerId != null) {
+          result = await executeUpload(synapse, carResult.carBytes, carResult.rootCid, {
+            ...baseOptions,
+            providerIds: [debugParams.providerId],
+            metadata: { clientId: getOrCreateClientId() },
+          })
+        } else if (walletAddress != null && storedDataSetIds.length > 0) {
+          // Resume into this browser's known datasets. Passing explicit ids
+          // skips the SDK's smart-select, which enumerates every dataset on
+          // the shared demo wallet (one eth_call per dataset, unbounded).
+          try {
+            result = await executeUpload(synapse, carResult.carBytes, carResult.rootCid, {
+              ...baseOptions,
+              dataSetIds: storedDataSetIds.map((id) => BigInt(id)),
+            })
+          } catch (error) {
+            if (sawUploadProgress || !isDataSetResolutionError(error)) throw error
+            console.warn('[FilecoinUpload] Stored dataset ids failed to resolve, recreating data sets:', error)
+            clearStoredDataSetIds(walletAddress)
+            clearCachedPieces(walletAddress)
+            result = await uploadIntoFreshDataSets()
+          }
+        } else {
+          // First upload from this browser
+          result = await uploadIntoFreshDataSets()
+        }
         logger.info('Upload completed')
 
         setUploadState((prev) => ({

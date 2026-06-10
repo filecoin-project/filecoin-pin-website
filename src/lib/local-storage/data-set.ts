@@ -112,6 +112,23 @@ export const addStoredDataSetId = (walletAddress: string, dataSetId: number): vo
 }
 
 /**
+ * Remove all stored data set IDs for a wallet (multi-id list and legacy single-id key).
+ *
+ * Used when stored IDs fail to resolve on-chain (e.g. dataset deleted or owned
+ * by a different wallet) so the next upload creates fresh data sets and
+ * re-learns the browser's dataset ids.
+ */
+export const clearStoredDataSetIds = (walletAddress: string): void => {
+  try {
+    localStorage.removeItem(getDataSetIdsKey(walletAddress))
+    localStorage.removeItem(getDataSetStorageKey(walletAddress))
+    console.debug('[DataSetStorage] Cleared stored data set IDs for wallet:', walletAddress)
+  } catch (error) {
+    console.warn('[DataSetStorage] Failed to clear data set IDs from localStorage:', error)
+  }
+}
+
+/**
  * Get the stored data set ID for a specific wallet address and provider ID.
  *
  * This allows testing/debugging with different providers by storing separate
