@@ -54,7 +54,7 @@ export async function createFreshUploadContexts(
   }
 
   const excludeProviderIds: bigint[] = []
-  const selected = []
+  const selected: typeof providers = []
   for (let i = 0; i < copies; i++) {
     // Restrict the primary copy to endorsed providers, mirroring the SDK's
     // requireEndorsedPrimary behavior; secondaries draw from the full pool.

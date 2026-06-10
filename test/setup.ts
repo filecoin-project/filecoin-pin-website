@@ -38,4 +38,6 @@ for (const name of ['localStorage', 'sessionStorage'] as const) {
 // Cleanup after each test
 afterEach(() => {
   cleanup()
+  localStorage.clear()
+  sessionStorage.clear()
 })
