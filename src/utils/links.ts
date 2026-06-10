@@ -8,14 +8,14 @@ const UPLOAD_COMPLETED_LINKS = {
  * download button href
  */
 export const getIpfsGatewayDownloadLink = (cid: string, fileName: string): string => {
-  return `${getIpfsGatewayRenderLink(cid, fileName)}?filename=${fileName}.car`
+  return `${getIpfsGatewayRenderLink(cid)}?filename=${encodeURIComponent(fileName)}`
 }
 
 /**
  * cid text hyperlink
  */
-export const getIpfsGatewayRenderLink = (cid: string, fileName: string): string => {
-  return `${UPLOAD_COMPLETED_LINKS.ipfsGatewayBaseUrl}${cid}/${fileName}`
+export const getIpfsGatewayRenderLink = (cid: string): string => {
+  return `${UPLOAD_COMPLETED_LINKS.ipfsGatewayBaseUrl}${cid}`
 }
 
 /**
