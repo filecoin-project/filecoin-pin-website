@@ -7,10 +7,12 @@ describe('IPFS gateway links', () => {
     expect(getIpfsGatewayRenderLink('bafyroot')).toBe('https://dweb.link/ipfs/bafyroot')
   })
 
-  it('keeps the original file name in the download query only', () => {
+  it('keeps the original file name in the download query and forces attachment disposition', () => {
     const href = getIpfsGatewayDownloadLink('bafyroot', 'Screenshot 2026-05-18 at 7.48.15 pm.png')
 
-    expect(href).toBe('https://dweb.link/ipfs/bafyroot?filename=Screenshot%202026-05-18%20at%207.48.15%20pm.png')
+    expect(href).toBe(
+      'https://dweb.link/ipfs/bafyroot?filename=Screenshot%202026-05-18%20at%207.48.15%20pm.png&download=true',
+    )
     expect(href).not.toContain('/Screenshot')
   })
 })

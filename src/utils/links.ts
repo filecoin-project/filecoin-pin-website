@@ -8,7 +8,7 @@ const UPLOAD_COMPLETED_LINKS = {
  * download button href
  */
 export const getIpfsGatewayDownloadLink = (cid: string, fileName: string): string => {
-  return `${getIpfsGatewayRenderLink(cid)}?filename=${encodeURIComponent(fileName)}`
+  return `${getIpfsGatewayRenderLink(cid)}?filename=${encodeURIComponent(fileName)}&download=true`
 }
 
 /**
