@@ -98,7 +98,7 @@ function UploadCompleted({
             hasIpniFailure ? (
               <TextWithCopyToClipboard text={cid} />
             ) : (
-              <TextWithCopyToClipboard href={getIpfsGatewayRenderLink(cid, fileName)} text={cid} />
+              <TextWithCopyToClipboard href={getIpfsGatewayRenderLink(cid)} text={cid} />
             )
           }
           title="IPFS Root CID"

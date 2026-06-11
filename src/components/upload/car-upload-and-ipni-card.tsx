@@ -46,7 +46,7 @@ export const CarUploadAndIpniCard = ({ stepStates, cid, fileName }: CarUploadAnd
           subtitle={
             <TextWithCopyToClipboard
               text={cid}
-              {...(!hasIpniAnnounceFailure && { href: getIpfsGatewayRenderLink(cid, fileName) })}
+              {...(!hasIpniAnnounceFailure && { href: getIpfsGatewayRenderLink(cid) })}
             />
           }
           title="IPFS Root CID"
