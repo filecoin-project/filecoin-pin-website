@@ -1,4 +1,4 @@
-import type { PDPProvider } from '@filoz/synapse-sdk'
+import { CommitError, type PDPProvider, StoreError } from '@filoz/synapse-sdk'
 import { createCarFromFile } from 'filecoin-pin/core/unixfs'
 import {
   checkUploadReadiness,
@@ -65,6 +65,15 @@ const isDataSetResolutionError = (error: unknown): boolean => {
   const message = error instanceof Error ? error.message : String(error)
   return /does not exist|not owned by|duplicate providers|not found in registry|resolved to/i.test(message)
 }
+
+/**
+ * True for store and commit failures surfaced by Synapse (`StoreError` /
+ * `CommitError`). On the resume path these indicate the provider behind a
+ * stored dataset id is unreachable. A caller must also confirm no bytes were
+ * stored yet: after a 'stored' event the same error indicates a failure mid-
+ * upload rather than an unreachable resumed provider.
+ */
+const isProviderStoreError = (error: unknown): boolean => StoreError.is(error) || CommitError.is(error)
 
 /**
  * Handles the end-to-end upload workflow with filecoin-pin:
@@ -158,6 +167,10 @@ export const useFilecoinUpload = () => {
         // Distinguishes resolution failures (safe to retry into fresh data
         // sets) from errors after the upload started.
         let sawUploadProgress = false
+        // Set once the primary copy's bytes land on a provider. Past this point
+        // a store or commit failure reflects a problem mid-upload, so the
+        // resume retry below leaves the stored dataset ids in place.
+        let sawBytesStored = false
         const baseOptions: UploadExecutionOptions = {
           logger,
           contextId: `upload-${Date.now()}`,
@@ -188,6 +201,7 @@ export const useFilecoinUpload = () => {
               }
 
               case 'stored':
+                sawBytesStored = true
                 console.debug('[FilecoinUpload] Stored on provider:', String(event.data.providerId))
                 setUploadState((prev) => ({
                   ...prev,
@@ -339,8 +353,19 @@ export const useFilecoinUpload = () => {
               dataSetIds: storedDataSetIds.map((id) => BigInt(id)),
             })
           } catch (error) {
-            if (sawUploadProgress || !isDataSetResolutionError(error)) throw error
-            console.warn('[FilecoinUpload] Stored dataset ids failed to resolve, recreating data sets:', error)
+            // Recoverable failures, both safe to retry into fresh datasets:
+            //   1. Resolution failed: the stored id is gone or owned by another
+            //      wallet. Resolution emits no progress events, so
+            //      sawUploadProgress is still false.
+            //   2. The dataset resolved but its provider is unreachable: a
+            //      StoreError before any bytes landed. Dataset resolution reads
+            //      chain and registry state without contacting the provider, so
+            //      an unreachable provider first surfaces at store time.
+            //      Recreating datasets routes the upload to a reachable provider.
+            const resolutionFailure = !sawUploadProgress && isDataSetResolutionError(error)
+            const deadProviderOnResume = !sawBytesStored && isProviderStoreError(error)
+            if (!resolutionFailure && !deadProviderOnResume) throw error
+            console.warn('[FilecoinUpload] Stored dataset ids unusable, recreating data sets:', error)
             clearStoredDataSetIds(walletAddress)
             clearCachedPieces(walletAddress)
             result = await uploadIntoFreshDataSets()

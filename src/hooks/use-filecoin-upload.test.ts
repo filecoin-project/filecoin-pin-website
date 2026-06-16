@@ -40,6 +40,7 @@ vi.mock('../lib/filecoin-pin/fresh-contexts.ts', () => ({
   createFreshUploadContexts: createFreshUploadContextsMock,
 }))
 
+import { CommitError, StoreError } from '@filoz/synapse-sdk'
 import { addStoredDataSetId, getStoredDataSetIds } from '../lib/local-storage/data-set.ts'
 import { getCachedPieces, setCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import { useFilecoinUpload } from './use-filecoin-upload.ts'
@@ -180,6 +181,48 @@ describe('useFilecoinUpload dataset resume', () => {
     await expect(result.current.uploadFile(testFile)).rejects.toThrow('network timeout')
 
     expect(executeUploadMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('recreates data sets when a stored dataset resolves but its provider is offline', async () => {
+    // The dataset resolves (callbacks fire) but the provider is offline, so the
+    // store throws a StoreError before any bytes land. Without recovery every
+    // later upload from this browser re-resolves the same dead provider and
+    // fails.
+    addStoredDataSetId('0xabc', 42)
+    setCachedPieces('0xabc', [{ pieceCid: 'bafkstale' } as never])
+    useFilecoinPinContextMock.mockReturnValue(baseContext)
+    executeUploadMock
+      .mockImplementationOnce(async (_synapse, _car, _root, opts) => {
+        opts.onProgress?.({ type: 'dataSetResolved', data: { dataSetId: 42n, provider: { id: 4n, name: 'p' } } })
+        throw new StoreError('Failed to store on primary provider 4', { providerId: 4n, endpoint: 'https://p' })
+      })
+      .mockResolvedValueOnce({ copies: [], network: 'calibration' })
+
+    const { result } = renderHook(() => useFilecoinUpload())
+    await result.current.uploadFile(testFile)
+
+    expect(executeUploadMock).toHaveBeenCalledTimes(2)
+    expect(getOpts()).toMatchObject({ contexts: fakeContexts })
+    expect(getOpts()).not.toHaveProperty('dataSetIds')
+    expect(getStoredDataSetIds('0xabc')).toEqual([])
+    expect(getCachedPieces('0xabc')).toBeNull()
+  })
+
+  it('rethrows a StoreError that occurs after bytes are stored without recreating data sets', async () => {
+    // After a copy lands (stored event), a later store or commit failure means
+    // the upload progressed past resolution, so it must not recreate datasets.
+    addStoredDataSetId('0xabc', 42)
+    useFilecoinPinContextMock.mockReturnValue(baseContext)
+    executeUploadMock.mockImplementationOnce(async (_synapse, _car, _root, opts) => {
+      opts.onProgress?.({ type: 'stored', data: { providerId: 4n, pieceCid: { toString: () => 'bafkpiece' } } })
+      throw new CommitError('secondary copy commit failed', { providerId: 4n, endpoint: 'https://p' })
+    })
+
+    const { result } = renderHook(() => useFilecoinUpload())
+    await expect(result.current.uploadFile(testFile)).rejects.toThrow('secondary copy commit failed')
+
+    expect(executeUploadMock).toHaveBeenCalledTimes(1)
+    expect(getStoredDataSetIds('0xabc')).toEqual([42])
   })
 
   it('prefers debug providerId over stored dataset ids', async () => {

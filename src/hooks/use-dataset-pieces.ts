@@ -179,7 +179,17 @@ export const useDatasetPieces = () => {
   const autoLoadedRef = useRef(false)
   useEffect(() => {
     if (autoLoadedRef.current) return
-    if (!walletAddress || dataSetIds.length === 0) return
+    // Only arm once the dataset manager has settled. While it is idle/
+    // initializing, dataSetIds is empty but not authoritative, so we must not
+    // mark ourselves loaded yet.
+    if (!walletAddress || dataSet.status !== 'ready') return
+    // A wallet that genuinely owns no datasets: arm the guard and stop, so a
+    // dataset id appended mid-upload (piecesConfirmed flips 0 -> 1 before the
+    // piece cache is written) never triggers a chain enumeration.
+    if (dataSetIds.length === 0) {
+      autoLoadedRef.current = true
+      return
+    }
 
     const cached = getCachedPieces(walletAddress)
     if (cached) {
@@ -194,7 +204,7 @@ export const useDatasetPieces = () => {
       autoLoadedRef.current = true
       loadPieces()
     }
-  }, [walletAddress, dataSetIds.length, synapse, loadPieces])
+  }, [walletAddress, dataSet.status, dataSetIds.length, synapse, loadPieces])
 
   const refreshPieces = useCallback(() => {
     loadPieces()
