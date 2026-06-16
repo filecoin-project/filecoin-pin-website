@@ -33,5 +33,5 @@ jobs:
           path: dist  # Path to the downloaded build artifacts
           walletPrivateKey: ${{ secrets.WALLET_PRIVATE_KEY }}
           network: calibration
-          minStorageDays: "30"
-          filecoinPayBalanceLimit: "0.25"
+          minRunwayDays: "30"
+          maxBalance: "0.25"
