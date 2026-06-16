@@ -20,7 +20,7 @@ jobs:
 
       # Download the build artifacts from the calling workflow
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: site-dist
           path: dist
