@@ -17,8 +17,8 @@
     "test:ui": "vitest --ui"
   },
   "dependencies": {
-    "@filoz/synapse-core": "^0.5.2",
-    "@filoz/synapse-sdk": "^0.41.0",
+    "@filoz/synapse-core": "^0.6.1",
+    "@filoz/synapse-sdk": "^0.42.0",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-form": "^0.1.8",
