@@ -7,7 +7,7 @@ const normalizeEnvValue = (value: string | boolean | number | undefined) => {
   return trimmed.length === 0 ? undefined : trimmed
 }
 
-// Hardcoded defaults (can be overridden by env vars) expires: 2027-01-18 07:51:06
+// Hardcoded defaults (can be overridden by env vars) expires: 2027-01-18 07:51:06 UTC
 // Signer: 0x6CCE68E42e436230d36B59b992de43619f216eA2
 // These must be kept current: the build served from Filecoin via an IPFS gateway has no
 // backend supplying env vars, so it relies on these values rather than VITE_SESSION_KEY.
