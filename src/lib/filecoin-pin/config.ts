@@ -8,8 +8,9 @@ const normalizeEnvValue = (value: string | boolean | number | undefined) => {
 }
 
 // Hardcoded defaults (can be overridden by env vars) expires: 2027-01-18 07:51:06
-// Signer: 0x6CCE68E42e436230d36B59b992de43619f216eA2 — matches VITE_SESSION_KEY in Vercel.
-// Rotate via docs/update-session-key.md and update this value so repo and prod stay in sync.
+// Signer: 0x6CCE68E42e436230d36B59b992de43619f216eA2
+// These must be kept current: the build served from Filecoin via an IPFS gateway has no
+// backend supplying env vars, so it relies on these values rather than VITE_SESSION_KEY.
 const DEFAULT_WALLET_ADDRESS: Hex = '0x44f08D1beFe61255b3C3A349C392C560FA333759'
 const DEFAULT_SESSION_KEY: Hex = '0x256b25c8af80f47d81752dea07109ad9a7073ef2f7516c61f4abb3496770c710'
 
