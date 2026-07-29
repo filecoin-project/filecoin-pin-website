@@ -7,9 +7,12 @@ const normalizeEnvValue = (value: string | boolean | number | undefined) => {
   return trimmed.length === 0 ? undefined : trimmed
 }
 
-// Hardcoded defaults (can be overridden by env vars) expires: 2026-08-15 09:24:22
+// Hardcoded defaults (can be overridden by env vars) expires: 2027-01-18 07:51:06 UTC
+// Signer: 0x6CCE68E42e436230d36B59b992de43619f216eA2
+// These must be kept current: the build served from Filecoin via an IPFS gateway has no
+// backend supplying env vars, so it relies on these values rather than VITE_SESSION_KEY.
 const DEFAULT_WALLET_ADDRESS: Hex = '0x44f08D1beFe61255b3C3A349C392C560FA333759'
-const DEFAULT_SESSION_KEY: Hex = '0x416dc827726298c032acf086ddf45c1de79b8e62f3af2ffe0377afe08862deb3'
+const DEFAULT_SESSION_KEY: Hex = '0x256b25c8af80f47d81752dea07109ad9a7073ef2f7516c61f4abb3496770c710'
 
 const privateKey = normalizeEnvValue(import.meta.env.VITE_FILECOIN_PRIVATE_KEY) as Hex | undefined
 const envWalletAddress = normalizeEnvValue(import.meta.env.VITE_WALLET_ADDRESS) as Hex | undefined
