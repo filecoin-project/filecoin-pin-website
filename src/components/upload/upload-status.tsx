@@ -52,7 +52,7 @@ function UploadStatus({
   // Use the upload progress hook to calculate all progress-related values
   const { uploadOutcome, uploadBadgeStatus } = useUploadProgress({ stepStates, cid })
 
-  const { isUploadSuccessful } = uploadOutcome
+  const { isUploadSuccessful, hasIpniAnnounceFailure } = uploadOutcome
 
   return (
     <Accordion
@@ -75,6 +75,7 @@ function UploadStatus({
               datasetId={datasetId}
               datasetIds={datasetIds}
               fileName={fileName}
+              hasIpniAnnounceFailure={hasIpniAnnounceFailure}
               pieceCid={pieceCid}
               providerIds={providerIds}
               providerNames={providerNames}

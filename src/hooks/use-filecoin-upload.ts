@@ -278,6 +278,28 @@ export const useFilecoinUpload = () => {
                 break
               }
 
+              case 'pieceSyncStatus:failed': {
+                console.warn('[FilecoinUpload] Piece sync check failed:', event.data.error.message)
+                cacheIpniResult(rootCid, 'failed')
+                updateStepState('announcing-cids', {
+                  status: 'error',
+                  progress: 0,
+                  error: INPI_ERROR_MESSAGE,
+                })
+                break
+              }
+
+              case 'indexingConfirmation:mismatch': {
+                console.warn('[FilecoinUpload] Indexer mismatch:', event.data.error.message)
+                cacheIpniResult(rootCid, 'failed')
+                updateStepState('announcing-cids', {
+                  status: 'error',
+                  progress: 0,
+                  error: INPI_ERROR_MESSAGE,
+                })
+                break
+              }
+
               case 'ipniProviderResults:failed': {
                 console.warn('[FilecoinUpload] IPNI check failed:', event.data.error.message)
                 cacheIpniResult(rootCid, 'failed')
