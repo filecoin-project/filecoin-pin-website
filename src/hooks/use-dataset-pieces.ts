@@ -1,10 +1,8 @@
 import { getDetailedDataSet } from 'filecoin-pin/core/data-set'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { addCachedPiece, getCachedPieces, setCachedPieces } from '../lib/local-storage/piece-cache.ts'
+import { formatFileSize } from '../utils/format-file-size.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
-
-// Inlined from @filoz/synapse-sdk METADATA_KEYS to avoid dual-copy type issues
-const IPFS_ROOT_CID_KEY = 'ipfsRootCID'
 
 export interface DatasetPiece {
   id: string
@@ -44,8 +42,10 @@ export interface DatasetPiece {
  *
  * Renders from the localStorage piece cache when available (zero RPC calls);
  * only falls back to chain enumeration (getDetailedDataSet) when no cache
- * exists or the caller explicitly refreshes. Chain enumeration is expensive:
- * several eth_calls per dataset plus one eth_call per piece for metadata.
+ * exists or the caller explicitly refreshes. Chain enumeration is expensive
+ * (several eth_calls per dataset) and, since filecoin-pin no longer exposes
+ * per-piece metadata on chain, can't recover the original filename or IPFS
+ * CID — those render as placeholders for pieces found this way.
  */
 export const useDatasetPieces = () => {
   const [pieces, setPieces] = useState<DatasetPiece[]>([])
@@ -107,12 +107,14 @@ export const useDatasetPieces = () => {
 
         for (const piece of pieces) {
           const pieceCid = piece.pieceCid.toString()
-          const meta = piece.metadata ?? {}
-          const ipfsRootCid = meta[IPFS_ROOT_CID_KEY] || ''
-          const fileName = meta.label || ipfsRootCid || 'unknown'
-          const fileSize = meta.fileSize || 'Unknown'
-          const transactionHash = meta.transactionHash || ''
-          const uploadedAt = meta.uploadedAt ? Number(meta.uploadedAt) : Date.now()
+          // filecoin-pin no longer exposes per-piece metadata (label/ipfsRootCID), so
+          // this chain-enumeration fallback can't recover the original filename or IPFS
+          // CID for pieces missing from the local cache. Size is still available directly.
+          const ipfsRootCid = ''
+          const fileName = 'unknown'
+          const fileSize = piece.size == null ? 'Unknown' : formatFileSize(piece.size)
+          const transactionHash = ''
+          const uploadedAt = Date.now()
           const pieceId = Number(piece.pieceId)
 
           const existing = piecesByCid.get(pieceCid)

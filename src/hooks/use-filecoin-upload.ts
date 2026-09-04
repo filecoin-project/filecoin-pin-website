@@ -16,7 +16,6 @@ import { clearCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import type { StepState } from '../types/upload/step.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
-import { cacheIpniResult } from './use-ipni-check.ts'
 import { useWaitableRef } from './use-waitable-ref.ts'
 
 interface UploadState {
@@ -278,9 +277,28 @@ export const useFilecoinUpload = () => {
                 break
               }
 
+              case 'pieceSyncStatus:failed': {
+                console.warn('[FilecoinUpload] Piece sync check failed:', event.data.error.message)
+                updateStepState('announcing-cids', {
+                  status: 'error',
+                  progress: 0,
+                  error: INPI_ERROR_MESSAGE,
+                })
+                break
+              }
+
+              case 'indexingConfirmation:mismatch': {
+                console.warn('[FilecoinUpload] Indexer mismatch:', event.data.error.message)
+                updateStepState('announcing-cids', {
+                  status: 'error',
+                  progress: 0,
+                  error: INPI_ERROR_MESSAGE,
+                })
+                break
+              }
+
               case 'ipniProviderResults:failed': {
                 console.warn('[FilecoinUpload] IPNI check failed:', event.data.error.message)
-                cacheIpniResult(rootCid, 'failed')
                 updateStepState('announcing-cids', {
                   status: 'error',
                   progress: 0,
@@ -291,7 +309,6 @@ export const useFilecoinUpload = () => {
 
               case 'ipniProviderResults:complete': {
                 console.debug('[FilecoinUpload] IPNI check succeeded')
-                cacheIpniResult(rootCid, 'success')
                 updateStepState('announcing-cids', { status: 'completed', progress: 100 })
                 break
               }
