@@ -28,10 +28,6 @@ vi.mock('./use-filecoin-pin-context.ts', () => ({
   useFilecoinPinContext: useFilecoinPinContextMock,
 }))
 
-vi.mock('./use-ipni-check.ts', () => ({
-  cacheIpniResult: vi.fn(),
-}))
-
 vi.mock('../lib/filecoin-pin/synapse.ts', () => ({
   ensureSessionKeyPermissions: vi.fn().mockResolvedValue(undefined),
 }))
