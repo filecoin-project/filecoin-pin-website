@@ -155,6 +155,37 @@ export default function Content() {
         title="Wallet & storage"
       >
         <WalletSetup inDrawer />
+        <div className="space-y-3 rounded-lg border border-border bg-canvas/30 p-4">
+          <p className={`text-sm ${canUpload ? 'text-success' : 'text-muted'}`} role="status">
+            {setupChecking
+              ? 'Checking storage setup…'
+              : canUpload
+                ? 'Wallet setup complete. You can upload files.'
+                : connection.sessionStatus === 'active'
+                  ? storageSetup?.status === 'error' || wallet.status === 'error'
+                    ? 'Unable to confirm storage setup. Refresh balances to try again.'
+                    : storageSetup?.gasReady
+                      ? storageSetup?.depositReady
+                        ? storageSetup?.approvalReady
+                          ? 'Refresh balances to confirm storage setup.'
+                          : 'Next: approve storage payments.'
+                        : 'Next: deposit USDFC into your storage account.'
+                      : 'Next: add FIL to your wallet for transaction gas, then refresh balances.'
+                  : 'Next: authorize a browser session to upload files.'}
+          </p>
+          {canUpload && (
+            <Button
+              disabled={connection.busy || connection.uploading || Boolean(uploadedFile)}
+              onClick={() => {
+                setUploadFolder(folder)
+                setPanel('upload')
+              }}
+              size="sm"
+            >
+              Continue to upload
+            </Button>
+          )}
+        </div>
       </SidePanel>
       <SidePanel
         description={`Upload a file to ${uploadFolder || 'Files'}.`}
