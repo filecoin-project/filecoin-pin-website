@@ -1,6 +1,7 @@
+import { formatUSDFC } from 'filecoin-pin/core/utils'
 import { ArrowUpRight, Check, ChevronDown, KeyRound, Moon, QrCode, ShieldCheck, Sun, Wallet } from 'lucide-react'
 import { useState } from 'react'
-import { formatUnits, parseUnits } from 'viem'
+import { parseUnits } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useTheme } from '../../context/theme-provider.tsx'
@@ -121,7 +122,7 @@ export function WalletControls() {
   )
 }
 
-export function WalletSetup() {
+export function WalletSetup({ inDrawer = false }: { inDrawer?: boolean }) {
   const connection = useBrowserWallet()
   const { wallet, refreshWallet, storageSetup } = useFilecoinPinContext()
   const [days, setDays] = useState(7)
@@ -145,9 +146,14 @@ export function WalletSetup() {
     })
     await refreshWallet()
   }
+  const Container = inDrawer ? 'section' : 'details'
+  const Header = inDrawer ? 'div' : 'summary'
   return (
-    <details className="drive-panel group/setup" open={!active || storageSetup?.status !== 'ready'}>
-      <summary className="drive-summary flex cursor-pointer items-center gap-3 p-4 sm:px-6 sm:py-5">
+    <Container
+      className="drive-panel group/setup"
+      {...(inDrawer ? {} : { open: !active || storageSetup?.status !== 'ready' })}
+    >
+      <Header className="drive-summary flex items-center gap-3 p-4 sm:px-6 sm:py-5">
         <span
           aria-hidden="true"
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${active ? 'bg-emerald-500/10 text-success' : 'bg-brand-800/15 text-accent'}`}
@@ -162,12 +168,14 @@ export function WalletSetup() {
               ? 'Checking session authorization…'
               : 'Authorize a session to upload and delete'}
         </span>
-        <ChevronDown
-          aria-hidden="true"
-          className="text-muted transition-transform group-open/setup:rotate-180"
-          size={17}
-        />
-      </summary>
+        {!inDrawer && (
+          <ChevronDown
+            aria-hidden="true"
+            className="text-muted transition-transform group-open/setup:rotate-180"
+            size={17}
+          />
+        )}
+      </Header>
       <fieldset
         aria-label="Storage setup checklist"
         className="flex flex-wrap gap-x-6 gap-y-2 border-t border-border bg-canvas/20 px-5 py-3 text-xs sm:px-6"
@@ -193,7 +201,7 @@ export function WalletSetup() {
           </span>
         )}
       </fieldset>
-      <div className="grid gap-8 border-t border-border p-5 sm:p-6 lg:grid-cols-2 lg:gap-10">
+      <div className={`grid gap-8 border-t border-border p-5 sm:p-6 ${inDrawer ? '' : 'lg:grid-cols-2 lg:gap-10'}`}>
         <section className="space-y-4">
           <h2 className="flex items-center gap-2 text-sm font-semibold">
             <KeyRound aria-hidden="true" className="text-accent" size={16} />
@@ -258,7 +266,9 @@ export function WalletSetup() {
             )}
           </div>
         </section>
-        <section className="space-y-4 lg:border-l lg:border-border lg:pl-10">
+        <section
+          className={`space-y-4 ${inDrawer ? 'border-t border-border pt-6' : 'lg:border-l lg:border-border lg:pl-10'}`}
+        >
           <h2 className="flex items-center gap-2 text-sm font-semibold">
             <Wallet aria-hidden="true" className="text-accent" size={16} />
             Storage payments
@@ -273,7 +283,7 @@ export function WalletSetup() {
               {[
                 ['Gas balance', wallet.data.formatted.fil],
                 ['Wallet balance', wallet.data.formatted.usdfc],
-                ['Available for storage', `${formatUnits(wallet.data.raw.filecoinPayBalance, 18)} USDFC`],
+                ['Available for storage', `${formatUSDFC(wallet.data.raw.filecoinPayBalance, 2)} USDFC`],
               ].map(([label, value]) => (
                 <div className="min-w-0" key={label}>
                   <dt className="text-[10px] text-muted">{label}</dt>
@@ -353,6 +363,6 @@ export function WalletSetup() {
           )}
         </section>
       </div>
-    </details>
+    </Container>
   )
 }

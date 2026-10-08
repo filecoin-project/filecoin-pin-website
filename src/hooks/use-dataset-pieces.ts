@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { addCachedPiece, getCachedPieces, setCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
+import { useIpfsIndexing } from './use-ipfs-indexing.ts'
 
 const DIRECTORY_SAVE_ERROR =
   'Unable to save the browser directory. Keep this page open and export a directory backup before reloading.'
@@ -28,6 +29,7 @@ export interface DatasetPiece {
   pieceId: number
   folderPath?: string
   ipfsIndexed?: boolean
+  ipfsCheckAttempts?: number
   pieceIds?: string[]
   deletion?: Record<string, { transactionHash: string; confirmed: boolean; remaining?: boolean }>
   /** Total copies (1 for un-replicated). */
@@ -254,6 +256,30 @@ export const useDatasetPieces = () => {
       loadPieces()
     }
   }, [walletAddress, dataSet.status, dataSetIds.length, synapse, loadPieces])
+
+  const updateIndexing = useCallback(
+    (cid: string, indexed: boolean, attempts: number) => {
+      setPieces((previous) => {
+        const changed = previous.some(
+          (file) =>
+            file.cid === cid &&
+            !file.deletion &&
+            (indexed || file.ipfsIndexed !== true) &&
+            (file.ipfsIndexed !== indexed || file.ipfsCheckAttempts !== attempts)
+        )
+        if (!changed) return previous
+        const next = previous.map((file) =>
+          file.cid === cid && !file.deletion && (indexed || file.ipfsIndexed !== true)
+            ? { ...file, ipfsIndexed: indexed, ipfsCheckAttempts: attempts }
+            : file
+        )
+        if (walletAddress && !setCachedPieces(walletAddress, next)) setError(DIRECTORY_SAVE_ERROR)
+        return next
+      })
+    },
+    [walletAddress]
+  )
+  useIpfsIndexing(walletAddress, pieces, updateIndexing)
 
   const refreshPieces = useCallback(() => {
     loadPieces()

@@ -61,6 +61,8 @@ For browser regression checks, run `npm run dev` in another terminal, install Ch
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for source layout and contribution conventions. Core code lives in [the wallet provider](src/context/browser-wallet-provider.tsx), [the upload hook](src/hooks/use-filecoin-upload.ts), and [the drive components](src/components/drive/).
 
+Pending IPFS root CIDs receive at most five additional background indexing checks, two minutes apart. The browser saves the attempt count and cooldown per wallet/network and CID, so reloads and reconnects do not restart the budget. Checks pause while the page is hidden. When the budget is exhausted, the file remains stored and downloadable; its status becomes `Stored · IPFS indexing unconfirmed`. File details offer `Retry indexing checks` to explicitly start another bounded round. This checks root-CID discoverability in IPNI, not full-file retrieval or replica health.
+
 ## Deployment
 
 Build with `npm run build` and serve `dist` over HTTPS on a stable origin. Browser directory data and session credentials are scoped to that origin. Configure the public origin in the Reown project's allowlist. Set `VITE_WALLETCONNECT_PROJECT_ID` before building to override the built-in public project ID. Never configure wallet private keys in deployment environment variables.

@@ -19,6 +19,7 @@ import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useUploadHistory } from '../../context/upload-history-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
+import { IPFS_CHECK_LIMIT, resetIndexingChecks } from '../../hooks/use-ipfs-indexing.ts'
 import { scheduleFileDeletion } from '../../lib/filecoin-pin/delete.ts'
 import { downloadFile, saveBlob } from '../../lib/filecoin-pin/download.ts'
 import { addStoredDataSetId } from '../../lib/local-storage/data-set.ts'
@@ -47,7 +48,11 @@ export function fileStatus(file: DatasetPiece) {
   if (deleted === copies.length) return 'Deletion scheduled'
   if (file.deletion && Object.keys(file.deletion).length) return 'Deletion incomplete'
   if (!file.cid) return 'Metadata missing'
-  return file.ipfsIndexed === false ? 'Stored · IPFS indexing pending' : 'Stored'
+  if (file.ipfsIndexed === false)
+    return (file.ipfsCheckAttempts ?? 0) >= IPFS_CHECK_LIMIT
+      ? 'Stored · IPFS indexing unconfirmed'
+      : 'Stored · IPFS indexing pending'
+  return 'Stored'
 }
 
 // Formats browsers commonly display inline; media playback also depends on codecs.
@@ -57,8 +62,10 @@ const canPreview = (name: string) =>
 interface Props {
   folder: string
   onFolderChange: (folder: string) => void
+  onUpload?: () => void
+  uploadDisabled?: boolean
 }
-export function FileBrowser({ folder, onFolderChange }: Props) {
+export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled = false }: Props) {
   const { history, updateUpload, replaceHistory, error: directoryError } = useUploadHistory()
   const { synapse, storageScope, ensurePermissions, addDataSetId } = useFilecoinPinContext()
   const connection = useBrowserWallet()
@@ -217,18 +224,40 @@ export function FileBrowser({ folder, onFolderChange }: Props) {
             {history.length}
           </span>
         </h2>
-        <div className="flex flex-wrap gap-3">
-          <Button className="w-auto" disabled={disabled} onClick={exportDirectory} size="sm" variant="secondary">
+        <div className="flex items-center gap-2">
+          {onUpload && (
+            <Button
+              aria-label="Upload files"
+              className="w-auto"
+              disabled={disabled || uploadDisabled}
+              onClick={onUpload}
+              size="sm"
+            >
+              <Upload aria-hidden="true" size={14} />
+              Upload
+            </Button>
+          )}
+          <Button
+            aria-label="Export directory"
+            className="w-auto"
+            disabled={disabled}
+            onClick={exportDirectory}
+            size="sm"
+            title="Export directory backup"
+            variant="secondary"
+          >
             <Download aria-hidden="true" size={14} />
-            Export directory
+            <span className="hidden sm:inline">Export directory</span>
           </Button>
           <label
             className={`inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm text-foreground transition-colors hover:bg-surface-raised ${disabled ? 'opacity-50' : 'cursor-pointer'}`}
+            title="Import directory backup"
           >
             <Upload aria-hidden="true" size={14} />
-            Import directory
+            <span className="hidden sm:inline">Import directory</span>
             <input
               accept=".json,application/json"
+              aria-label="Import directory"
               className="sr-only"
               disabled={disabled}
               onChange={(event) => {
@@ -242,8 +271,7 @@ export function FileBrowser({ folder, onFolderChange }: Props) {
         </div>
       </div>
       <p className="border-b border-border bg-canvas/30 px-5 py-3 text-xs leading-5 text-muted sm:px-6">
-        This browser keeps your file names and folders. Export a directory backup to restore them on another browser.
-        Folder changes only affect this directory.
+        Files and folders are saved in this browser. Export a backup to transfer your directory.
       </p>
       {directoryError && (
         <p className="text-sm text-warning break-words" role="alert">
@@ -423,6 +451,13 @@ export function FileBrowser({ folder, onFolderChange }: Props) {
                     <td className="p-4">
                       <span
                         className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] ${file.deletion ? 'bg-amber-500/10 text-warning' : file.cid ? (file.ipfsIndexed === false ? 'bg-brand-800/15 text-accent' : 'bg-emerald-500/10 text-success') : 'bg-surface-raised text-muted'}`}
+                        title={
+                          file.ipfsIndexed === false && !file.deletion
+                            ? (file.ipfsCheckAttempts ?? 0) >= IPFS_CHECK_LIMIT
+                              ? 'Automatic checks stopped after 5 attempts. The file is stored and can still be downloaded.'
+                              : `Checking IPFS indexing up to 5 times, every 2 minutes (${file.ipfsCheckAttempts ?? 0}/5 completed).`
+                            : undefined
+                        }
                       >
                         <span className="h-1 w-1 shrink-0 rounded-full bg-current" />
                         {fileStatus(file)}
@@ -517,6 +552,30 @@ export function FileBrowser({ folder, onFolderChange }: Props) {
                   <p>
                     {selected.fileSize} · {fileStatus(selected)}
                   </p>
+                  {selected.ipfsIndexed === false &&
+                    !selected.deletion &&
+                    (selected.ipfsCheckAttempts ?? 0) >= IPFS_CHECK_LIMIT && (
+                      <div className="mt-2 space-y-2">
+                        <p className="text-xs text-muted">
+                          Automatic indexing checks stopped after 5 attempts. Your stored file can still be downloaded.
+                        </p>
+                        <Button
+                          disabled={disabled || !storageScope}
+                          onClick={() => {
+                            try {
+                              resetIndexingChecks(storageScope ?? '', selected.cid)
+                              updateUpload({ ...selected, ipfsCheckAttempts: 0 })
+                            } catch {
+                              setError('Unable to save indexing check settings in this browser.')
+                            }
+                          }}
+                          size="sm"
+                          variant="secondary"
+                        >
+                          Retry indexing checks
+                        </Button>
+                      </div>
+                    )}
                   <p>Uploaded {new Date(selected.uploadedAt).toLocaleString()}</p>
                   <p className="break-all">Wallet {connection.address}</p>
                   <div className="grid grid-cols-2 gap-2">

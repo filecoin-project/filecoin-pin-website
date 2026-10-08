@@ -198,6 +198,14 @@ try {
     }, theme)
     await consolePage.waitForTimeout(200)
     assert.deepEqual(await audit(consolePage, 'body'), [], `${theme}: console contrast`)
+    await consolePage.getByRole('button', { name: 'Wallet & storage', exact: true }).click()
+    assert.deepEqual(await audit(consolePage, 'body'), [], `${theme}: wallet drawer contrast`)
+    await consolePage.screenshot({
+      path: `/tmp/drive-wallet-drawer-${theme}.png`,
+      fullPage: true,
+      animations: 'disabled',
+    })
+    await consolePage.getByRole('button', { name: 'Close Wallet & storage', exact: true }).click()
     await consolePage.getByRole('button', { name: 'report.pdf', exact: true }).click()
     await consolePage.getByRole('button', { name: 'Close details', exact: true }).waitFor()
     assert.deepEqual(await audit(consolePage, 'body'), [], `${theme}: file details contrast`)

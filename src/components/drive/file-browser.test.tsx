@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { UploadHistoryProvider } from '../../context/upload-history-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { getCachedPieces, setCachedPieces } from '../../lib/local-storage/piece-cache.ts'
-import { FileBrowser } from './file-browser.tsx'
+import { FileBrowser, fileStatus } from './file-browser.tsx'
 
 const mocks = vi.hoisted(() => ({
   context: vi.fn(),
@@ -109,4 +109,14 @@ it('schedules a later identical upload instead of reusing an older alias’s del
   )
   expect(mocks.submit).toHaveBeenCalledOnce()
   expect(getCachedPieces(scope)?.every((file) => file.deletion?.['1'].transactionHash === hash)).toBe(true)
+})
+
+it('distinguishes pending indexing from stopped checks without treating storage as failed', () => {
+  expect(fileStatus({ ...file, ipfsIndexed: false, ipfsCheckAttempts: 4 })).toBe('Stored · IPFS indexing pending')
+  expect(fileStatus({ ...file, ipfsIndexed: false, ipfsCheckAttempts: 5 })).toBe('Stored · IPFS indexing unconfirmed')
+  expect(fileStatus({ ...file, ipfsIndexed: true, ipfsCheckAttempts: 5 })).toBe('Stored')
+  expect(fileStatus({ ...file, cid: '', ipfsIndexed: false })).toBe('Metadata missing')
+  expect(
+    fileStatus({ ...file, ipfsIndexed: false, deletion: { '1': { confirmed: true, transactionHash: hash } } })
+  ).toBe('Deletion scheduled')
 })

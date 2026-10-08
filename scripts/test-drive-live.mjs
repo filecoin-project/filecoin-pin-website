@@ -103,6 +103,7 @@ async function newWalletPage() {
 try {
   const page = await newWalletPage()
   primaryPage = page
+  await page.getByRole('button', { name: 'Wallet & storage', exact: true }).click()
   await page
     .getByRole('checkbox', { name: 'I authorize all four storage permissions, including deletion, for this browser.' })
     .check()
@@ -112,6 +113,7 @@ try {
     await page.reload()
     await page.getByLabel('Network', { exact: true }).selectOption('calibration')
     await page.getByRole('button', { name: 'Connect wallet', exact: true }).click()
+    await page.getByRole('button', { name: 'Wallet & storage', exact: true }).click()
     await page.getByText('Wallet setup · Session authorized', { exact: true }).waitFor()
     await page.getByRole('button', { name: 'Revoke session', exact: true }).click()
     await page.getByRole('button', { name: 'Authorize session', exact: true }).waitFor()
@@ -120,7 +122,7 @@ try {
     const additionalDeposit = process.env.DRIVE_TEST_DEPOSIT
     if (additionalDeposit) {
       const input = page.getByLabel('Deposit amount in USDFC', { exact: true })
-      if (!(await input.isVisible())) await page.getByText('Wallet setup · Session authorized', { exact: true }).click()
+      if (!(await input.isVisible())) await page.getByRole('button', { name: 'Wallet & storage', exact: true }).click()
       await input.fill(additionalDeposit)
       await page.getByRole('button', { name: 'Deposit USDFC', exact: true }).click()
       await page.getByText('Deposit confirmed.', { exact: true }).waitFor()
@@ -130,11 +132,6 @@ try {
         )
       )
       console.log(`Additional ${additionalDeposit} test USDFC deposited`)
-    }
-    if (process.env.DRIVE_TEST_IMPORT_DIRECTORY) {
-      await page.getByText('Session ready', { exact: true }).waitFor()
-      await page.getByLabel('Import directory').setInputFiles(process.env.DRIVE_TEST_IMPORT_DIRECTORY)
-      console.log('Existing directory imported for dataset reuse acceptance')
     }
     if (await page.getByText('Session ready', { exact: true }).count()) {
       console.log('Existing deposited funds and payment approval are ready')
@@ -150,11 +147,17 @@ try {
       await page.getByRole('button', { name: 'Approve storage payments', exact: true }).click()
       await page.getByText('Session ready', { exact: true }).waitFor()
     }
+    await page.getByRole('button', { name: 'Close Wallet & storage', exact: true }).click()
+    if (process.env.DRIVE_TEST_IMPORT_DIRECTORY) {
+      await page.getByText('Session ready', { exact: true }).waitFor()
+      await page.getByLabel('Import directory').setInputFiles(process.env.DRIVE_TEST_IMPORT_DIRECTORY)
+      console.log('Existing directory imported for dataset reuse acceptance')
+    }
     console.log('Owner session authorized; storage funding and payment approval ready')
     const bytes = Buffer.from(Array.from({ length: 256 * 1024 + 123 }, (_, index) => index % 251))
     const fileName = process.env.DRIVE_TEST_EXISTING_FILE || `验收-${Date.now()}.bin`
     if (!process.env.DRIVE_TEST_EXISTING_FILE) {
-      await page.getByText('Upload to Files', { exact: true }).click()
+      await page.getByRole('button', { name: 'Upload files', exact: true }).click()
       await page
         .locator('form input[type=file]')
         .setInputFiles({ name: fileName, mimeType: 'application/octet-stream', buffer: bytes })
@@ -166,12 +169,15 @@ try {
           .waitFor({ timeout: 600_000 })
           .then(() => 'stored'),
         page
-          .getByText(`Upload failed - ${fileName}`, { exact: true })
+          .getByRole('complementary', { name: 'Upload activity', exact: true })
+          .getByText('Upload failed', { exact: true })
           .waitFor({ timeout: 600_000 })
           .then(() => 'failed'),
       ])
       assert.equal(uploadResult, 'stored', 'File upload failed; see browser error and saved directory')
     }
+    if (await page.getByRole('button', { name: 'Close Upload details', exact: true }).count())
+      await page.getByRole('button', { name: 'Close Upload details', exact: true }).click()
     await page.waitForFunction(
       () =>
         [...document.querySelectorAll('button')].some(
@@ -245,7 +251,7 @@ try {
       { timeout: 600_000 }
     )
     await page.getByRole('button', { name: 'Close details', exact: true }).click()
-    await page.getByText('Wallet setup · Session authorized', { exact: true }).click()
+    await page.getByRole('button', { name: 'Wallet & storage', exact: true }).click()
     await page.getByRole('button', { name: 'Revoke session', exact: true }).click()
     await page.getByRole('button', { name: 'Authorize session', exact: true }).waitFor()
     console.log('All recorded copies scheduled for deletion; browser session revoked')
