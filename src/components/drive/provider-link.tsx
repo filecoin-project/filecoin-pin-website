@@ -29,7 +29,7 @@ export function ProviderLink({
   }, [providerId, network, identity])
   if (result?.identity === identity && result.url)
     return (
-      <a className="underline" href={result.url} rel="noreferrer" target="_blank">
+      <a className="underline" href={result.url} rel="noopener noreferrer" target="_blank">
         {children}
       </a>
     )

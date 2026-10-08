@@ -350,7 +350,7 @@ export function WalletSetup({ inDrawer = false }: { inDrawer?: boolean }) {
             <a
               className="inline-flex items-center gap-1 self-center text-xs text-muted hover:text-accent"
               href="https://pay.filecoin.cloud/console"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               target="_blank"
             >
               Open Pay Console <ArrowUpRight aria-hidden="true" size={13} />

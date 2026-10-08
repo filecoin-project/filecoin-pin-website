@@ -683,7 +683,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                     <a
                       className="block text-sm underline"
                       href={getIpfsGatewayDownloadLink(selected.cid, selected.fileName)}
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       target="_blank"
                     >
                       Download through IPFS gateway
@@ -693,7 +693,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                     <a
                       className="block text-sm underline"
                       href={getPieceExplorerLink(selected.pieceCid, selected.network)}
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       target="_blank"
                     >
                       View piece on explorer
@@ -709,7 +709,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                         <a
                           className="underline"
                           href={getDatasetExplorerLink(datasetId, selected.network)}
-                          rel="noreferrer"
+                          rel="noopener noreferrer"
                           target="_blank"
                         >
                           Dataset {datasetId}
@@ -727,7 +727,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                               selected.transactionHashes?.[index] ?? selected.transactionHash,
                               selected.network
                             )}
-                            rel="noreferrer"
+                            rel="noopener noreferrer"
                             target="_blank"
                           >
                             Upload transaction
@@ -737,7 +737,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                           <a
                             className="underline"
                             href={getTxExplorerLink(selected.deletion[datasetId].transactionHash, selected.network)}
-                            rel="noreferrer"
+                            rel="noopener noreferrer"
                             target="_blank"
                           >
                             Deletion{' '}
