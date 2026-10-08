@@ -1,14 +1,6 @@
-/**
- * LocalStorage cache of the upload-history piece list, scoped per wallet.
- *
- * Why cache?
- * ----------
- * Rebuilding history from chain is expensive: `getDetailedDataSet` costs
- * several eth_calls per dataset plus one eth_call per piece for metadata
- * (filename, root CID, tx hash). All of that information is already known
- * in-browser at upload time, so we persist it here and render history from
- * cache with zero RPC calls. The chain fetch only runs when there is no cache
- * (e.g. localStorage was cleared) or when the user explicitly refreshes.
+/** Browser file directory, scoped by chain ID and wallet address. Chain reads
+ * cannot reconstruct names or IPFS root CIDs; this is durable local metadata,
+ * rather than a disposable RPC cache. Directory backups make it portable.
  */
 
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
@@ -37,19 +29,20 @@ export const getCachedPieces = (walletAddress: string): DatasetPiece[] | null =>
 }
 
 /** Replace the cached piece list for a wallet. */
-export const setCachedPieces = (walletAddress: string, pieces: DatasetPiece[]): void => {
+export const setCachedPieces = (walletAddress: string, pieces: DatasetPiece[]): boolean => {
   try {
     localStorage.setItem(getPieceCacheKey(walletAddress), JSON.stringify(pieces))
+    return true
   } catch (error) {
     console.warn('[PieceCache] Failed to write piece cache to localStorage:', error)
+    return false
   }
 }
 
-/** Prepend a piece to the cached list (used after an upload completes). Idempotent by pieceCid. */
-export const addCachedPiece = (walletAddress: string, piece: DatasetPiece): void => {
+/** Prepend a piece to the cached list (used after an upload completes). Idempotent by file record ID. */
+export const addCachedPiece = (walletAddress: string, piece: DatasetPiece): boolean => {
   const current = getCachedPieces(walletAddress) ?? []
-  if (current.some((p) => p.pieceCid === piece.pieceCid)) return
-  setCachedPieces(walletAddress, [piece, ...current])
+  return setCachedPieces(walletAddress, [piece, ...current.filter((record) => record.id !== piece.id)])
 }
 
 /** Remove the cached piece list. Called alongside clearStoredDataSetIds so cache and ids stay in lockstep. */

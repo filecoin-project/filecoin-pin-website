@@ -1,156 +1,264 @@
-import { useState } from 'react'
-import { Alert } from '@/components/ui/alert.tsx'
-import { useUploadHistory } from '../../context/upload-history-context.tsx'
+import { AlertTriangle, Loader2, ShieldCheck, Wallet } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
-import { useUploadExpansion } from '../../hooks/use-upload-expansion.ts'
 import { useUploadOrchestration } from '../../hooks/use-upload-orchestration.ts'
-import { useUploadUI } from '../../hooks/use-upload-ui.ts'
-import type { StepState } from '../../types/upload/step.ts'
 import { formatFileSize } from '../../utils/format-file-size.ts'
-import { Heading } from '../ui/heading.tsx'
-import { LoadingState } from '../ui/loading-state.tsx'
-import { PageTitle } from '../ui/page-title.tsx'
+import { getStepLabel } from '../../utils/upload/step-utils.ts'
+import { FileBrowser } from '../drive/file-browser.tsx'
+import { SidePanel } from '../drive/side-panel.tsx'
+import { WalletSetup } from '../drive/wallet-controls.tsx'
+import { Alert } from '../ui/alert.tsx'
+import { ButtonBase as Button } from '../ui/button/button-base.tsx'
 import DragNDrop from '../upload/drag-n-drop.tsx'
 import { UploadError } from '../upload/upload-error.tsx'
 import { UploadStatus } from '../upload/upload-status.tsx'
 
-// Completed state for displaying upload history
-const COMPLETED_PROGRESS: StepState[] = [
-  { step: 'creating-car', status: 'completed', progress: 100 },
-  { step: 'checking-readiness', status: 'completed', progress: 100 },
-  { step: 'uploading-car', status: 'completed', progress: 100 },
-  { step: 'replicating', status: 'completed', progress: 100 },
-  { step: 'announcing-cids', status: 'completed', progress: 100 },
-  { step: 'finalizing-transaction', status: 'completed', progress: 100 },
-]
-
 export default function Content() {
-  // Upload orchestration (handles all lifecycle coordination)
+  const connection = useBrowserWallet()
+  const { wallet, synapse, storageSetup, refreshWallet } = useFilecoinPinContext()
+  // Keep the operation mounted here: closing a panel only changes its visibility.
   const orchestration = useUploadOrchestration()
-  const { startUpload, uploadedFile, activeUpload, dragDropKey } = orchestration
-
-  // UI state derivation
-  const { showUploadForm, showActiveUpload, isUploading } = useUploadUI(orchestration)
-
-  // Upload history data access
-  const { history: uploadHistory, isLoading: isLoadingPieces, hasLoaded: hasLoadedHistory } = useUploadHistory()
-
-  // Expansion state management
-  const { isExpanded, toggleExpansion } = useUploadExpansion(orchestration)
-
-  // Active upload accordion expansion (separate from history expansion)
-  const [activeUploadExpanded, setActiveUploadExpanded] = useState(true)
-
-  // Wallet/synapse/dataset status for loading states
-  const { wallet, synapse, dataSet } = useFilecoinPinContext()
-
-  // Determine if we're still initializing (wallet, synapse, provider)
-  // Note: We don't block on isLoadingPieces - users can upload while history loads
-  const isInitializing = wallet.status === 'loading' || wallet.status === 'idle'
-
-  // Check if we've confirmed there's no dataset (wallet/synapse ready, but no dataset found)
-  // In this case, we shouldn't show loading because there won't be any pieces/history to load
-  const hasConfirmedNoDataset =
-    wallet.status === 'ready' &&
-    synapse !== null &&
-    dataSet.status === 'ready' &&
-    dataSet.dataSetIds.length === 0 &&
-    !isInitializing
-
-  // Get loading message based on current state
-  const getLoadingMessage = () => {
-    if (wallet.status === 'loading' || wallet.status === 'idle') {
-      return 'Connecting to Filecoin network...'
-    }
-    if (!synapse) {
-      return 'Initializing storage service...'
-    }
-    return 'Loading previous uploads...'
+  const { activeUpload, uploadedFile, startUpload, dragDropKey } = orchestration
+  const [folder, setFolder] = useState('')
+  const [uploadFolder, setUploadFolder] = useState('')
+  const [panel, setPanel] = useState<'wallet' | 'upload' | 'activity' | null>(null)
+  const [progressExpanded, setProgressExpanded] = useState(true)
+  const started = useRef(false)
+  const canUpload = Boolean(
+    connection.sessionStatus === 'active' && synapse && wallet.status === 'ready' && storageSetup?.status === 'ready'
+  )
+  const setupChecking =
+    connection.sessionStatus === 'checking' ||
+    wallet.status === 'idle' ||
+    wallet.status === 'loading' ||
+    storageSetup?.status === 'checking'
+  const uploadStep = activeUpload.stepStates.find((step) => step.status === 'in-progress')
+  const completedSteps = activeUpload.stepStates.filter((step) => step.status === 'completed').length
+  const openUpload = () => {
+    setUploadFolder(folder)
+    setPanel(canUpload ? 'upload' : 'wallet')
   }
-
-  // If wallet failed to load, show error instead of spinner
-  if (wallet.status === 'error') {
-    return (
-      <div className="space-y-10">
-        <PageTitle />
-        <Alert message={`Failed to connect to Filecoin network: ${wallet.error}`} variant="error" />
-      </div>
-    )
-  }
+  useEffect(() => {
+    if (activeUpload.isUploading) started.current = true
+    else if (started.current) {
+      started.current = false
+      connection.setUploading(false)
+      void refreshWallet()
+    }
+  }, [activeUpload.isUploading, connection, refreshWallet])
 
   return (
-    <div className="space-y-10">
-      <PageTitle />
-      <Alert
-        message="This demo runs on Filecoin Calibration testnet, where data isn't permanent and infrastructure resets regularly."
-        variant="neutral"
-      />
-
-      {/* Show drag-n-drop only when not uploading */}
-      {showUploadForm && (
-        <div className="space-y-6">
-          <Heading tag="h2">Upload a file</Heading>
-          <DragNDrop isUploading={isUploading} key={dragDropKey} onUpload={startUpload} />
+    <main className="mx-auto max-w-[1440px] space-y-4 px-5 py-5 sm:px-8 lg:px-12 lg:py-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Your files</h1>
+          <p className="mt-1 text-sm text-muted">Store and manage files on Filecoin.</p>
+        </div>
+        <Button
+          aria-label="Wallet & storage"
+          className="w-auto"
+          onClick={() => setPanel('wallet')}
+          size="sm"
+          variant="secondary"
+        >
+          <Wallet aria-hidden="true" size={15} />
+          Wallet & storage
+          {setupChecking ? (
+            <Loader2 aria-label="Checking wallet setup" className="animate-spin text-muted" size={14} />
+          ) : (
+            <span className={`h-1.5 w-1.5 rounded-full ${canUpload ? 'bg-success' : 'bg-warning'}`} />
+          )}
+        </Button>
+      </div>
+      {connection.network === 'calibration' && (
+        <p className="text-xs text-muted">Calibration is a test network. Data and infrastructure may reset.</p>
+      )}
+      {!canUpload && !setupChecking && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-surface px-4 py-3">
+          <p className="flex items-center gap-2 text-sm text-muted">
+            <ShieldCheck aria-hidden="true" className="shrink-0 text-accent" size={16} />
+            Configure your wallet to upload and delete files.
+          </p>
+          <button
+            className="text-sm text-link hover:text-link-hover underline focus:brand-outline"
+            onClick={() => setPanel('wallet')}
+            type="button"
+          >
+            Set up wallet
+          </button>
         </div>
       )}
-
-      {/* Show active upload progress */}
-      {showActiveUpload && uploadedFile && (
-        <div className="space-y-6">
-          <Heading tag="h2">Current upload</Heading>
-
-          {/* Show error alert if upload failed */}
-          <UploadError orchestration={orchestration} />
-
-          <UploadStatus
-            cid={activeUpload.currentCid}
-            confirmedCopies={activeUpload.confirmedCopies}
-            copyCount={activeUpload.copies?.length}
-            expectedCopies={activeUpload.expectedCopies}
-            fileName={uploadedFile.file.name}
-            fileSize={formatFileSize(uploadedFile.file.size)}
-            isExpanded={activeUploadExpanded}
-            onToggleExpanded={() => setActiveUploadExpanded(!activeUploadExpanded)}
-            pieceCid={activeUpload.pieceCid ?? ''}
-            stepStates={activeUpload.stepStates}
-            transactionHash={activeUpload.transactionHash ?? ''}
-            transactionHashes={activeUpload.transactionHashes}
-            uploadNetwork={activeUpload.network}
+      {wallet.status === 'error' && (
+        <Alert message={`Unable to load wallet balances: ${wallet.error}`} variant="error" />
+      )}
+      <span className="sr-only" role="status">
+        {setupChecking ? 'Checking wallet setup…' : canUpload ? 'Session ready' : 'Setup required'}
+      </span>
+      <div className={uploadedFile ? 'grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_280px]' : ''}>
+        <FileBrowser
+          folder={folder}
+          onFolderChange={setFolder}
+          onUpload={openUpload}
+          uploadDisabled={setupChecking || connection.busy || connection.uploading || Boolean(uploadedFile)}
+        />
+        {uploadedFile && (
+          <aside
+            aria-label="Upload activity"
+            className="order-first rounded-xl border border-border bg-surface p-4 xl:order-last"
+          >
+            <div className="flex items-center gap-2 text-sm font-medium">
+              {activeUpload.error ? (
+                <AlertTriangle aria-hidden="true" className="text-danger" size={16} />
+              ) : (
+                <Loader2 aria-hidden="true" className="animate-spin text-accent" size={16} />
+              )}
+              {activeUpload.error ? 'Upload failed' : 'Current upload'}
+            </div>
+            <p className="mt-2 truncate text-sm" title={uploadedFile.file.name}>
+              {uploadedFile.file.name}
+            </p>
+            <p className="mt-1 text-xs text-muted" role="status">
+              {activeUpload.error
+                ? 'Open details to retry or dismiss.'
+                : uploadStep
+                  ? getStepLabel(uploadStep.step)
+                  : 'Finishing upload…'}
+            </p>
+            <p className="mt-2 text-xs text-muted">
+              {completedSteps} / {activeUpload.stepStates.length} stages completed
+            </p>
+            <Button
+              className="mt-3"
+              onClick={() => {
+                setProgressExpanded(true)
+                setPanel('activity')
+              }}
+              size="sm"
+              variant="secondary"
+            >
+              View upload details
+            </Button>
+          </aside>
+        )}
+      </div>
+      <footer className="flex flex-wrap justify-between gap-2 text-xs text-muted">
+        <span>Export a directory backup before clearing browser data.</span>
+        <span>Powered by Filecoin & IPFS</span>
+      </footer>
+      <SidePanel
+        description="Manage browser authorization, balances and storage payments."
+        onOpenChange={(open) => {
+          if (!open) setPanel(null)
+        }}
+        open={panel === 'wallet'}
+        title="Wallet & storage"
+      >
+        <WalletSetup inDrawer />
+        <div className="space-y-3 rounded-lg border border-border bg-canvas/30 p-4">
+          <p className={`text-sm ${canUpload ? 'text-success' : 'text-muted'}`} role="status">
+            {setupChecking
+              ? 'Checking storage setup…'
+              : canUpload
+                ? 'Wallet setup complete. You can upload files.'
+                : connection.sessionStatus === 'active'
+                  ? storageSetup?.status === 'error' || wallet.status === 'error'
+                    ? 'Unable to confirm storage setup. Refresh balances to try again.'
+                    : storageSetup?.gasReady
+                      ? storageSetup?.depositReady
+                        ? storageSetup?.approvalReady
+                          ? 'Refresh balances to confirm storage setup.'
+                          : 'Next: approve storage payments.'
+                        : 'Next: deposit USDFC into your storage account.'
+                      : 'Next: add FIL to your wallet for transaction gas, then refresh balances.'
+                  : 'Next: authorize a browser session to upload files.'}
+          </p>
+          {canUpload && (
+            <Button
+              disabled={connection.busy || connection.uploading || Boolean(uploadedFile)}
+              onClick={() => {
+                setUploadFolder(folder)
+                setPanel('upload')
+              }}
+              size="sm"
+            >
+              Continue to upload
+            </Button>
+          )}
+        </div>
+      </SidePanel>
+      <SidePanel
+        description={`Upload a file to ${uploadFolder || 'Files'}.`}
+        onOpenChange={(open) => {
+          if (!open) setPanel(null)
+        }}
+        open={panel === 'upload'}
+        title="Upload files"
+      >
+        {canUpload ? (
+          <DragNDrop
+            isUploading={connection.busy || connection.uploading}
+            key={dragDropKey}
+            onUpload={(file) => {
+              connection.setUploading(true)
+              startUpload(file, uploadFolder)
+              setPanel(null)
+            }}
           />
-        </div>
-      )}
-
-      {/* Show loading state while initializing, but not if we've confirmed there's no dataset */}
-      {!hasConfirmedNoDataset &&
-        (!hasLoadedHistory || isLoadingPieces || isInitializing) &&
-        uploadHistory.length === 0 && <LoadingState message={getLoadingMessage()} />}
-
-      {/* Always show upload history when available */}
-      {uploadHistory.length > 0 && (
-        <div className="space-y-6">
-          <Heading tag="h2">Uploaded files</Heading>
-          {uploadHistory.map((upload) => (
-            <UploadStatus
-              cid={upload.cid}
-              copyCount={upload.copyCount}
-              datasetId={upload.datasetId}
-              datasetIds={upload.datasetIds}
-              fileName={upload.fileName}
-              fileSize={upload.fileSize}
-              isExpanded={isExpanded(upload.id)}
-              key={upload.id}
-              onToggleExpanded={() => toggleExpansion(upload.id)}
-              pieceCid={upload.pieceCid}
-              providerIds={upload.providerIds}
-              providerNames={upload.providerNames}
-              serviceURLs={upload.serviceURLs}
-              stepStates={COMPLETED_PROGRESS}
-              transactionHash={upload.transactionHash}
-              transactionHashes={upload.transactionHashes}
+        ) : (
+          <>
+            <p className="text-sm text-muted">Complete wallet setup before uploading.</p>
+            <Button onClick={() => setPanel('wallet')} size="sm">
+              Set up wallet
+            </Button>
+          </>
+        )}
+      </SidePanel>
+      <SidePanel
+        description="Closing this panel keeps the upload running. Keep the browser tab open until it finishes."
+        onOpenChange={(open) => {
+          if (!open) setPanel(null)
+        }}
+        open={panel === 'activity'}
+        title="Upload details"
+      >
+        {uploadedFile ? (
+          <>
+            <p className="text-sm text-muted">Current upload · {uploadedFile.folderPath || 'Files'}</p>
+            <UploadError
+              orchestration={{
+                ...orchestration,
+                retryUpload: () => {
+                  connection.setUploading(true)
+                  orchestration.retryUpload()
+                },
+                cancelUpload: () => {
+                  orchestration.cancelUpload()
+                  setPanel(null)
+                },
+              }}
             />
-          ))}
-        </div>
-      )}
-    </div>
+            <UploadStatus
+              cid={activeUpload.currentCid}
+              confirmedCopies={activeUpload.confirmedCopies}
+              expectedCopies={activeUpload.expectedCopies}
+              fileName={uploadedFile.file.name}
+              fileSize={formatFileSize(uploadedFile.file.size)}
+              isExpanded={progressExpanded}
+              onToggleExpanded={() => setProgressExpanded((expanded) => !expanded)}
+              pieceCid={activeUpload.pieceCid}
+              stepStates={activeUpload.stepStates}
+              transactionHash={activeUpload.transactionHash ?? ''}
+              transactionHashes={activeUpload.transactionHashes}
+              uploadNetwork={activeUpload.network}
+            />
+          </>
+        ) : (
+          <p className="text-sm text-success" role="status">
+            Upload finished. Your file is in the directory.
+          </p>
+        )}
+      </SidePanel>
+    </main>
   )
 }

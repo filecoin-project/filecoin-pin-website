@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import { getIpfsGatewayDownloadLink, getIpfsGatewayRenderLink } from './links.ts'
+import { getIpfsGatewayDownloadLink, getIpfsGatewayPreviewLink, getIpfsGatewayRenderLink } from './links.ts'
 
 describe('IPFS gateway links', () => {
+  it('previews a file without requesting the service-worker gateway inspector', () => {
+    const cid = 'bafkreig4nl6nqu64xpwqfimx5bwhcntmpbgbjnly7dzs6u6zkeqfkimtfe'
+    const href = getIpfsGatewayPreviewLink(cid, 'small copy.txt')
+    expect(href).toBe(`https://${cid}.ipfs.inbrowser.link/?filename=small%20copy.txt`)
+    expect(new URL(href).searchParams.has('download')).toBe(false)
+  })
+
   it('links directly to the root CID without treating the file name as a path', () => {
     expect(getIpfsGatewayRenderLink('bafyroot')).toBe('https://dweb.link/ipfs/bafyroot')
   })

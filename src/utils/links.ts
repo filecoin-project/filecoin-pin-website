@@ -1,14 +1,23 @@
+import { CID } from 'multiformats/cid'
+
 const UPLOAD_COMPLETED_LINKS = {
   ipfsGatewayBaseUrl: 'https://dweb.link/ipfs/',
-  // TODO: use network elsewhere (links.ts)
-  pdpExplorerBaseUrl: 'https://pdp.vxb.ai/calibration/',
 }
+
+const pdpExplorerBase = (network: string) =>
+  `https://pdp.filecoin.cloud/${network === 'mainnet' ? 'mainnet' : 'calibration'}/`
 
 /**
  * download button href
  */
 export const getIpfsGatewayDownloadLink = (cid: string, fileName: string): string => {
   return `${getIpfsGatewayRenderLink(cid)}?filename=${encodeURIComponent(fileName)}&download=true`
+}
+
+/** Omit download=false: service-worker gateways interpret it as an IPLD inspector request. */
+export const getIpfsGatewayPreviewLink = (cid: string, fileName: string): string => {
+  const gatewayCid = CID.parse(cid).toV1().toString()
+  return `https://${gatewayCid}.ipfs.inbrowser.link/?filename=${encodeURIComponent(fileName)}`
 }
 
 /**
@@ -21,18 +30,18 @@ export const getIpfsGatewayRenderLink = (cid: string): string => {
 /**
  * completed upload provider name text hyperlink
  */
-export const getProviderExplorerLink = (providerAddress: string): string => {
-  return `${UPLOAD_COMPLETED_LINKS.pdpExplorerBaseUrl}providers/${providerAddress}`
+export const getProviderExplorerLink = (providerAddress: string, network = 'calibration'): string => {
+  return `${pdpExplorerBase(network)}providers/${providerAddress}`
 }
 
 // for pieceCid text hyperlink
-export const getPieceExplorerLink = (pieceCid: string): string => {
-  return `${UPLOAD_COMPLETED_LINKS.pdpExplorerBaseUrl}piece/${pieceCid}`
+export const getPieceExplorerLink = (pieceCid: string, network = 'calibration'): string => {
+  return `${pdpExplorerBase(network)}piece/${pieceCid}`
 }
 
 // view proofs button
-export const getDatasetExplorerLink = (datasetId: string): string => {
-  return `${UPLOAD_COMPLETED_LINKS.pdpExplorerBaseUrl}dataset/${datasetId}`
+export const getDatasetExplorerLink = (datasetId: string, network = 'calibration'): string => {
+  return `${pdpExplorerBase(network)}dataset/${datasetId}`
 }
 
 /**

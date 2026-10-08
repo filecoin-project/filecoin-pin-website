@@ -9,7 +9,7 @@ type TextLinkProps = {
 function TextLink({ href, children, isTruncated }: TextLinkProps) {
   return (
     <ExternalLink
-      className={cn('text-brand-500 underline focus:brand-outline hover:text-brand-100', isTruncated && 'truncate')}
+      className={cn('text-link underline focus:brand-outline hover:text-link-hover', isTruncated && 'truncate')}
       href={href}
     >
       {children}

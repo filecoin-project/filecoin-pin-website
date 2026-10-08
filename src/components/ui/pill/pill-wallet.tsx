@@ -7,7 +7,11 @@ type PillWalletProps = {
 
 function PillWallet({ address, href }: PillWalletProps) {
   return (
-    <PillWrapper ariaLabel={`Wallet address: ${address}`} className="hover:bg-zinc-700 cursor-pointer" href={href}>
+    <PillWrapper
+      ariaLabel={`Wallet address: ${address}`}
+      className="hover:bg-surface-raised cursor-pointer"
+      href={href}
+    >
       <span>{address}</span>
     </PillWrapper>
   )

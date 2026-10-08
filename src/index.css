@@ -6,6 +6,30 @@
 }
 
 @theme {
+  --color-accent: #48daff;
+  --color-surface-hover: #2b3340;
+  --color-field-border: #65748a;
+  --color-success: #6ee7b7;
+  --color-success-surface: #0d2c23;
+  --color-success-border: #1b604a;
+  --color-warning: #fcd34d;
+  --color-warning-surface: #3b260c;
+  --color-warning-border: #725019;
+  --color-danger: #fca5a5;
+  --color-danger-surface: #3b1c23;
+  --color-danger-border: #74303b;
+  --color-button-brand-hover: #075aa5;
+  --color-link: #1ebfff;
+  --color-link-hover: #83eaff;
+  --color-badge-completed: #0e385d;
+  --color-badge-completed-text: #83eaff;
+  --color-badge-completed-border: #0d5d9b;
+  --color-canvas: #101216;
+  --color-surface: #171a20;
+  --color-surface-raised: #1d2129;
+  --color-border: #2b303a;
+  --color-muted: #9ca6b5;
+  --color-foreground: #edf0f5;
   --color-brand-50: oklch(0.98 0.0157 216.67); /* #EDFBFF */
   --color-brand-100: oklch(0.95 0.035 219.18); /* #D6F5FF */
   --color-brand-200: oklch(0.92 0.0628 215.11); /* #B5F0FF */
@@ -28,20 +52,124 @@
 
 
 @utility brand-outline {
-  outline: 2px solid white;
+  outline: 2px solid var(--color-brand-500);
 }
 
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color-scheme: dark;
+  color: var(--color-foreground);
+  background-color: var(--color-canvas);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-accent: #075b9d;
+  --color-surface-hover: #dde6f0;
+  --color-field-border: #8093ab;
+  --color-success: #065f46;
+  --color-success-surface: #ecfdf5;
+  --color-success-border: #a7dfc9;
+  --color-warning: #92400e;
+  --color-warning-surface: #fff4e8;
+  --color-warning-border: #edc9a2;
+  --color-danger: #b91c1c;
+  --color-danger-surface: #fef2f2;
+  --color-danger-border: #fecaca;
+  --color-link: #075b9d;
+  --color-link-hover: #064d90;
+  --color-badge-completed: #e8f3ff;
+  --color-badge-completed-text: #075b9d;
+  --color-badge-completed-border: #b8d8f3;
+  --color-canvas: #f4f7fb;
+  --color-surface: #ffffff;
+  --color-surface-raised: #eaf0f7;
+  --color-border: #d6dee9;
+  --color-muted: #526176;
+  --color-foreground: #182435;
+  --color-brand-400: #086dc5;
+  --color-brand-500: #087ac1;
+  --color-emerald-300: #047857;
+  --color-emerald-400: #047857;
+  --color-amber-300: #92400e;
+  --color-amber-400: #a16207;
+  --color-red-300: #b91c1c;
+  --color-yellow-300: #854d0e;
+  --color-badge-in-progress: #fff4e8;
+  --color-badge-in-progress-text: #9a4c00;
+  --color-badge-in-progress-border: #edc9a2;
+}
+
+@layer base {
+  body {
+    margin: 0;
+    min-width: 320px;
+  }
+
+  button, a, input, select, summary {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 3px;
+  }
+
+  svg {
+    flex-shrink: 0;
+  }
+
+  input[type="checkbox"] {
+    accent-color: var(--color-brand-700);
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+  }
+}
+
+@utility drive-field {
+  border: 1px solid var(--color-field-border);
+  border-radius: 8px;
+  background-color: var(--color-surface);
+  color: var(--color-foreground);
+  transition: border-color 150ms;
+  &::placeholder {
+    color: var(--color-muted);
+    opacity: 1;
+  }
+  &:focus {
+    border-color: var(--color-brand-700);
+  }
+}
+
+@utility drive-panel {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background-color: var(--color-surface);
+}
+
+@utility drive-summary {
+  list-style: none;
+  &::-webkit-details-marker {
+    display: none;
+  }
+}
+
+@keyframes copy-confirmed {
+  0% { transform: scale(0.65); opacity: 0; }
+  65% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.copy-feedback { animation: copy-confirmed 220ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .copy-feedback { animation: none; }
 }

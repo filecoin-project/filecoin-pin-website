@@ -21,12 +21,11 @@ import { selectProviders } from '@filoz/synapse-core/warm-storage'
 import { METADATA_KEYS } from '@filoz/synapse-sdk'
 import { StorageContext } from '@filoz/synapse-sdk/storage'
 import { WarmStorageService } from '@filoz/synapse-sdk/warm-storage'
-import { filecoinPinConfig } from './config.ts'
 import { APPLICATION_SOURCE, type Synapse } from './synapse.ts'
 
 const DEFAULT_COPIES = 2
 
-const withCDN = ('withCDN' in filecoinPinConfig ? filecoinPinConfig.withCDN : false) ?? false
+const withCDN = false
 
 /**
  * Select reachable providers (endorsed preferred for the primary copy) and

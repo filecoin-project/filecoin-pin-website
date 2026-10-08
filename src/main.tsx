@@ -5,9 +5,13 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import { Toaster } from 'sonner'
 import App from './app.tsx'
-import { BreakpointDebugger } from './components/ui/breakpoint-debugger.tsx'
-import { FilecoinPinProvider } from './context/filecoin-pin-provider.tsx'
-import { UploadHistoryProvider } from './context/upload-history-context.tsx'
+import { BrowserWalletProvider } from './context/browser-wallet-provider.tsx'
+import { ThemeProvider, useTheme } from './context/theme-provider.tsx'
+
+function ThemedToaster() {
+  const { theme } = useTheme()
+  return <Toaster mobileOffset={0} offset={0} position="bottom-right" theme={theme} />
+}
 
 const root = document.getElementById('root')
 
@@ -26,12 +30,11 @@ createRoot(root, {
   onRecoverableError: Sentry.reactErrorHandler(),
 }).render(
   <StrictMode>
-    <FilecoinPinProvider>
-      <UploadHistoryProvider>
-        <Toaster mobileOffset={0} offset={0} position="bottom-right" />
+    <ThemeProvider>
+      <BrowserWalletProvider>
         <App />
-        {import.meta.env.DEV && <BreakpointDebugger />}
-      </UploadHistoryProvider>
-    </FilecoinPinProvider>
+        <ThemedToaster />
+      </BrowserWalletProvider>
+    </ThemeProvider>
   </StrictMode>
 )
