@@ -56,7 +56,7 @@ function UploadStatus({
 
   return (
     <Accordion
-      className="rounded-xl space-y-6 overflow-hidden border p-6 border-zinc-700"
+      className="rounded-xl space-y-6 overflow-hidden border p-6 border-border"
       collapsible
       onValueChange={onToggleExpanded ? () => onToggleExpanded() : undefined}
       type="single"

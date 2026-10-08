@@ -44,10 +44,17 @@ export default function DragNDrop({ onFileSelected, onUpload, isUploading }: Dra
 
       <div className="flex justify-end">
         <div className="flex gap-4 items-center">
-          <Button disabled={buttonIsDisabled} onClick={clearFile} type="button" variant="secondary">
+          <Button
+            className="w-auto min-w-24"
+            disabled={buttonIsDisabled}
+            onClick={clearFile}
+            type="button"
+            variant="secondary"
+          >
             Cancel
           </Button>
           <Button
+            className="w-auto min-w-24"
             disabled={buttonIsDisabled}
             loading={isUploading}
             onClick={uploadFile}

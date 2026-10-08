@@ -25,7 +25,7 @@ type CardInfoRowProps = {
 }
 
 function CardWrapper({ children }: CardWrapperProps) {
-  return <div className="bg-zinc-900 p-6 rounded-lg space-y-6">{children}</div>
+  return <div className="bg-surface p-6 rounded-lg space-y-6">{children}</div>
 }
 
 function CardHeader({ title, status, estimatedTime, withSpinner }: CardHeaderProps) {
@@ -44,7 +44,7 @@ function CardHeader({ title, status, estimatedTime, withSpinner }: CardHeaderPro
           <BadgeStatus status={status} />
         </div>
       </div>
-      <span aria-live="polite" className="text-sm text-zinc-400 text-left" hidden={!isInProgress}>
+      <span aria-live="polite" className="text-sm text-muted text-left" hidden={!isInProgress}>
         {estimatedTime}
       </span>
     </div>
@@ -52,7 +52,7 @@ function CardHeader({ title, status, estimatedTime, withSpinner }: CardHeaderPro
 }
 
 function CardContent({ children }: CardContentProps) {
-  return <div className="p-5 border border-zinc-800 rounded-md">{children}</div>
+  return <div className="p-5 border border-border rounded-md">{children}</div>
 }
 
 function CardInfoRow({ title, subtitle, children }: CardInfoRowProps) {

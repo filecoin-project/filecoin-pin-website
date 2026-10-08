@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { getDetailedDataSetMock, useFilecoinPinContextMock } = vi.hoisted(() => ({
   getDetailedDataSetMock: vi.fn(),
@@ -49,6 +49,8 @@ beforeEach(() => {
   localStorage.clear()
   getDetailedDataSetMock.mockResolvedValue({ pieces: [], provider: null })
 })
+
+afterEach(() => vi.restoreAllMocks())
 
 describe('useDatasetPieces auto-load', () => {
   it('does not enumerate the chain when a dataset id appears mid-upload on a fresh browser', async () => {
@@ -102,4 +104,62 @@ describe('useDatasetPieces auto-load', () => {
     expect(getDetailedDataSetMock).not.toHaveBeenCalled()
     expect(result.current.pieces).toHaveLength(1)
   })
+})
+
+it('preserves file names, paths, CIDs and duplicate-content records when refreshing chain state', async () => {
+  const original = { ...cachedPiece('piece'), id: 'file-1', folderPath: 'reports' }
+  const alias = { ...original, id: 'file-2', fileName: 'renamed.txt' }
+  setCachedPieces(WALLET, [original, alias])
+  useFilecoinPinContextMock.mockReturnValue(makeContext({ status: 'ready', dataSetIds: [1n] }))
+  getDetailedDataSetMock.mockResolvedValue({
+    pieces: [{ pieceCid: { toString: () => 'piece' }, size: 5, pieceId: 1 }],
+    provider: null,
+  })
+  const { result } = renderHook(() => useDatasetPieces())
+  await waitFor(() => expect(result.current.hasLoaded).toBe(true))
+  await act(async () => result.current.refreshPieces())
+  await waitFor(() => expect(result.current.isLoading).toBe(false))
+  expect(result.current.pieces).toMatchObject([original, alias])
+})
+
+it('adds newly discovered copies without counting repeated pieces in one dataset as extra copies', async () => {
+  const original = { ...cachedPiece('piece'), folderPath: 'reports' }
+  setCachedPieces(WALLET, [original])
+  useFilecoinPinContextMock.mockReturnValue(makeContext({ status: 'ready', dataSetIds: [1n, 2n] }))
+  getDetailedDataSetMock.mockImplementation(async (_synapse, id) => ({
+    pieces: [1, 2].map((pieceId) => ({ pieceCid: { toString: () => 'piece' }, size: 5, pieceId })),
+    provider: { id, name: `provider-${id}`, pdp: { serviceURL: `https://provider-${id}.example` } },
+  }))
+  const { result } = renderHook(() => useDatasetPieces())
+  await waitFor(() => expect(result.current.hasLoaded).toBe(true))
+  await act(async () => result.current.refreshPieces())
+  await waitFor(() => expect(result.current.isLoading).toBe(false))
+  expect(result.current.pieces[0]).toMatchObject({
+    fileName: 'a.txt',
+    folderPath: 'reports',
+    cid: 'bafyroot',
+    datasetIds: ['1', '2'],
+    copyCount: 2,
+    providerNames: ['p', 'provider-2'],
+  })
+})
+
+it('retains an in-memory deletion checkpoint and reports failed persistence before continuing', async () => {
+  const original = cachedPiece('piece')
+  setCachedPieces(WALLET, [original])
+  useFilecoinPinContextMock.mockReturnValue(makeContext({ status: 'ready', dataSetIds: [1n] }))
+  const { result } = renderHook(() => useDatasetPieces())
+  await waitFor(() => expect(result.current.hasLoaded).toBe(true))
+  vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+    throw new Error('Quota exceeded')
+  })
+  const checkpoint = {
+    ...original,
+    deletion: { '1': { transactionHash: `0x${'a'.repeat(64)}`, confirmed: false } },
+  }
+  act(() => {
+    expect(() => result.current.replacePieces([checkpoint])).toThrow('export a directory backup')
+  })
+  expect(result.current.pieces).toEqual([checkpoint])
+  expect(result.current.error).toContain('Keep this page open')
 })

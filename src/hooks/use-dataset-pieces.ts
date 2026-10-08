@@ -4,6 +4,9 @@ import { addCachedPiece, getCachedPieces, setCachedPieces } from '../lib/local-s
 import { formatFileSize } from '../utils/format-file-size.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 
+const DIRECTORY_SAVE_ERROR =
+  'Unable to save the browser directory. Keep this page open and export a directory backup before reloading.'
+
 export interface DatasetPiece {
   id: string
   fileName: string
@@ -23,6 +26,10 @@ export interface DatasetPiece {
   network: string
   uploadedAt: number // timestamp
   pieceId: number
+  folderPath?: string
+  ipfsIndexed?: boolean
+  pieceIds?: string[]
+  deletion?: Record<string, { transactionHash: string; confirmed: boolean; remaining?: boolean }>
   /** Total copies (1 for un-replicated). */
   copyCount?: number
   /** Datasets that hold a copy of this piece (primary first). */
@@ -53,9 +60,9 @@ export const useDatasetPieces = () => {
   const [error, setError] = useState<string | null>(null)
   const [hasLoaded, setHasLoaded] = useState(false)
 
-  const { wallet, synapse, dataSet } = useFilecoinPinContext()
+  const { wallet, synapse, dataSet, storageScope } = useFilecoinPinContext()
 
-  const walletAddress = wallet.status === 'ready' ? wallet.data.address : null
+  const walletAddress = storageScope ?? (wallet.status === 'ready' ? wallet.data.address : null)
   const network = wallet.status === 'ready' ? wallet.data.network : 'calibration'
 
   const dataSetIdsKey = dataSet.status === 'ready' ? dataSet.dataSetIds.map((id) => String(id)).join(',') : ''
@@ -119,6 +126,7 @@ export const useDatasetPieces = () => {
 
           const existing = piecesByCid.get(pieceCid)
           if (existing) {
+            if (existing.datasetIds?.includes(dsIdStr)) continue
             // Append this dataset/copy info; keep the primary (first seen) as the primary fields
             existing.datasetIds = [...(existing.datasetIds ?? []), dsIdStr]
             existing.providerIds = [...(existing.providerIds ?? []), providerId]
@@ -152,7 +160,44 @@ export const useDatasetPieces = () => {
         }
       }
 
-      const merged = [...piecesByCid.values()]
+      // Chain reads update storage facts without overwriting the browser's names, paths or CIDs.
+      const cached = walletAddress ? (getCachedPieces(walletAddress) ?? []) : []
+      const merged = cached.map((file) => {
+        const live = piecesByCid.get(file.pieceCid)
+        if (!live) return file
+        // Preserve browser metadata and recorded copies, but include copies
+        // discovered on chain. Incomplete chain reads must not remove copies.
+        const recordedIds = file.datasetIds ?? [file.datasetId]
+        const liveIds = live.datasetIds ?? [live.datasetId]
+        const datasetIds = [...new Set([...recordedIds, ...liveIds])]
+        const mergeField = (
+          plural: 'providerIds' | 'providerNames' | 'serviceURLs' | 'transactionHashes',
+          singular: 'providerId' | 'providerName' | 'serviceURL' | 'transactionHash'
+        ) =>
+          datasetIds.map((id) => {
+            const recordedIndex = recordedIds.indexOf(id)
+            const liveIndex = liveIds.indexOf(id)
+            return (
+              (recordedIndex < 0
+                ? undefined
+                : file[plural]?.[recordedIndex] || (recordedIndex === 0 ? file[singular] : undefined)) ||
+              (liveIndex < 0 ? '' : live[plural]?.[liveIndex] || live[singular]) ||
+              ''
+            )
+          })
+        return {
+          ...live,
+          ...file,
+          datasetIds,
+          copyCount: datasetIds.length,
+          providerIds: mergeField('providerIds', 'providerId'),
+          providerNames: mergeField('providerNames', 'providerName'),
+          serviceURLs: mergeField('serviceURLs', 'serviceURL'),
+          transactionHashes: mergeField('transactionHashes', 'transactionHash'),
+        }
+      })
+      const known = new Set(cached.map((file) => file.pieceCid))
+      merged.push(...[...piecesByCid.values()].filter((file) => !known.has(file.pieceCid)))
       merged.sort((a, b) => (b.pieceId || 0) - (a.pieceId || 0))
 
       console.debug('[DatasetPieces] Merged', merged.length, 'unique pieces across', dataSetIds.length, 'datasets')
@@ -161,7 +206,7 @@ export const useDatasetPieces = () => {
       // silently drop those pieces from history on every later visit.
       const hadFailures = datasets.some((entry) => entry == null)
       if (walletAddress && !hadFailures) {
-        setCachedPieces(walletAddress, merged)
+        if (!setCachedPieces(walletAddress, merged)) setError(DIRECTORY_SAVE_ERROR)
       }
     } catch (err) {
       console.error('[DatasetPieces] Failed to load pieces:', err)
@@ -190,6 +235,8 @@ export const useDatasetPieces = () => {
     // piece cache is written) never triggers a chain enumeration.
     if (dataSetIds.length === 0) {
       autoLoadedRef.current = true
+      setPieces(getCachedPieces(walletAddress) ?? [])
+      setHasLoaded(true)
       return
     }
 
@@ -216,17 +263,42 @@ export const useDatasetPieces = () => {
   const addPiece = useCallback(
     (piece: DatasetPiece) => {
       setPieces((prev) => {
-        const updated = [piece, ...prev]
+        const updated = [piece, ...prev.filter((file) => file.id !== piece.id)]
         return updated
       })
       if (walletAddress) {
-        addCachedPiece(walletAddress, piece)
+        if (!addCachedPiece(walletAddress, piece)) setError(DIRECTORY_SAVE_ERROR)
+      }
+    },
+    [walletAddress]
+  )
+
+  const updatePiece = useCallback(
+    (piece: DatasetPiece) => {
+      setPieces((prev) => {
+        const next = prev.map((file) => (file.id === piece.id ? piece : file))
+        if (walletAddress && !setCachedPieces(walletAddress, next)) setError(DIRECTORY_SAVE_ERROR)
+        return next
+      })
+    },
+    [walletAddress]
+  )
+
+  const replacePieces = useCallback(
+    (next: DatasetPiece[]) => {
+      setPieces(next)
+      setHasLoaded(true)
+      if (walletAddress && !setCachedPieces(walletAddress, next)) {
+        setError(DIRECTORY_SAVE_ERROR)
+        throw new Error(DIRECTORY_SAVE_ERROR)
       }
     },
     [walletAddress]
   )
 
   return {
+    updatePiece,
+    replacePieces,
     pieces,
     isLoading,
     error,

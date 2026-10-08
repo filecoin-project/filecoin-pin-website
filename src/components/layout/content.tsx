@@ -1,156 +1,126 @@
-import { useState } from 'react'
-import { Alert } from '@/components/ui/alert.tsx'
-import { useUploadHistory } from '../../context/upload-history-context.tsx'
+import { ChevronDown, Upload } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
-import { useUploadExpansion } from '../../hooks/use-upload-expansion.ts'
 import { useUploadOrchestration } from '../../hooks/use-upload-orchestration.ts'
-import { useUploadUI } from '../../hooks/use-upload-ui.ts'
-import type { StepState } from '../../types/upload/step.ts'
 import { formatFileSize } from '../../utils/format-file-size.ts'
-import { Heading } from '../ui/heading.tsx'
-import { LoadingState } from '../ui/loading-state.tsx'
-import { PageTitle } from '../ui/page-title.tsx'
+import { FileBrowser } from '../drive/file-browser.tsx'
+import { WalletSetup } from '../drive/wallet-controls.tsx'
+import { Alert } from '../ui/alert.tsx'
 import DragNDrop from '../upload/drag-n-drop.tsx'
 import { UploadError } from '../upload/upload-error.tsx'
 import { UploadStatus } from '../upload/upload-status.tsx'
 
-// Completed state for displaying upload history
-const COMPLETED_PROGRESS: StepState[] = [
-  { step: 'creating-car', status: 'completed', progress: 100 },
-  { step: 'checking-readiness', status: 'completed', progress: 100 },
-  { step: 'uploading-car', status: 'completed', progress: 100 },
-  { step: 'replicating', status: 'completed', progress: 100 },
-  { step: 'announcing-cids', status: 'completed', progress: 100 },
-  { step: 'finalizing-transaction', status: 'completed', progress: 100 },
-]
-
 export default function Content() {
-  // Upload orchestration (handles all lifecycle coordination)
+  const connection = useBrowserWallet()
+  const { wallet, synapse, storageSetup, refreshWallet } = useFilecoinPinContext()
   const orchestration = useUploadOrchestration()
-  const { startUpload, uploadedFile, activeUpload, dragDropKey } = orchestration
-
-  // UI state derivation
-  const { showUploadForm, showActiveUpload, isUploading } = useUploadUI(orchestration)
-
-  // Upload history data access
-  const { history: uploadHistory, isLoading: isLoadingPieces, hasLoaded: hasLoadedHistory } = useUploadHistory()
-
-  // Expansion state management
-  const { isExpanded, toggleExpansion } = useUploadExpansion(orchestration)
-
-  // Active upload accordion expansion (separate from history expansion)
-  const [activeUploadExpanded, setActiveUploadExpanded] = useState(true)
-
-  // Wallet/synapse/dataset status for loading states
-  const { wallet, synapse, dataSet } = useFilecoinPinContext()
-
-  // Determine if we're still initializing (wallet, synapse, provider)
-  // Note: We don't block on isLoadingPieces - users can upload while history loads
-  const isInitializing = wallet.status === 'loading' || wallet.status === 'idle'
-
-  // Check if we've confirmed there's no dataset (wallet/synapse ready, but no dataset found)
-  // In this case, we shouldn't show loading because there won't be any pieces/history to load
-  const hasConfirmedNoDataset =
-    wallet.status === 'ready' &&
-    synapse !== null &&
-    dataSet.status === 'ready' &&
-    dataSet.dataSetIds.length === 0 &&
-    !isInitializing
-
-  // Get loading message based on current state
-  const getLoadingMessage = () => {
-    if (wallet.status === 'loading' || wallet.status === 'idle') {
-      return 'Connecting to Filecoin network...'
+  const { activeUpload, uploadedFile, startUpload, dragDropKey } = orchestration
+  const [folder, setFolder] = useState('')
+  const started = useRef(false)
+  const canUpload = Boolean(
+    connection.sessionStatus === 'active' && synapse && wallet.status === 'ready' && storageSetup?.status === 'ready'
+  )
+  useEffect(() => {
+    if (activeUpload.isUploading) started.current = true
+    else if (started.current) {
+      started.current = false
+      connection.setUploading(false)
+      void refreshWallet()
     }
-    if (!synapse) {
-      return 'Initializing storage service...'
-    }
-    return 'Loading previous uploads...'
-  }
-
-  // If wallet failed to load, show error instead of spinner
-  if (wallet.status === 'error') {
-    return (
-      <div className="space-y-10">
-        <PageTitle />
-        <Alert message={`Failed to connect to Filecoin network: ${wallet.error}`} variant="error" />
-      </div>
-    )
-  }
+  }, [activeUpload.isUploading, connection, refreshWallet])
 
   return (
-    <div className="space-y-10">
-      <PageTitle />
-      <Alert
-        message="This demo runs on Filecoin Calibration testnet, where data isn't permanent and infrastructure resets regularly."
-        variant="neutral"
-      />
-
-      {/* Show drag-n-drop only when not uploading */}
-      {showUploadForm && (
-        <div className="space-y-6">
-          <Heading tag="h2">Upload a file</Heading>
-          <DragNDrop isUploading={isUploading} key={dragDropKey} onUpload={startUpload} />
+    <main className="mx-auto max-w-[1440px] space-y-6 px-5 py-8 sm:px-8 lg:px-12 lg:py-10">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-2">
+          <p className="text-[10px] font-medium tracking-[0.16em] text-muted">YOUR STORAGE CONSOLE</p>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Your workspace</h1>
+          <p className="text-sm text-muted">A home for your files. Connected to Filecoin.</p>
         </div>
+        <span className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-xs text-muted">
+          <span className={`h-1.5 w-1.5 rounded-full ${canUpload ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+          {canUpload ? 'Session ready' : 'Setup required'}
+        </span>
+      </div>
+      {connection.network === 'calibration' && (
+        <Alert message="Calibration is a test network. Data and infrastructure may reset." variant="neutral" />
       )}
-
-      {/* Show active upload progress */}
-      {showActiveUpload && uploadedFile && (
-        <div className="space-y-6">
-          <Heading tag="h2">Current upload</Heading>
-
-          {/* Show error alert if upload failed */}
-          <UploadError orchestration={orchestration} />
-
+      <WalletSetup />
+      {wallet.status === 'error' && (
+        <Alert message={`Unable to load wallet balances: ${wallet.error}`} variant="error" />
+      )}
+      {wallet.status === 'loading' && (
+        <p className="text-sm text-muted" role="status">
+          Loading wallet balances…
+        </p>
+      )}
+      {!activeUpload.isUploading && !uploadedFile && (
+        <details className="drive-panel group/upload" open={!canUpload}>
+          <summary className="drive-summary flex cursor-pointer items-center gap-3 p-4 sm:px-6 sm:py-5">
+            <span
+              aria-hidden="true"
+              className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-800/15 text-accent"
+            >
+              <Upload size={18} />
+            </span>
+            <span className="min-w-0 flex-1 truncate text-sm font-medium">Upload to {folder || 'Files'}</span>
+            <ChevronDown
+              aria-hidden="true"
+              className="text-muted transition-transform group-open/upload:rotate-180"
+              size={17}
+            />
+          </summary>
+          <div className="border-t border-border p-5 sm:p-6">
+            {canUpload ? (
+              <DragNDrop
+                isUploading={connection.busy || connection.uploading}
+                key={dragDropKey}
+                onUpload={(file) => {
+                  connection.setUploading(true)
+                  startUpload(file, folder)
+                }}
+              />
+            ) : (
+              <p className="text-sm text-muted">
+                Connect, authorize your browser session and load wallet balances to upload. Each wallet and network has
+                its own directory.
+              </p>
+            )}
+          </div>
+        </details>
+      )}
+      {uploadedFile && (
+        <section className="space-y-3">
+          <h2 className="font-medium">Current upload · {uploadedFile.folderPath || 'Files'}</h2>
+          <UploadError
+            orchestration={{
+              ...orchestration,
+              retryUpload: () => {
+                connection.setUploading(true)
+                orchestration.retryUpload()
+              },
+            }}
+          />
           <UploadStatus
             cid={activeUpload.currentCid}
             confirmedCopies={activeUpload.confirmedCopies}
-            copyCount={activeUpload.copies?.length}
             expectedCopies={activeUpload.expectedCopies}
             fileName={uploadedFile.file.name}
             fileSize={formatFileSize(uploadedFile.file.size)}
-            isExpanded={activeUploadExpanded}
-            onToggleExpanded={() => setActiveUploadExpanded(!activeUploadExpanded)}
-            pieceCid={activeUpload.pieceCid ?? ''}
+            pieceCid={activeUpload.pieceCid}
             stepStates={activeUpload.stepStates}
             transactionHash={activeUpload.transactionHash ?? ''}
             transactionHashes={activeUpload.transactionHashes}
             uploadNetwork={activeUpload.network}
           />
-        </div>
+        </section>
       )}
-
-      {/* Show loading state while initializing, but not if we've confirmed there's no dataset */}
-      {!hasConfirmedNoDataset &&
-        (!hasLoadedHistory || isLoadingPieces || isInitializing) &&
-        uploadHistory.length === 0 && <LoadingState message={getLoadingMessage()} />}
-
-      {/* Always show upload history when available */}
-      {uploadHistory.length > 0 && (
-        <div className="space-y-6">
-          <Heading tag="h2">Uploaded files</Heading>
-          {uploadHistory.map((upload) => (
-            <UploadStatus
-              cid={upload.cid}
-              copyCount={upload.copyCount}
-              datasetId={upload.datasetId}
-              datasetIds={upload.datasetIds}
-              fileName={upload.fileName}
-              fileSize={upload.fileSize}
-              isExpanded={isExpanded(upload.id)}
-              key={upload.id}
-              onToggleExpanded={() => toggleExpansion(upload.id)}
-              pieceCid={upload.pieceCid}
-              providerIds={upload.providerIds}
-              providerNames={upload.providerNames}
-              serviceURLs={upload.serviceURLs}
-              stepStates={COMPLETED_PROGRESS}
-              transactionHash={upload.transactionHash}
-              transactionHashes={upload.transactionHashes}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+      <FileBrowser folder={folder} onFolderChange={setFolder} />
+      <footer className="flex flex-wrap justify-between gap-3 pt-1 text-xs text-muted">
+        <span>Directory saved in this browser. Export a backup to keep it portable.</span>
+        <span>Powered by Filecoin & IPFS</span>
+      </footer>
+    </main>
   )
 }

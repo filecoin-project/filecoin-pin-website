@@ -9,7 +9,7 @@ export function DashedContainer({ className, ...rest }: DashedContainerProps) {
       {...rest}
       className={clsx(
         className,
-        'flex h-full w-full items-center justify-center rounded-lg border border-dashed border-zinc-700 bg-zinc-950 p-6'
+        'flex h-full w-full items-center justify-center rounded-xl border border-dashed border-border bg-canvas/40 p-6'
       )}
     />
   )

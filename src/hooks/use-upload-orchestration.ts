@@ -8,6 +8,9 @@ import { useUploadProgress } from './use-upload-progress.ts'
 interface UploadedFile {
   file: File
   cid: string
+  id?: string
+  folderPath?: string
+  startedAt?: number
 }
 
 /**
@@ -44,12 +47,18 @@ export function useUploadOrchestration() {
    * Build DatasetPiece from the primary copy result and add to history.
    */
   useEffect(() => {
-    if (!isUploadSuccessful || !uploadState.pieceCid || !uploadedFile) {
+    if (!uploadState.pieceCid || !uploadedFile) {
       return
     }
 
-    const copies = uploadState.copies
-    if (!copies) {
+    const copies =
+      uploadState.copies ??
+      uploadState.confirmedPieces?.map((copy, index) => ({
+        ...copy,
+        role: index === 0 ? 'primary' : 'secondary',
+        retrievalUrl: '',
+      }))
+    if (!copies?.length) {
       return
     }
     const primary = copies.find((c) => c.role === 'primary')
@@ -67,9 +76,14 @@ export function useUploadOrchestration() {
     const providerNameFor = (providerId: bigint | string) => providersById[String(providerId)]?.name ?? ''
     const serviceUrlFor = (c: (typeof copies)[number]) =>
       providersById[String(c.providerId)]?.pdp?.serviceURL ?? c.retrievalUrl ?? ''
+    const transactionFor = (providerId: bigint) =>
+      uploadState.confirmedPieces?.find((copy) => copy.providerId === providerId)?.transactionHash ?? ''
 
     const newPiece = {
-      id: `piece-${uploadState.pieceCid}`,
+      id: uploadedFile.id ?? crypto.randomUUID(),
+      folderPath: uploadedFile.folderPath,
+      ipfsIndexed: uploadState.stepStates.find((step) => step.step === 'announcing-cids')?.status === 'completed',
+      pieceIds: orderedCopies.map((c) => String(c.pieceId)),
       fileName: uploadedFile.file.name,
       fileSize: formatFileSize(uploadedFile.file.size),
       cid: uploadState.currentCid || '',
@@ -78,20 +92,24 @@ export function useUploadOrchestration() {
       datasetId: String(primary.dataSetId),
       providerId: String(primary.providerId),
       serviceURL: serviceUrlFor(primary),
-      transactionHash: uploadState.transactionHashes[0] || uploadState.transactionHash || '',
+      transactionHash:
+        transactionFor(primary.providerId) || uploadState.transactionHashes[0] || uploadState.transactionHash || '',
       network: uploadState.network || (wallet?.status === 'ready' ? wallet.data.network : 'calibration'),
-      uploadedAt: Date.now(),
+      uploadedAt: uploadedFile.startedAt ?? Date.now(),
       pieceId: Number(primary.pieceId),
       copyCount: copies.length,
       datasetIds: orderedCopies.map((c) => String(c.dataSetId)),
       providerIds: orderedCopies.map((c) => String(c.providerId)),
       providerNames: orderedCopies.map((c) => providerNameFor(c.providerId)),
       serviceURLs: orderedCopies.map(serviceUrlFor),
-      transactionHashes: uploadState.transactionHashes.slice(),
+      transactionHashes: orderedCopies.map((copy) => transactionFor(copy.providerId)),
     }
 
     addUpload(newPiece)
 
+    // Checkpoint confirmed storage before replication/indexing finish. Keep the
+    // active operation and its lock until the SDK has actually returned.
+    if (uploadState.isUploading || uploadState.error || !isUploadSuccessful || !uploadState.copies) return
     setUploadedFile(null)
     resetUpload()
     setDragDropKey((prev) => prev + 1)
@@ -101,9 +119,13 @@ export function useUploadOrchestration() {
     uploadState.currentCid,
     uploadState.transactionHash,
     uploadState.copies,
+    uploadState.confirmedPieces,
+    uploadState.isUploading,
+    uploadState.error,
     uploadState.network,
     uploadState.providersById,
     uploadState.transactionHashes,
+    uploadState.stepStates,
     uploadedFile,
     wallet,
     addUpload,
@@ -111,18 +133,19 @@ export function useUploadOrchestration() {
   ])
 
   const handleUpload = useCallback(
-    (file: File) => {
+    (file: File, folderPath = '') => {
       console.debug('[UploadOrchestration] Starting upload for file:', file.name)
 
       pendingAutoExpandPieceCidsRef.current = new Set()
 
-      setUploadedFile({ file, cid: '' })
+      const id = crypto.randomUUID()
+      setUploadedFile({ file, cid: '', id, folderPath, startedAt: Date.now() })
 
       // Upload in background (not awaited) so handler returns immediately
       uploadFile(file)
         .then((cid) => {
           console.debug('[UploadOrchestration] Upload returned CID:', cid)
-          setUploadedFile({ file, cid })
+          setUploadedFile((current) => (current?.id === id ? { ...current, cid } : current))
         })
         .catch((error) => {
           // Keep uploadedFile state so the error shows in the progress view
@@ -145,7 +168,7 @@ export function useUploadOrchestration() {
       return
     }
     console.debug('[UploadOrchestration] Retrying upload for file:', uploadedFile.file.name)
-    handleUpload(uploadedFile.file)
+    handleUpload(uploadedFile.file, uploadedFile.folderPath)
   }, [uploadedFile, handleUpload])
 
   return {
