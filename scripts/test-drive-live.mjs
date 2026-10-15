@@ -251,7 +251,7 @@ try {
       scope,
       { timeout: 600_000 }
     )
-    await page.getByRole('button', { name: 'Close details', exact: true }).click()
+    await page.getByRole('dialog').waitFor({ state: 'hidden' })
     await page.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
     await page.getByRole('button', { name: 'Revoke session', exact: true }).click()
     await page.getByRole('button', { name: 'Authorize session', exact: true }).waitFor()

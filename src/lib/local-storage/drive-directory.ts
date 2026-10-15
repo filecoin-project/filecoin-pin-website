@@ -1,6 +1,7 @@
 import { from as pieceFrom } from '@filoz/synapse-core/piece'
 import { CID } from 'multiformats/cid'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
+import { isDeletionScheduled } from '../../utils/file-deletion.ts'
 
 export function normalizeFolder(path: string): string {
   const parts = path.replaceAll('\\', '/').split('/').filter(Boolean)
@@ -13,7 +14,10 @@ export function normalizeFolder(path: string): string {
 
 export function directoryFolders(files: DatasetPiece[], folders: string[]): string[] {
   const result = new Set<string>()
-  for (const value of [...folders, ...files.map((file) => file.folderPath ?? '')]) {
+  for (const value of [
+    ...folders,
+    ...files.filter((file) => !isDeletionScheduled(file)).map((file) => file.folderPath ?? ''),
+  ]) {
     const parts = normalizeFolder(value).split('/').filter(Boolean)
     for (let i = 1; i <= parts.length; i++) result.add(parts.slice(0, i).join('/'))
   }

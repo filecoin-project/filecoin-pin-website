@@ -2,7 +2,8 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, expect, it, vi } from 'vitest'
 import { UploadHistoryProvider } from '../../context/upload-history-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
-import { getCachedPieces, setCachedPieces } from '../../lib/local-storage/piece-cache.ts'
+import { parseDirectoryBackup } from '../../lib/local-storage/drive-directory.ts'
+import { addCachedPiece, getCachedPieces, setCachedPieces } from '../../lib/local-storage/piece-cache.ts'
 import { FileBrowser, fileStatus } from './file-browser.tsx'
 
 const mocks = vi.hoisted(() => ({
@@ -79,6 +80,8 @@ it('resumes deletion of shared content through details even when the selected re
   fireEvent.click(screen.getByRole('button', { name: 'Schedule deletion' }))
   await within(screen.getByRole('dialog')).findByText('second provider unavailable')
   expect(getCachedPieces(scope)?.[0].deletion?.['1'].confirmed).toBe(true)
+  expect(screen.getByRole('button', { name: 'second.txt', hidden: true })).toBeTruthy()
+  expect(screen.getByText('Deletion incomplete', { exact: true })).toBeTruthy()
   const retry = screen.getByRole('button', { name: 'Continue deletion' })
   expect(retry).toHaveProperty('disabled', false)
   mocks.context.mockResolvedValue({ deletePieces: mocks.submit, getScheduledRemovals: async () => [] })
@@ -86,7 +89,10 @@ it('resumes deletion of shared content through details even when the selected re
   await waitFor(() => expect(getCachedPieces(scope)?.[1].deletion?.['2'].confirmed).toBe(true))
   expect(mocks.submit).toHaveBeenCalledTimes(2)
   expect(mocks.permissions).toHaveBeenCalledTimes(2)
-  await waitFor(() => expect(retry).toHaveProperty('disabled', true))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(screen.queryByRole('button', { name: 'first.txt' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'second.txt' })).toBeNull()
+  expect(screen.getByRole('status').textContent).toContain('Removed from the file list')
 })
 
 it('schedules a later identical upload instead of reusing an older alias’s deletion receipt', async () => {
@@ -103,12 +109,13 @@ it('schedules a later identical upload instead of reusing an older alias’s del
   )
   fireEvent.click(await screen.findByRole('button', { name: 'later.txt' }))
   fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Continue deletion' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Schedule deletion' }))
   await waitFor(() =>
     expect(getCachedPieces(scope)?.find((file) => file.id === 'later')?.deletion?.['1'].confirmed).toBe(true)
   )
   expect(mocks.submit).toHaveBeenCalledOnce()
-  expect(getCachedPieces(scope)?.every((file) => file.deletion?.['1'].transactionHash === hash)).toBe(true)
+  expect(getCachedPieces(scope)?.find((file) => file.id === 'first')?.deletion?.['1'].transactionHash).toBe(oldHash)
+  expect(getCachedPieces(scope)?.find((file) => file.id === 'later')?.deletion?.['1'].transactionHash).toBe(hash)
 })
 
 it('distinguishes pending indexing from stopped checks without treating storage as failed', () => {
@@ -119,4 +126,34 @@ it('distinguishes pending indexing from stopped checks without treating storage 
   expect(
     fileStatus({ ...file, ipfsIndexed: false, deletion: { '1': { confirmed: true, transactionHash: hash } } })
   ).toBe('Deletion scheduled')
+})
+
+it('keeps removed files hidden after restore and reload, but shows a new identical upload', async () => {
+  const archived = { ...file, folderPath: 'old/nested', deletion: { '1': { confirmed: true, transactionHash: hash } } }
+  const backup = JSON.stringify({ version: 1, scope, files: [archived], folders: [] })
+  const restored = parseDirectoryBackup(backup, scope, 'mainnet')
+  expect(restored.folders).toEqual([])
+  setCachedPieces(scope, restored.files)
+  const mount = () =>
+    render(
+      <UploadHistoryProvider>
+        <FileBrowser folder="" onFolderChange={vi.fn()} />
+      </UploadHistoryProvider>
+    )
+  const view = mount()
+  await screen.findByText('No files here yet. Upload to this folder.')
+  expect(screen.queryByRole('button', { name: 'first.txt' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'old' })).toBeNull()
+  expect(screen.getByRole('heading', { name: 'Files 0' })).toBeTruthy()
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search all files' }), { target: { value: 'first' } })
+  expect(screen.getByText('No matching files.')).toBeTruthy()
+  expect(getCachedPieces(scope)?.[0].deletion).toEqual(archived.deletion)
+  view.unmount()
+  addCachedPiece(scope, { ...file, id: 'new-upload', fileName: 'new.txt', uploadedAt: 2 })
+  mount()
+  expect(await screen.findByRole('button', { name: 'new.txt' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'first.txt' })).toBeNull()
+  expect(screen.getByRole('heading', { name: 'Files 1' })).toBeTruthy()
+  expect(getCachedPieces(scope)).toHaveLength(2)
+  expect(getCachedPieces(scope)?.find((record) => record.id === 'new-upload')?.deletion).toBeUndefined()
 })

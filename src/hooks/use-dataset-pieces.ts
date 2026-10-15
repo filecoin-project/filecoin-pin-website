@@ -1,6 +1,7 @@
 import { getDetailedDataSet } from 'filecoin-pin/core/data-set'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { addCachedPiece, getCachedPieces, setCachedPieces } from '../lib/local-storage/piece-cache.ts'
+import { isDeletionScheduled } from '../utils/file-deletion.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 import { useIpfsIndexing } from './use-ipfs-indexing.ts'
@@ -165,6 +166,8 @@ export const useDatasetPieces = () => {
       // Chain reads update storage facts without overwriting the browser's names, paths or CIDs.
       const cached = walletAddress ? (getCachedPieces(walletAddress) ?? []) : []
       const merged = cached.map((file) => {
+        // Archived receipts describe the copies removed at that time, not future uploads.
+        if (isDeletionScheduled(file)) return file
         const live = piecesByCid.get(file.pieceCid)
         if (!live) return file
         // Preserve browser metadata and recorded copies, but include copies

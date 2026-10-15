@@ -63,6 +63,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for source layout and contribution conven
 
 Pending IPFS root CIDs receive at most five additional background indexing checks, two minutes apart. The browser saves the attempt count and cooldown per wallet/network and CID, so reloads and reconnects do not restart the budget. Checks pause while the page is hidden. When the budget is exhausted, the file remains stored and downloadable; its status becomes `Stored · IPFS indexing unconfirmed`. File details offer `Retry indexing checks` to explicitly start another bounded round. This checks root-CID discoverability in IPNI, not full-file retrieval or replica health.
 
+Files whose recorded copies all have confirmed removal-scheduling transactions and no remaining batches are hidden from the normal file list, search and file count. Their metadata and transaction receipts remain in browser storage and directory backups. Partial removals stay available to continue. Hiding a record does not confirm physical erasure at providers or IPFS caches; uploading identical content again creates a separate visible record.
+
 ## Deployment
 
 Build with `npm run build` and serve `dist` over HTTPS on a stable origin. Browser directory data and session credentials are scoped to that origin. Configure the public origin in the Reown project's allowlist. Set `VITE_WALLETCONNECT_PROJECT_ID` before building to override the built-in public project ID. Never configure wallet private keys in deployment environment variables.

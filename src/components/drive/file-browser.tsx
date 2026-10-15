@@ -30,6 +30,7 @@ import {
   readFolders,
   saveFolders,
 } from '../../lib/local-storage/drive-directory.ts'
+import { isDeletionScheduled } from '../../utils/file-deletion.ts'
 import {
   getDatasetExplorerLink,
   getIpfsGatewayDownloadLink,
@@ -43,10 +44,8 @@ import { Select } from '../ui/select.tsx'
 import { ProviderLink } from './provider-link.tsx'
 
 export function fileStatus(file: DatasetPiece) {
-  const copies = file.datasetIds ?? [file.datasetId]
-  const deleted = copies.filter((id) => file.deletion?.[id]?.confirmed && !file.deletion[id].remaining).length
-  if (deleted === copies.length) return 'Deletion scheduled'
-  if (file.deletion && Object.keys(file.deletion).length) return 'Deletion incomplete'
+  if (isDeletionScheduled(file)) return 'Deletion scheduled'
+  if (file.deletion) return 'Deletion incomplete'
   if (!file.cid) return 'Metadata missing'
   if (file.ipfsIndexed === false)
     return (file.ipfsCheckAttempts ?? 0) >= IPFS_CHECK_LIMIT
@@ -76,18 +75,21 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
   const [moveTo, setMoveTo] = useState('')
   const [rename, setRename] = useState('')
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [working, setWorking] = useState(false)
   const [download, setDownload] = useState<{ id: string; name: string; stage: string } | null>(null)
   const [deleteConsent, setDeleteConsent] = useState(false)
   const [showFolders, setShowFolders] = useState(false)
-  const allFolders = directoryFolders(history, folders)
+  const visibleHistory = history.filter((file) => !isDeletionScheduled(file))
+  const allFolders = directoryFolders(visibleHistory, folders)
   const selected = history.find((file) => file.id === selectedId)
   const selectedAliases = selected ? history.filter((file) => file.pieceCid === selected.pieceCid) : []
   const allAliasesScheduled =
     selectedAliases.length > 0 && selectedAliases.every((file) => fileStatus(file) === 'Deletion scheduled')
-  const hasDeletionProgress = selectedAliases.some((file) => Object.keys(file.deletion ?? {}).length > 0)
+  const affectedAliases = selectedAliases.filter((file) => !isDeletionScheduled(file))
+  const hasDeletionProgress = affectedAliases.some((file) => file.deletion !== undefined)
   const disabled = working || connection.busy || connection.uploading
-  const files = history
+  const files = visibleHistory
     .filter((file) =>
       search
         ? `${file.folderPath ?? ''}/${file.fileName}`.toLowerCase().includes(search.toLowerCase())
@@ -108,6 +110,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
     if (disabled) return
     setWorking(true)
     setError('')
+    setNotice('')
     if (chainOperation) connection.setUploading(true)
     try {
       await action()
@@ -169,9 +172,8 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
         addStoredDataSetId(storageScope ?? '', Number(id))
         addDataSetId(BigInt(id))
       }
-    const mergedFolders = directoryFolders([...byId.values()], [...folders, ...parsed.folders])
-    saveFolders(storageScope ?? '', mergedFolders)
-    setFolders(mergedFolders)
+    saveFolders(storageScope ?? '', [...folders, ...parsed.folders])
+    setFolders(directoryFolders([], [...folders, ...parsed.folders]))
     replaceHistory([...byId.values()])
   }
   const deleteFile = async () => {
@@ -199,7 +201,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
     await scheduleFileDeletion(synapse, { ...selected, datasetIds, deletion }, (changed) => {
       replaceHistory(
         history.map((file) =>
-          file.pieceCid === selected.pieceCid
+          file.pieceCid === selected.pieceCid && !isDeletionScheduled(file)
             ? {
                 ...file,
                 deletion: Object.fromEntries(
@@ -213,6 +215,8 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
       )
     })
     setDeleteConsent(false)
+    setSelectedId(null)
+    setNotice('Removed from the file list. Storage providers will process removal in a subsequent proving period.')
   }
 
   return (
@@ -221,7 +225,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
         <h2 className="flex items-center gap-2.5 text-base font-semibold">
           Files{' '}
           <span className="rounded-md bg-surface-raised px-2 py-0.5 text-xs font-normal tabular-nums text-muted">
-            {history.length}
+            {visibleHistory.length}
           </span>
         </h2>
         <div className="flex items-center gap-2">
@@ -273,6 +277,11 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
       <p className="border-b border-border bg-canvas/30 px-5 py-3 text-xs leading-5 text-muted sm:px-6">
         Files and folders are saved in this browser. Export a backup to transfer your directory.
       </p>
+      {notice && (
+        <p className="px-5 py-3 text-sm text-success" role="status">
+          {notice}
+        </p>
+      )}
       {directoryError && (
         <p className="text-sm text-warning break-words" role="alert">
           {directoryError}
@@ -762,11 +771,11 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                     in IPFS caches. This does not terminate datasets or immediately stop every storage charge. Large
                     removals are saved in batches; continue after the provider releases its removal queue.
                   </p>
-                  {selectedAliases.length > 1 && (
+                  {affectedAliases.length > 1 && (
                     <div className="text-sm text-warning">
                       <p>These files contain identical content. Deletion affects all listed records:</p>
                       <ul className="mt-2 list-disc pl-5">
-                        {selectedAliases.map((file) => (
+                        {affectedAliases.map((file) => (
                           <li className="break-words" key={file.id}>
                             {[file.folderPath, file.fileName].filter(Boolean).join('/')}
                           </li>

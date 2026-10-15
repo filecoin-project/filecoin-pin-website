@@ -163,3 +163,25 @@ it('retains an in-memory deletion checkpoint and reports failed persistence befo
   expect(result.current.pieces).toEqual([checkpoint])
   expect(result.current.error).toContain('Keep this page open')
 })
+
+it('keeps archived removal receipts stable when chain refresh discovers later copies of the same content', async () => {
+  const archived = {
+    ...cachedPiece('same-piece'),
+    deletion: { '1': { confirmed: true, transactionHash: `0x${'a'.repeat(64)}` } },
+  }
+  setCachedPieces(WALLET, [archived])
+  useFilecoinPinContextMock.mockReturnValue(makeContext({ status: 'ready', dataSetIds: [1n, 2n] }))
+  const { result } = renderHook(() => useDatasetPieces())
+  await waitFor(() => expect(result.current.pieces).toHaveLength(1))
+  getDetailedDataSetMock.mockResolvedValue({
+    pieces: [{ pieceCid: { toString: () => 'same-piece' }, pieceId: 2, size: 5 }],
+    provider: null,
+  })
+  await act(async () => result.current.refreshPieces())
+  await waitFor(() => expect(result.current.isLoading).toBe(false))
+  expect(getDetailedDataSetMock).toHaveBeenCalledTimes(2)
+  expect(result.current.pieces).toEqual([archived])
+  act(() => result.current.addPiece({ ...cachedPiece('same-piece'), id: 'new-upload', datasetId: '2' }))
+  expect(result.current.pieces).toHaveLength(2)
+  expect(result.current.pieces.find((record) => record.id === 'new-upload')?.deletion).toBeUndefined()
+})
