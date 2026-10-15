@@ -138,8 +138,8 @@ export function useUploadOrchestration() {
       const id = crypto.randomUUID()
       setUploadedFile({ file, cid: '', id, folderPath, startedAt: Date.now() })
 
-      // Upload in background (not awaited) so handler returns immediately
-      uploadFile(file)
+      // Expose completion so callers can release their operation lock even on early failures.
+      return uploadFile(file)
         .then((cid) => {
           console.debug('[UploadOrchestration] Upload returned CID:', cid)
           setUploadedFile((current) => (current?.id === id ? { ...current, cid } : current))
@@ -165,7 +165,7 @@ export function useUploadOrchestration() {
       return
     }
     console.debug('[UploadOrchestration] Retrying upload for file:', uploadedFile.file.name)
-    handleUpload(uploadedFile.file, uploadedFile.folderPath)
+    return handleUpload(uploadedFile.file, uploadedFile.folderPath)
   }, [uploadedFile, handleUpload])
 
   return {

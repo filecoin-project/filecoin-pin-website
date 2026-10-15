@@ -18,10 +18,11 @@ import { useState } from 'react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useUploadHistory } from '../../context/upload-history-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
+import { useDownloadQueue } from '../../hooks/use-download-queue.ts'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { IPFS_CHECK_LIMIT, resetIndexingChecks } from '../../hooks/use-ipfs-indexing.ts'
 import { scheduleFileDeletion } from '../../lib/filecoin-pin/delete.ts'
-import { downloadFile, saveBlob } from '../../lib/filecoin-pin/download.ts'
+import { saveBlob } from '../../lib/filecoin-pin/download.ts'
 import { addStoredDataSetId } from '../../lib/local-storage/data-set.ts'
 import {
   directoryFolders,
@@ -77,7 +78,10 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [working, setWorking] = useState(false)
-  const [download, setDownload] = useState<{ id: string; name: string; stage: string } | null>(null)
+  const { download, queuedDownloads, downloadError, enqueueDownload, cancelQueuedDownload } = useDownloadQueue(
+    synapse,
+    storageScope
+  )
   const [deleteConsent, setDeleteConsent] = useState(false)
   const [showFolders, setShowFolders] = useState(false)
   const visibleHistory = history.filter((file) => !isDeletionScheduled(file))
@@ -88,7 +92,8 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
     selectedAliases.length > 0 && selectedAliases.every((file) => fileStatus(file) === 'Deletion scheduled')
   const affectedAliases = selectedAliases.filter((file) => !isDeletionScheduled(file))
   const hasDeletionProgress = affectedAliases.some((file) => file.deletion !== undefined)
-  const disabled = working || connection.busy || connection.uploading
+  const disabled = working || Boolean(download) || connection.busy || connection.uploading
+  const isQueued = (id: string) => queuedDownloads.some((file) => file.id === id)
   const files = visibleHistory
     .filter((file) =>
       search
@@ -121,22 +126,16 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
       if (chainOperation) connection.setUploading(false)
     }
   }
-  const downloadOriginal = (file: DatasetPiece) =>
-    act(async () => {
-      if (!synapse) return
-      setDownload({ id: file.id, name: file.fileName, stage: 'Downloading from storage provider' })
-      try {
-        await downloadFile(synapse, file, (stage) =>
-          setDownload({
-            id: file.id,
-            name: file.fileName,
-            stage: stage === 'downloading' ? 'Downloading from storage provider' : 'Preparing original file',
-          })
-        )
-      } finally {
-        setDownload(null)
-      }
-    })
+  const downloadOriginal = (file: DatasetPiece) => {
+    if (working) return
+    if (isQueued(file.id)) {
+      cancelQueuedDownload(file.id)
+      return
+    }
+    setError('')
+    setNotice('')
+    enqueueDownload(file)
+  }
   const createFolder = () => {
     try {
       if (!newFolder.trim()) return
@@ -237,7 +236,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
             <Button
               aria-label="Upload files"
               className="w-auto"
-              disabled={disabled || uploadDisabled}
+              disabled={working || connection.busy || connection.uploading || uploadDisabled}
               onClick={onUpload}
               size="sm"
             >
@@ -292,14 +291,42 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
         </p>
       )}
       {download && (
-        <p
-          className="flex items-center gap-2 rounded-lg border border-border bg-surface p-3 text-sm text-foreground"
-          role="status"
-        >
-          <Loader2 aria-hidden="true" className="shrink-0 animate-spin text-accent" size={16} />
-          <span className="break-all">
-            {download.stage} · {download.name}
-          </span>
+        <div className="border-b border-border bg-canvas/30 px-5 py-3 text-sm sm:px-6">
+          <p className="flex items-center gap-2" role="status">
+            <Loader2 aria-hidden="true" className="shrink-0 animate-spin text-accent" size={16} />
+            <span className="break-all">
+              {download.stage} · {download.name}
+            </span>
+          </p>
+          {queuedDownloads.length > 0 && (
+            <details className="mt-2 text-xs text-muted">
+              <summary className="w-fit cursor-pointer">
+                {queuedDownloads.length} {queuedDownloads.length === 1 ? 'download' : 'downloads'} queued
+              </summary>
+              <ul aria-label="Queued downloads" className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+                {queuedDownloads.map((file) => (
+                  <li className="flex items-center justify-between gap-3" key={file.id}>
+                    <span className="min-w-0 truncate" title={file.name}>
+                      {file.name}
+                    </span>
+                    <button
+                      aria-label={`Cancel queued download for ${file.name}`}
+                      className="inline-flex shrink-0 items-center gap-1 rounded p-1 text-muted hover:text-foreground"
+                      onClick={() => cancelQueuedDownload(file.id)}
+                      type="button"
+                    >
+                      <X aria-hidden="true" size={14} /> Cancel
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
+      {downloadError && (
+        <p className="px-5 py-3 text-sm text-warning break-words" role="alert">
+          {downloadError}
         </p>
       )}
       {error && (
@@ -483,17 +510,26 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                     <td className="p-4">
                       <div className="flex gap-3">
                         <button
+                          aria-label={isQueued(file.id) ? `Cancel queued download for ${file.fileName}` : undefined}
                           className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent disabled:opacity-40"
-                          disabled={disabled || !synapse || !file.cid || fileStatus(file) === 'Deletion scheduled'}
-                          onClick={() => void downloadOriginal(file)}
+                          disabled={
+                            working || download?.id === file.id || !synapse || !file.cid || isDeletionScheduled(file)
+                          }
+                          onClick={() => downloadOriginal(file)}
                           type="button"
                         >
                           {download?.id === file.id ? (
                             <Loader2 aria-hidden="true" className="animate-spin" size={14} />
+                          ) : isQueued(file.id) ? (
+                            <X aria-hidden="true" size={14} />
                           ) : (
                             <Download aria-hidden="true" size={14} />
                           )}
-                          {download?.id === file.id ? 'Downloading…' : 'Download'}
+                          {download?.id === file.id
+                            ? 'Downloading…'
+                            : isQueued(file.id)
+                              ? 'Queued · Cancel'
+                              : 'Download'}
                         </button>
                         <button
                           className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent"
@@ -593,18 +629,36 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                   <p className="break-all">Wallet {connection.address}</p>
                   <div className="grid grid-cols-2 gap-2">
                     <Button
-                      aria-label={download?.id === selected.id ? 'Downloading…' : 'Download original file'}
-                      disabled={disabled || !synapse || !selected.cid || fileStatus(selected) === 'Deletion scheduled'}
-                      onClick={() => void downloadOriginal(selected)}
+                      aria-label={
+                        download?.id === selected.id
+                          ? 'Downloading…'
+                          : isQueued(selected.id)
+                            ? 'Cancel queued download'
+                            : 'Download original file'
+                      }
+                      disabled={
+                        working ||
+                        download?.id === selected.id ||
+                        !synapse ||
+                        !selected.cid ||
+                        isDeletionScheduled(selected)
+                      }
+                      onClick={() => downloadOriginal(selected)}
                       size="sm"
-                      variant="primary"
+                      variant={isQueued(selected.id) ? 'secondary' : 'primary'}
                     >
                       {download?.id === selected.id ? (
                         <Loader2 aria-hidden="true" className="animate-spin" size={14} />
+                      ) : isQueued(selected.id) ? (
+                        <X aria-hidden="true" size={14} />
                       ) : (
                         <Download aria-hidden="true" size={14} />
                       )}
-                      {download?.id === selected.id ? 'Downloading…' : 'Download'}
+                      {download?.id === selected.id
+                        ? 'Downloading…'
+                        : isQueued(selected.id)
+                          ? 'Queued · Cancel'
+                          : 'Download'}
                     </Button>
                     {selected.cid && canPreview(selected.fileName) && fileStatus(selected) !== 'Deletion scheduled' ? (
                       <a

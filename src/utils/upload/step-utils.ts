@@ -13,7 +13,7 @@ export function getStepLabel(step: StepState['step']) {
     case 'announcing-cids':
       return 'Announcing IPFS CIDs to IPNI'
     case 'finalizing-transaction':
-      return 'Finalizing storage transaction'
+      return 'Storage provider confirmation'
   }
 }
 
@@ -23,8 +23,6 @@ export function getStepEstimatedTime(step: StepState['step']) {
       return 'Estimated time: ~10-60 seconds'
     case 'announcing-cids':
       return 'Estimated time: ~30 seconds'
-    case 'finalizing-transaction':
-      return 'Estimated time: ~30-60 seconds'
   }
 }
 

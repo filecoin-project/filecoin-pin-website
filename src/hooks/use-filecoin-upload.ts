@@ -7,6 +7,7 @@ import {
   type UploadExecutionResult,
 } from 'filecoin-pin/core/upload'
 import pino from 'pino'
+import prettyBytes from 'pretty-bytes'
 import { useCallback, useState } from 'react'
 import { MAX_FILE_SIZE } from '../constants/files.ts'
 import { createFreshUploadContexts } from '../lib/filecoin-pin/fresh-contexts.ts'
@@ -124,7 +125,8 @@ export const useFilecoinUpload = () => {
       try {
         if (network !== 'mainnet' && network !== 'calibration')
           throw new Error('Wait for wallet setup to finish before uploading.')
-        if (file.size > MAX_FILE_SIZE) throw new Error('Files must be smaller than 200 MB for browser uploads.')
+        if (file.size > MAX_FILE_SIZE)
+          throw new Error(`Files must be ${prettyBytes(MAX_FILE_SIZE)} or smaller for browser uploads.`)
         updateStepState('creating-car', { status: 'in-progress', progress: 0 })
         logger.info('Creating CAR from file')
 

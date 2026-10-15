@@ -80,6 +80,25 @@ try {
   await page.getByRole('button', { name: 'Upload files', exact: true }).click()
   await page.getByText('Upload a file to reports/2026.', { exact: true }).waitFor()
   await page.getByText('Click to upload', { exact: true }).waitFor()
+  const uploadPanel = page.getByRole('dialog', { name: 'Upload files', exact: true })
+  await uploadPanel.locator('input[type="file"]').evaluate((input) => {
+    const file = new File(['size fixture'], 'oversize.bin')
+    Object.defineProperty(file, 'size', { value: 200_000_001 })
+    const transfer = new DataTransfer()
+    transfer.items.add(file)
+    input.files = transfer.files
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await uploadPanel.getByRole('alert').filter({ hasText: 'File is too large.' }).waitFor()
+  assert.equal(await uploadPanel.getByRole('button', { name: 'Upload', exact: true }).isDisabled(), true)
+  await uploadPanel.locator('input[type="file"]').setInputFiles({
+    name: 'small.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('valid file'),
+  })
+  assert.equal(await uploadPanel.getByRole('alert').count(), 0, 'Valid selection must clear the size error')
+  assert.equal(await uploadPanel.getByRole('button', { name: 'Upload', exact: true }).isEnabled(), true)
+  await uploadPanel.getByRole('button', { name: 'Remove selected file', exact: true }).click()
   assert.equal(
     await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
     false,

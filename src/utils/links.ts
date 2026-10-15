@@ -1,7 +1,7 @@
 import { CID } from 'multiformats/cid'
 
 const UPLOAD_COMPLETED_LINKS = {
-  ipfsGatewayBaseUrl: 'https://dweb.link/ipfs/',
+  ipfsGatewayBaseUrl: 'https://inbrowser.link/ipfs/',
 }
 
 const pdpExplorerBase = (network: string) =>

@@ -64,6 +64,25 @@ try {
     add('progress', h(progress.ProgressBar, { progress: 50 }))
     add('title', h(title.PageTitle))
     add('select', h(select.Select, { 'aria-label': 'Example network' }, h('option', null, 'Filecoin Mainnet')))
+    const { UploadStatus } = await import('/src/components/upload/upload-status.tsx')
+    add(
+      'upload-progress',
+      h(UploadStatus, {
+        fileName: 'DH_SD-Eos_Chn_PN_Stream3_V2.812.0000017.1.R.240704.bin',
+        fileSize: '32.78 MB',
+        transactionHash: '',
+        expectedCopies: 2,
+        confirmedCopies: 0,
+        stepStates: [
+          { step: 'creating-car', status: 'completed', progress: 100 },
+          { step: 'checking-readiness', status: 'completed', progress: 100 },
+          { step: 'uploading-car', status: 'completed', progress: 100 },
+          { step: 'replicating', status: 'completed', progress: 100 },
+          { step: 'announcing-cids', status: 'error', progress: 0, error: 'IPFS indexing is not confirmed yet.' },
+          { step: 'finalizing-transaction', status: 'in-progress', progress: 0 },
+        ],
+      })
+    )
     add('dialog', h(dialog.Dialog, { content: h('p', null, 'File details and storage configuration') }))
     for (const value of ['completed', 'pinned', 'published', 'error', 'pending', 'in-progress'])
       add(`status-${value}`, h(status.BadgeStatus, { status: value }))

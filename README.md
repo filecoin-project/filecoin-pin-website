@@ -34,7 +34,12 @@ Disconnecting a WalletConnect wallet also ends its remote connection session. Wa
 - Folder tree, nested virtual folders, breadcrumbs, display-name changes and file moves.
 - File details with IPFS root CID, piece CID, providers, datasets and transaction links.
 - Original-file download: retrieve and validate the CAR from a recorded provider, then extract the UnixFS file in the browser. An IPFS gateway link is available as a fallback. File details also offer a new-tab gateway preview for common browser-supported formats; media playback depends on the browser and encoding.
+
 - Scheduling deletion across recorded copies, with persisted transaction checkpoints for partial failures and retries.
+
+Gateway links use the external `inbrowser.link` browser gateway. Gateway availability is separate from IPNI indexing: an indexed CID does not guarantee successful gateway retrieval. Use **Download** to retrieve the original file directly from a recorded Filecoin storage provider.
+
+Original-file downloads can run alongside an upload. Additional downloads are queued and run one at a time; repeated requests for the same file are deduplicated. Queued files show **Queued · Cancel** in the list and details. Expand the queue above the file list to manage pending downloads across folders. Pending downloads can be cancelled; an active download cannot be cancelled. A failed download reports its file name and the queue continues. The queue is kept only in the current page and is cleared on reload or a wallet/network change; an already running download may still finish. Closing file details keeps downloads running.
 
 Folders and display names are browser directory metadata. Moving or renaming a record does not change the stored content or its CID. Repeated uploads of identical content keep separate directory records. Deleting their shared piece affects all matching records; the deletion UI explains this before scheduling removals.
 

@@ -42,10 +42,10 @@ const createMockOrchestration = (
     },
     pendingAutoExpandPieceCids: new Set(),
     dragDropKey: 0,
-    startUpload: () => {
+    startUpload: async () => {
       console.log('Start upload clicked')
     },
-    retryUpload: () => {
+    retryUpload: async () => {
       console.log('Retry upload clicked')
     },
     cancelUpload: () => {

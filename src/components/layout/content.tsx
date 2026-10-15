@@ -1,5 +1,5 @@
 import { AlertTriangle, Loader2, ShieldCheck, Wallet } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { useUploadOrchestration } from '../../hooks/use-upload-orchestration.ts'
@@ -24,7 +24,6 @@ export default function Content() {
   const [uploadFolder, setUploadFolder] = useState('')
   const [panel, setPanel] = useState<'wallet' | 'upload' | 'activity' | null>(null)
   const [progressExpanded, setProgressExpanded] = useState(true)
-  const started = useRef(false)
   const canUpload = Boolean(
     connection.sessionStatus === 'active' && synapse && wallet.status === 'ready' && storageSetup?.status === 'ready'
   )
@@ -39,14 +38,15 @@ export default function Content() {
     setUploadFolder(folder)
     setPanel(canUpload ? 'upload' : 'wallet')
   }
-  useEffect(() => {
-    if (activeUpload.isUploading) started.current = true
-    else if (started.current) {
-      started.current = false
+  const runUpload = async (upload: () => Promise<void> | undefined) => {
+    connection.setUploading(true)
+    try {
+      await upload()
+    } finally {
       connection.setUploading(false)
       void refreshWallet()
     }
-  }, [activeUpload.isUploading, connection, refreshWallet])
+  }
 
   return (
     <main className="mx-auto max-w-[1440px] space-y-4 px-5 py-5 sm:px-8 lg:px-12 lg:py-6">
@@ -200,8 +200,7 @@ export default function Content() {
             isUploading={connection.busy || connection.uploading}
             key={dragDropKey}
             onUpload={(file) => {
-              connection.setUploading(true)
-              startUpload(file, uploadFolder)
+              void runUpload(() => startUpload(file, uploadFolder))
               setPanel(null)
             }}
           />
@@ -215,7 +214,7 @@ export default function Content() {
         )}
       </SidePanel>
       <SidePanel
-        description="Closing this panel keeps the upload running. Keep the browser tab open until it finishes."
+        description="You can close this panel. Keep this browser tab open until the upload finishes."
         onOpenChange={(open) => {
           if (!open) setPanel(null)
         }}
@@ -224,14 +223,11 @@ export default function Content() {
       >
         {uploadedFile ? (
           <>
-            <p className="text-sm text-muted">Current upload · {uploadedFile.folderPath || 'Files'}</p>
+            <p className="text-xs text-muted">Uploading to {uploadedFile.folderPath || 'Files'}</p>
             <UploadError
               orchestration={{
                 ...orchestration,
-                retryUpload: () => {
-                  connection.setUploading(true)
-                  orchestration.retryUpload()
-                },
+                retryUpload: () => runUpload(orchestration.retryUpload),
                 cancelUpload: () => {
                   orchestration.cancelUpload()
                   setPanel(null)

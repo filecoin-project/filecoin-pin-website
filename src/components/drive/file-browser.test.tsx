@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { UploadHistoryProvider } from '../../context/upload-history-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   permissions: vi.fn(),
   uploading: vi.fn(),
   submit: vi.fn(),
+  download: vi.fn(),
+  uploadInProgress: false,
 }))
 const scope = '314:0x1111111111111111111111111111111111111111'
 vi.mock('../../hooks/use-filecoin-pin-context.ts', () => ({
@@ -30,7 +32,7 @@ vi.mock('../../context/browser-wallet-provider.tsx', () => ({
     network: 'mainnet',
     session: {},
     busy: false,
-    uploading: false,
+    uploading: mocks.uploadInProgress,
     setUploading: mocks.uploading,
   }),
 }))
@@ -38,6 +40,10 @@ vi.mock('../../lib/filecoin-pin/browser-wallet.ts', () => ({
   publicClient: () => ({ waitForTransactionReceipt: mocks.receipt }),
 }))
 vi.mock('@filoz/synapse-core/pdp-verifier', () => ({ findPieceIdsByCid: async () => ({ items: [1n] }) }))
+vi.mock('../../lib/filecoin-pin/download.ts', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  downloadFile: mocks.download,
+}))
 
 const hash = `0x${'a'.repeat(64)}`
 const file = {
@@ -58,10 +64,117 @@ const file = {
 } satisfies DatasetPiece
 beforeEach(() => {
   vi.resetAllMocks()
+  mocks.uploadInProgress = false
   mocks.permissions.mockResolvedValue(undefined)
   mocks.receipt.mockResolvedValue({ status: 'success' })
   mocks.submit.mockResolvedValue(hash)
   setCachedPieces(scope, [file, { ...file, id: 'second', fileName: 'second.txt', datasetId: '2', datasetIds: ['2'] }])
+})
+
+it.each(['table', 'details'] as const)(
+  'downloads from %s during an upload without releasing the upload lock',
+  async (entry) => {
+    mocks.uploadInProgress = true
+    let finish!: () => void
+    mocks.download.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        })
+    )
+    render(
+      <UploadHistoryProvider>
+        <FileBrowser folder="" onFolderChange={vi.fn()} />
+      </UploadHistoryProvider>
+    )
+    const fileButton = await screen.findByRole('button', { name: 'first.txt' })
+    if (entry === 'details') fireEvent.click(fileButton)
+    const download =
+      entry === 'details'
+        ? screen.getByRole('button', { name: 'Download original file' })
+        : within(fileButton.closest('tr') as HTMLElement).getByRole('button', { name: 'Download' })
+    expect(download).toHaveProperty('disabled', false)
+    fireEvent.click(download)
+    fireEvent.click(download)
+    expect(mocks.download).toHaveBeenCalledOnce()
+    expect(download).toHaveProperty('disabled', true)
+    await act(async () => finish())
+    await waitFor(() => expect(download).toHaveProperty('disabled', false))
+    expect(mocks.uploading).not.toHaveBeenCalled()
+  }
+)
+
+it('allows retrying a failed download while the upload remains active', async () => {
+  mocks.uploadInProgress = true
+  mocks.download.mockRejectedValueOnce(new Error('Provider unavailable')).mockResolvedValue(undefined)
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  const fileButton = await screen.findByRole('button', { name: 'first.txt' })
+  const download = within(fileButton.closest('tr') as HTMLElement).getByRole('button', { name: 'Download' })
+  fireEvent.click(download)
+  await screen.findByText(/Provider unavailable/)
+  expect(download).toHaveProperty('disabled', false)
+  fireEvent.click(download)
+  await waitFor(() => expect(mocks.download).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(download).toHaveProperty('disabled', false))
+  expect(mocks.uploading).not.toHaveBeenCalled()
+})
+
+it('keeps Upload available while downloading an existing file', async () => {
+  let finish!: () => void
+  mocks.download.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve
+      })
+  )
+  const upload = vi.fn()
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} onUpload={upload} />
+    </UploadHistoryProvider>
+  )
+  const fileButton = await screen.findByRole('button', { name: 'first.txt' })
+  fireEvent.click(within(fileButton.closest('tr') as HTMLElement).getByRole('button', { name: 'Download' }))
+  const button = screen.getByRole('button', { name: 'Upload files' })
+  expect(button).toHaveProperty('disabled', false)
+  fireEvent.click(button)
+  expect(upload).toHaveBeenCalledOnce()
+  await act(async () => finish())
+})
+
+it('shows queued files and lets users cancel from details or the queue list', async () => {
+  let finish!: () => void
+  mocks.download.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve
+      })
+  )
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  const first = await screen.findByRole('button', { name: 'first.txt' })
+  const second = screen.getByRole('button', { name: 'second.txt' })
+  fireEvent.click(within(first.closest('tr') as HTMLElement).getByRole('button', { name: 'Download' }))
+  fireEvent.click(within(second.closest('tr') as HTMLElement).getByRole('button', { name: 'Download' }))
+  expect(mocks.download).toHaveBeenCalledOnce()
+  expect(within(second.closest('tr') as HTMLElement).getByText('Queued · Cancel')).toBeTruthy()
+  fireEvent.click(second)
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel queued download' }))
+  expect(screen.getByRole('button', { name: 'Download original file' })).toHaveProperty('disabled', false)
+  fireEvent.click(screen.getByRole('button', { name: 'Download original file' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Close details' }))
+  const queue = screen.getByRole('list', { name: 'Queued downloads', hidden: true })
+  fireEvent.click(within(queue).getByRole('button', { name: 'Cancel queued download for second.txt', hidden: true }))
+  expect(screen.queryByRole('list', { name: 'Queued downloads', hidden: true })).toBeNull()
+  await act(async () => finish())
+  expect(mocks.download).toHaveBeenCalledOnce()
 })
 
 it('resumes deletion of shared content through details even when the selected record is already scheduled', async () => {

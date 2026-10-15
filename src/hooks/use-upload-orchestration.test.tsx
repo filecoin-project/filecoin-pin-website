@@ -72,7 +72,9 @@ beforeEach(() => {
 describe('durable upload directory checkpoints', () => {
   it('keeps confirmed file metadata when later replication or indexing fails', async () => {
     const { result } = renderHook(useUploadOrchestration)
-    act(() => result.current.startUpload(new File(['hello'], '研究.txt'), 'reports/2026'))
+    act(() => {
+      void result.current.startUpload(new File(['hello'], '研究.txt'), 'reports/2026')
+    })
     await waitFor(() => expect(getCachedPieces(scope)).toHaveLength(1))
     expect(result.current.activeUpload.isUploading).toBe(true)
     const checkpoint = getCachedPieces(scope)?.[0]
@@ -91,7 +93,9 @@ describe('durable upload directory checkpoints', () => {
 
   it('updates the same record with additional confirmed copies and their correct transaction links', async () => {
     const { result } = renderHook(useUploadOrchestration)
-    act(() => result.current.startUpload(new File(['hello'], 'report.txt'), 'reports'))
+    act(() => {
+      void result.current.startUpload(new File(['hello'], 'report.txt'), 'reports')
+    })
     await waitFor(() => expect(getCachedPieces(scope)).toHaveLength(1))
     const id = getCachedPieces(scope)?.[0].id
     act(() => {
@@ -123,7 +127,9 @@ it.each(['loading', 'error'] as const)(
   'keeps the upload network when balance refresh changes wallet status to %s',
   async (status) => {
     const { result, rerender } = renderHook(useUploadOrchestration)
-    act(() => result.current.startUpload(new File(['hello'], 'partial-mainnet.txt')))
+    act(() => {
+      void result.current.startUpload(new File(['hello'], 'partial-mainnet.txt'))
+    })
     await waitFor(() => expect(getCachedPieces(scope)).toHaveLength(1))
     expect(result.current.activeUpload.network).toBe('mainnet')
     act(() => fail(new Error('Secondary failed after primary confirmed')))
