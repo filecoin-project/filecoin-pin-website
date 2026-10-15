@@ -56,14 +56,14 @@ export default function Content() {
           <p className="mt-1 text-sm text-muted">Store and manage files on Filecoin.</p>
         </div>
         <Button
-          aria-label="Wallet & storage"
+          aria-label="Wallet and storage"
           className="w-auto"
           onClick={() => setPanel('wallet')}
           size="sm"
           variant="secondary"
         >
           <Wallet aria-hidden="true" size={15} />
-          Wallet & storage
+          Wallet and storage
           {setupChecking ? (
             <Loader2 aria-label="Checking wallet setup" className="animate-spin text-muted" size={14} />
           ) : (
@@ -144,7 +144,7 @@ export default function Content() {
       </div>
       <footer className="flex flex-wrap justify-between gap-2 text-xs text-muted">
         <span>Export a directory backup before clearing browser data.</span>
-        <span>Powered by Filecoin & IPFS</span>
+        <span>Powered by Filecoin</span>
       </footer>
       <SidePanel
         description="Manage browser authorization, balances and storage payments."
@@ -152,7 +152,7 @@ export default function Content() {
           if (!open) setPanel(null)
         }}
         open={panel === 'wallet'}
-        title="Wallet & storage"
+        title="Wallet and storage"
       >
         <WalletSetup inDrawer />
         <div className="space-y-3 rounded-lg border border-border bg-canvas/30 p-4">

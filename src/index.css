@@ -1,14 +1,23 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Funnel Sans and core palette match pay.filecoin.cloud. Font license: public/fonts/FunnelSans-OFL.txt. */
+@font-face {
+  font-family: "Funnel Sans";
+  src: url("/fonts/funnel-sans-variable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+}
+
 :root {
   --spacing-sidebar-height: 76px;
 }
 
 @theme {
-  --color-accent: #48daff;
-  --color-surface-hover: #2b3340;
-  --color-field-border: #65748a;
+  --color-accent: #54a2ff;
+  --color-surface-hover: #27272a;
+  --color-field-border: #71717b;
   --color-success: #6ee7b7;
   --color-success-surface: #0d2c23;
   --color-success-border: #1b604a;
@@ -18,18 +27,18 @@
   --color-danger: #fca5a5;
   --color-danger-surface: #3b1c23;
   --color-danger-border: #74303b;
-  --color-button-brand-hover: #075aa5;
-  --color-link: #1ebfff;
-  --color-link-hover: #83eaff;
+  --color-button-brand-hover: #193cb8;
+  --color-link: #0099e0;
+  --color-link-hover: #18b6ff;
   --color-badge-completed: #0e385d;
-  --color-badge-completed-text: #83eaff;
+  --color-badge-completed-text: #18b6ff;
   --color-badge-completed-border: #0d5d9b;
-  --color-canvas: #101216;
-  --color-surface: #171a20;
-  --color-surface-raised: #1d2129;
-  --color-border: #2b303a;
-  --color-muted: #9ca6b5;
-  --color-foreground: #edf0f5;
+  --color-canvas: #09090b;
+  --color-surface: #18181b;
+  --color-surface-raised: #27272a;
+  --color-border: #323235;
+  --color-muted: #9f9fa9;
+  --color-foreground: #fafafa;
   --color-brand-50: oklch(0.98 0.0157 216.67); /* #EDFBFF */
   --color-brand-100: oklch(0.95 0.035 219.18); /* #D6F5FF */
   --color-brand-200: oklch(0.92 0.0628 215.11); /* #B5F0FF */
@@ -42,8 +51,8 @@
   --color-brand-900: oklch(0.47 0.1224 248.85); /* #0D5D9B */
   --color-brand-950: oklch(0.33 0.0795 249.37); /* #0E385D */
 
-  --color-button-brand: #086dc5;
-  --color-button-brand-disabled: #005280;
+  --color-button-brand: #1447e6;
+  --color-button-brand-disabled: #193cb8;
 
   --color-badge-in-progress: #3B1400;
   --color-badge-in-progress-text: #FF8C3B;
@@ -56,7 +65,7 @@
 }
 
 :root {
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Funnel Sans", Arial, Helvetica, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
@@ -72,9 +81,9 @@
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --color-accent: #075b9d;
-  --color-surface-hover: #dde6f0;
-  --color-field-border: #8093ab;
+  --color-accent: #004d77;
+  --color-surface-hover: #e4e4e7;
+  --color-field-border: #a1a1aa;
   --color-success: #065f46;
   --color-success-surface: #ecfdf5;
   --color-success-border: #a7dfc9;
@@ -84,19 +93,19 @@
   --color-danger: #b91c1c;
   --color-danger-surface: #fef2f2;
   --color-danger-border: #fecaca;
-  --color-link: #075b9d;
-  --color-link-hover: #064d90;
+  --color-link: #006aa4;
+  --color-link-hover: #004d77;
   --color-badge-completed: #e8f3ff;
-  --color-badge-completed-text: #075b9d;
+  --color-badge-completed-text: #006aa4;
   --color-badge-completed-border: #b8d8f3;
-  --color-canvas: #f4f7fb;
+  --color-canvas: #ffffff;
   --color-surface: #ffffff;
-  --color-surface-raised: #eaf0f7;
-  --color-border: #d6dee9;
-  --color-muted: #526176;
-  --color-foreground: #182435;
-  --color-brand-400: #086dc5;
-  --color-brand-500: #087ac1;
+  --color-surface-raised: #f4f4f5;
+  --color-border: #e4e4e7;
+  --color-muted: #52525c;
+  --color-foreground: #09090b;
+  --color-brand-400: #1447e6;
+  --color-brand-500: #1447e6;
   --color-emerald-300: #047857;
   --color-emerald-400: #047857;
   --color-amber-300: #92400e;

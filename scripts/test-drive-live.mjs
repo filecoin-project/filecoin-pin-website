@@ -103,7 +103,7 @@ async function newWalletPage() {
 try {
   const page = await newWalletPage()
   primaryPage = page
-  await page.getByRole('button', { name: 'Wallet & storage', exact: true }).click()
+  await page.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
   await page
     .getByRole('checkbox', { name: 'I authorize all four storage permissions, including deletion, for this browser.' })
     .check()
@@ -113,7 +113,7 @@ try {
     await page.reload()
     await page.getByLabel('Network', { exact: true }).selectOption('calibration')
     await page.getByRole('button', { name: 'Connect wallet', exact: true }).click()
-    await page.getByRole('button', { name: 'Wallet & storage', exact: true }).click()
+    await page.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
     await page.getByText('Wallet setup · Session authorized', { exact: true }).waitFor()
     await page.getByRole('button', { name: 'Revoke session', exact: true }).click()
     await page.getByRole('button', { name: 'Authorize session', exact: true }).waitFor()
@@ -122,7 +122,8 @@ try {
     const additionalDeposit = process.env.DRIVE_TEST_DEPOSIT
     if (additionalDeposit) {
       const input = page.getByLabel('Deposit amount in USDFC', { exact: true })
-      if (!(await input.isVisible())) await page.getByRole('button', { name: 'Wallet & storage', exact: true }).click()
+      if (!(await input.isVisible()))
+        await page.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
       await input.fill(additionalDeposit)
       await page.getByRole('button', { name: 'Deposit USDFC', exact: true }).click()
       await page.getByText('Deposit confirmed.', { exact: true }).waitFor()
@@ -147,7 +148,7 @@ try {
       await page.getByRole('button', { name: 'Approve storage payments', exact: true }).click()
       await page.getByText('Session ready', { exact: true }).waitFor()
     }
-    await page.getByRole('button', { name: 'Close Wallet & storage', exact: true }).click()
+    await page.getByRole('button', { name: 'Close Wallet and storage', exact: true }).click()
     if (process.env.DRIVE_TEST_IMPORT_DIRECTORY) {
       await page.getByText('Session ready', { exact: true }).waitFor()
       await page.getByLabel('Import directory').setInputFiles(process.env.DRIVE_TEST_IMPORT_DIRECTORY)
@@ -251,7 +252,7 @@ try {
       { timeout: 600_000 }
     )
     await page.getByRole('button', { name: 'Close details', exact: true }).click()
-    await page.getByRole('button', { name: 'Wallet & storage', exact: true }).click()
+    await page.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
     await page.getByRole('button', { name: 'Revoke session', exact: true }).click()
     await page.getByRole('button', { name: 'Authorize session', exact: true }).waitFor()
     console.log('All recorded copies scheduled for deletion; browser session revoked')
