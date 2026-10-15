@@ -57,3 +57,31 @@ describe('WalletConnect transport', () => {
     expect(mocks.init).toHaveBeenCalledWith(expect.objectContaining({ projectId: '6d8b88b03b08df309b5258ff3de372be' }))
   })
 })
+
+it('silently restores an approved remote account without pairing or requesting a network change', async () => {
+  const account = '0x1111111111111111111111111111111111111111'
+  const request = vi.fn()
+  mocks.init.mockResolvedValue({
+    session: {
+      expiry: Math.floor(Date.now() / 1000) + 3600,
+      namespaces: { eip155: { accounts: [`eip155:314159:${account}`] } },
+    },
+    connect: mocks.connect,
+    request,
+  })
+  const { restoreWalletConnect } = await import('./wallet-connect.ts')
+  expect((await restoreWalletConnect('calibration'))?.address).toBe(account)
+  expect(await restoreWalletConnect('mainnet')).toBeNull()
+  expect(request).not.toHaveBeenCalled()
+  expect(mocks.connect).not.toHaveBeenCalled()
+})
+
+it.each([undefined, { expiry: 1, namespaces: {} }])(
+  'never starts pairing for a missing or expired remote session',
+  async (session) => {
+    mocks.init.mockResolvedValue({ session, connect: mocks.connect })
+    const { restoreWalletConnect } = await import('./wallet-connect.ts')
+    expect(await restoreWalletConnect('mainnet')).toBeNull()
+    expect(mocks.connect).not.toHaveBeenCalled()
+  }
+)

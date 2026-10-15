@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   load: vi.fn(),
   save: vi.fn(),
   remoteConnect: vi.fn(),
+  remoteRestore: vi.fn(),
   remoteDisconnect: vi.fn(),
 }))
 vi.mock('../lib/filecoin-pin/browser-wallet.ts', async (importOriginal) => ({
@@ -24,9 +25,11 @@ vi.mock('../lib/local-storage/session-vault.ts', () => ({
 vi.mock('../lib/filecoin-pin/wallet-connect.ts', () => ({
   walletConnectAvailable: true,
   connectWalletConnect: mocks.remoteConnect,
+  restoreWalletConnect: mocks.remoteRestore,
 }))
 
 import { SessionPermissionError } from '../lib/filecoin-pin/browser-wallet.ts'
+import { saveWalletPreference } from '../lib/local-storage/wallet-connection.ts'
 import { BrowserWalletProvider, useBrowserWallet } from './browser-wallet-provider.tsx'
 
 const ALICE = '0x1111111111111111111111111111111111111111'
@@ -57,6 +60,7 @@ beforeEach(() => {
   mocks.write.mockResolvedValue(hash)
   mocks.receipt.mockResolvedValue({ status: 'success' })
   mocks.validate.mockResolvedValue(undefined)
+  mocks.remoteRestore.mockResolvedValue(null)
   mocks.remoteDisconnect.mockResolvedValue(undefined)
   mocks.remoteConnect.mockResolvedValue({
     request,
@@ -237,4 +241,169 @@ describe('BYOW browser sessions', () => {
     await waitFor(() => expect(result.current.sessionStatus).toBe('active'))
     expect(mocks.validate).toHaveBeenCalled()
   })
+})
+
+it('remembers a manually selected network after remount and uses it when connecting', async () => {
+  const first = renderHook(useBrowserWallet, { wrapper })
+  expect(first.result.current.network).toBe('mainnet')
+  await act(async () => first.result.current.switchNetwork('calibration'))
+  first.unmount()
+  const second = renderHook(useBrowserWallet, { wrapper })
+  expect(second.result.current.network).toBe('calibration')
+  await act(async () => second.result.current.connect())
+  expect(request).toHaveBeenCalledWith({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x4cb2f' }] })
+  await act(async () => second.result.current.disconnect())
+  second.unmount()
+  const third = renderHook(useBrowserWallet, { wrapper })
+  expect(third.result.current.network).toBe('calibration')
+  await act(async () => third.result.current.switchNetwork('mainnet'))
+  third.unmount()
+  expect(renderHook(useBrowserWallet, { wrapper }).result.current.network).toBe('mainnet')
+})
+
+it('keeps the last successful network choice when the wallet rejects a switch', async () => {
+  const first = renderHook(useBrowserWallet, { wrapper })
+  await act(async () => first.result.current.switchNetwork('calibration'))
+  await act(async () => first.result.current.connect())
+  request.mockRejectedValueOnce(new Error('User rejected network switch'))
+  await act(async () => first.result.current.switchNetwork('mainnet'))
+  expect(first.result.current.network).toBe('calibration')
+  expect(first.result.current.error).toContain('User rejected')
+  first.unmount()
+  expect(renderHook(useBrowserWallet, { wrapper }).result.current.network).toBe('calibration')
+})
+
+it('defaults to Mainnet when the saved network is invalid or browser storage is blocked', () => {
+  localStorage.setItem('filecoin-drive-network', 'ethereum')
+  const first = renderHook(useBrowserWallet, { wrapper })
+  expect(first.result.current.network).toBe('mainnet')
+  first.unmount()
+  const read = vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
+    throw new Error('Storage blocked')
+  })
+  const second = renderHook(useBrowserWallet, { wrapper })
+  expect(second.result.current.network).toBe('mainnet')
+  second.unmount()
+  read.mockRestore()
+})
+
+it('silently restores an injected wallet and saved key after reload, and respects Disconnect', async () => {
+  mocks.load.mockResolvedValue({ privateKey: `0x${'1'.repeat(64)}`, expiresAt: Math.floor(Date.now() / 1000) + 86400 })
+  const first = renderHook(useBrowserWallet, { wrapper })
+  await act(async () => first.result.current.connect())
+  first.unmount()
+  request.mockClear()
+  const second = renderHook(useBrowserWallet, { wrapper })
+  await waitFor(() => expect(second.result.current.sessionStatus).toBe('active'))
+  expect(second.result.current.address).toBe(ALICE)
+  expect(request.mock.calls.map(([call]) => call.method)).toEqual(['eth_accounts'])
+  expect(mocks.write).not.toHaveBeenCalled()
+  await act(async () => second.result.current.disconnect())
+  second.unmount()
+  request.mockClear()
+  const third = renderHook(useBrowserWallet, { wrapper })
+  expect(third.result.current.restoring).toBe(false)
+  expect(third.result.current.address).toBeNull()
+  expect(request).not.toHaveBeenCalled()
+})
+
+it('returns to explicit Connect for a locked wallet without requesting accounts or switching chains', async () => {
+  saveWalletPreference({ type: 'injected' })
+  accounts = []
+  const { result } = renderHook(useBrowserWallet, { wrapper })
+  await waitFor(() => expect(result.current.restoring).toBe(false))
+  expect(result.current.address).toBeNull()
+  expect(result.current.error).toBeNull()
+  expect(request.mock.calls.map(([call]) => call.method)).toEqual(['eth_accounts'])
+})
+
+it('restores the selected EIP-6963 wallet by rdns even when its per-page UUID changes', async () => {
+  saveWalletPreference({ type: 'injected', rdns: 'io.selected.wallet' })
+  const selectedRequest = vi.fn().mockResolvedValue([BOB])
+  const { result } = renderHook(useBrowserWallet, { wrapper })
+  act(() =>
+    window.dispatchEvent(
+      new CustomEvent('eip6963:announceProvider', {
+        detail: {
+          info: { uuid: 'new-uuid', name: 'Selected wallet', rdns: 'io.selected.wallet' },
+          provider: { request: selectedRequest },
+        },
+      })
+    )
+  )
+  await waitFor(() => expect(result.current.address).toBe(BOB))
+  expect(selectedRequest).toHaveBeenCalledWith({ method: 'eth_accounts' })
+  expect(request).not.toHaveBeenCalled()
+})
+
+it('does not fall back to a different installed wallet when the remembered wallet is unavailable', async () => {
+  vi.useFakeTimers()
+  try {
+    saveWalletPreference({ type: 'injected', rdns: 'io.uninstalled.wallet' })
+    const { result } = renderHook(useBrowserWallet, { wrapper })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000)
+    })
+    expect(result.current.restoring).toBe(false)
+    expect(result.current.address).toBeNull()
+    expect(request).not.toHaveBeenCalled()
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+it('ignores a late silent connection after the user disconnects', async () => {
+  saveWalletPreference({ type: 'injected' })
+  let finish!: (accounts: string[]) => void
+  request.mockImplementation(
+    () =>
+      new Promise<string[]>((resolve) => {
+        finish = resolve
+      })
+  )
+  const { result } = renderHook(useBrowserWallet, { wrapper })
+  await waitFor(() => expect(request).toHaveBeenCalledWith({ method: 'eth_accounts' }))
+  await act(async () => result.current.disconnect())
+  await act(async () => {
+    finish([ALICE])
+  })
+  expect(result.current.address).toBeNull()
+  expect(result.current.restoring).toBe(false)
+})
+
+it.each([true, false])('restores a WalletConnect connection only when its session is reusable (%s)', async (valid) => {
+  saveWalletPreference({ type: 'walletconnect' })
+  mocks.remoteRestore.mockResolvedValue(valid ? { provider: { request }, address: ALICE } : null)
+  const { result } = renderHook(useBrowserWallet, { wrapper })
+  await waitFor(() => expect(result.current.restoring).toBe(false))
+  expect(result.current.address).toBe(valid ? ALICE : null)
+  expect(mocks.remoteRestore).toHaveBeenCalledWith('mainnet')
+  expect(mocks.remoteConnect).not.toHaveBeenCalled()
+  expect(request).not.toHaveBeenCalled()
+})
+
+it('stops waiting for an unresponsive wallet and ignores accounts that arrive after the timeout', async () => {
+  vi.useFakeTimers()
+  try {
+    saveWalletPreference({ type: 'injected' })
+    let finish!: (accounts: string[]) => void
+    request.mockImplementation(
+      () =>
+        new Promise<string[]>((resolve) => {
+          finish = resolve
+        })
+    )
+    const { result } = renderHook(useBrowserWallet, { wrapper })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8000)
+    })
+    expect(result.current.restoring).toBe(false)
+    expect(result.current.address).toBeNull()
+    await act(async () => {
+      finish([ALICE])
+    })
+    expect(result.current.address).toBeNull()
+  } finally {
+    vi.useRealTimers()
+  }
 })

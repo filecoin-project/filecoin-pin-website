@@ -22,6 +22,7 @@ vi.mock('../lib/filecoin-pin/fresh-contexts.ts', () => ({
 vi.mock('../context/upload-history-context.tsx', () => ({ useUploadHistory: () => ({ addUpload: mocks.add }) }))
 vi.mock('./use-filecoin-pin-context.ts', () => ({ useFilecoinPinContext: () => context }))
 
+import type { FilecoinPinContextValue } from '../context/filecoin-pin-provider.tsx'
 import { addCachedPiece, getCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import { useUploadOrchestration } from './use-upload-orchestration.ts'
 
@@ -29,7 +30,10 @@ const scope = '314:0x1111111111111111111111111111111111111111'
 const context = {
   synapse: { storage: { prepare: vi.fn().mockResolvedValue({ costs: { ready: true } }) } },
   storageScope: scope,
-  wallet: { status: 'ready', data: { address: scope.slice(4), network: 'mainnet' } },
+  wallet: {
+    status: 'ready',
+    data: { address: scope.slice(4), network: 'mainnet' },
+  } as FilecoinPinContextValue['wallet'],
   addDataSetId: vi.fn(),
   ensurePermissions: vi.fn().mockResolvedValue(undefined),
   debugParams: { providerId: null, dataSetId: null },
@@ -42,6 +46,10 @@ let fail: (error: Error) => void
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
+  context.wallet = {
+    status: 'ready',
+    data: { address: scope.slice(4), network: 'mainnet' },
+  } as FilecoinPinContextValue['wallet']
   mocks.add.mockImplementation((piece) => addCachedPiece(scope, piece))
   mocks.execute.mockImplementation(async (_synapse, _bytes, _cid, options) => {
     progress = options.onProgress
@@ -110,3 +118,19 @@ describe('durable upload directory checkpoints', () => {
     })
   })
 })
+
+it.each(['loading', 'error'] as const)(
+  'keeps the upload network when balance refresh changes wallet status to %s',
+  async (status) => {
+    const { result, rerender } = renderHook(useUploadOrchestration)
+    act(() => result.current.startUpload(new File(['hello'], 'partial-mainnet.txt')))
+    await waitFor(() => expect(getCachedPieces(scope)).toHaveLength(1))
+    expect(result.current.activeUpload.network).toBe('mainnet')
+    act(() => fail(new Error('Secondary failed after primary confirmed')))
+    await waitFor(() => expect(result.current.activeUpload.error).toBeTruthy())
+    context.wallet = status === 'loading' ? { status } : { status, error: 'Balance RPC unavailable' }
+    rerender()
+    expect(getCachedPieces(scope)?.[0].network).toBe('mainnet')
+    expect(result.current.activeUpload.network).toBe('mainnet')
+  }
+)

@@ -112,7 +112,7 @@ try {
   if (authorizationOnly) {
     await page.reload()
     await page.getByLabel('Network', { exact: true }).selectOption('calibration')
-    await page.getByRole('button', { name: 'Connect wallet', exact: true }).click()
+    await page.getByRole('button', { name: 'Disconnect', exact: true }).waitFor()
     await page.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
     await page.getByText('Wallet setup · Session authorized', { exact: true }).waitFor()
     await page.getByRole('button', { name: 'Revoke session', exact: true }).click()

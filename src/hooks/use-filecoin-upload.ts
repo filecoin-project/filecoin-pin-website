@@ -108,7 +108,10 @@ export const useFilecoinUpload = () => {
 
   const uploadFile = useCallback(
     async (file: File, metadata?: Record<string, string>): Promise<string> => {
+      // Freeze the network before any asynchronous upload or balance refresh.
+      const network = wallet.status === 'ready' ? wallet.data.network : undefined
       setUploadState({
+        network,
         isUploading: true,
         stepStates: INITIAL_STEP_STATES,
         transactionHashes: [],
@@ -119,6 +122,8 @@ export const useFilecoinUpload = () => {
       })
 
       try {
+        if (network !== 'mainnet' && network !== 'calibration')
+          throw new Error('Wait for wallet setup to finish before uploading.')
         if (file.size > MAX_FILE_SIZE) throw new Error('Files must be smaller than 200 MB for browser uploads.')
         updateStepState('creating-car', { status: 'in-progress', progress: 0 })
         logger.info('Creating CAR from file')
@@ -427,7 +432,6 @@ export const useFilecoinUpload = () => {
         setUploadState((prev) => ({
           ...prev,
           copies: result.copies,
-          network: wallet.status === 'ready' ? wallet.data.network || result.network : result.network,
         }))
 
         return rootCid

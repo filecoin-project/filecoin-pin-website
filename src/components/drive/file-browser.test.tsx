@@ -157,3 +157,74 @@ it('keeps removed files hidden after restore and reload, but shows a new identic
   expect(getCachedPieces(scope)).toHaveLength(2)
   expect(getCachedPieces(scope)?.find((record) => record.id === 'new-upload')?.deletion).toBeUndefined()
 })
+
+it.each(['archived', 'partial'] as const)(
+  'checks the current pending removal when an older %s record has a confirmed receipt',
+  async (older) => {
+    const oldHash = `0x${'b'.repeat(64)}`
+    const otherHash = `0x${'c'.repeat(64)}`
+    const archived = { ...file, deletion: { '1': { transactionHash: oldHash, confirmed: true } } }
+    const previous =
+      older === 'archived'
+        ? archived
+        : {
+            ...archived,
+            datasetIds: ['1', '2'],
+            deletion: { ...archived.deletion, '2': { transactionHash: otherHash, confirmed: false } },
+          }
+    setCachedPieces(scope, [
+      previous,
+      {
+        ...file,
+        id: 'later',
+        fileName: 'later.txt',
+        deletion: { '1': { transactionHash: hash, confirmed: false } },
+      },
+    ])
+    render(
+      <UploadHistoryProvider>
+        <FileBrowser folder="" onFolderChange={vi.fn()} />
+      </UploadHistoryProvider>
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'later.txt' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue deletion' }))
+    await screen.findByText(
+      'Removed from the file list. Storage providers will process removal in a subsequent proving period.'
+    )
+    expect(mocks.receipt).toHaveBeenCalledWith({ hash })
+    expect(mocks.submit).not.toHaveBeenCalled()
+    expect(getCachedPieces(scope)?.find((record) => record.id === 'later')?.deletion?.['1'].confirmed).toBe(true)
+    if (older === 'archived')
+      expect(getCachedPieces(scope)?.find((record) => record.id === 'first')?.deletion?.['1'].transactionHash).toBe(
+        oldHash
+      )
+  }
+)
+
+it('preserves the archive while a new removal reverts and can be submitted again', async () => {
+  const oldHash = `0x${'b'.repeat(64)}`
+  setCachedPieces(scope, [
+    { ...file, deletion: { '1': { transactionHash: oldHash, confirmed: true } } },
+    { ...file, id: 'later', fileName: 'later.txt', deletion: { '1': { transactionHash: hash, confirmed: false } } },
+  ])
+  mocks.receipt.mockResolvedValueOnce({ status: 'reverted' })
+  mocks.context.mockResolvedValue({ deletePieces: mocks.submit, getScheduledRemovals: async () => [] })
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'later.txt' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Continue deletion' }))
+  await within(screen.getByRole('dialog')).findByText(
+    'Deletion transaction reverted for dataset 1. Retry to submit again.'
+  )
+  expect(getCachedPieces(scope)?.find((record) => record.id === 'later')?.deletion?.['1']).toBeUndefined()
+  fireEvent.click(screen.getByRole('button', { name: 'Continue deletion' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(mocks.submit).toHaveBeenCalledOnce()
+  expect(getCachedPieces(scope)?.find((record) => record.id === 'first')?.deletion?.['1'].transactionHash).toBe(oldHash)
+  expect(getCachedPieces(scope)?.find((record) => record.id === 'later')?.deletion?.['1'].confirmed).toBe(true)
+})

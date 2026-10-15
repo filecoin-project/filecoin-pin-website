@@ -12,9 +12,23 @@ export async function prepareBrowserPage(page, { seedDirectory = true, funded = 
         contentType: 'application/javascript',
         body: `export const EthereumProvider = { init: async (options) => {
           window.__walletConnectOptions = options;
-          return { ...window.ethereum, accounts: [], connect: async (options) => {
-            window.__walletConnectPairing = options;
-          }, disconnect: async () => { window.__walletConnectDisconnected = true; } };
+          const provider = { ...window.ethereum, accounts: [],
+            session: JSON.parse(localStorage.getItem('__mockWalletConnectSession') || 'null'),
+            connect: async (options) => {
+              window.__walletConnectPairing = options;
+              const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+              provider.session = { expiry: Math.floor(Date.now() / 1000) + 86400, namespaces: { eip155: {
+                accounts: [...options.chains, ...options.optionalChains].flatMap(chain => accounts.map(account => 'eip155:' + chain + ':' + account))
+              } } };
+              localStorage.setItem('__mockWalletConnectSession', JSON.stringify(provider.session));
+            },
+            disconnect: async () => {
+              window.__walletConnectDisconnected = true;
+              localStorage.removeItem('__mockWalletConnectSession');
+              provider.session = null;
+            }
+          };
+          return provider;
         } };`,
       })
     }
@@ -28,10 +42,15 @@ export async function prepareBrowserPage(page, { seedDirectory = true, funded = 
       return route.abort()
     }
     if (!body) return route.abort()
-    const { authorized, funding } = await page.evaluate(() => ({
-      authorized: Boolean(window.__driveAuthorized),
-      funding: window.__driveFunding,
-    }))
+    const state = await page
+      .evaluate(() => ({
+        authorized: Boolean(window.__driveAuthorized),
+        funding: window.__driveFunding,
+      }))
+      .catch(() => null)
+    // Reloading may destroy the old document while its mocked RPC is in flight.
+    if (!state) return route.abort()
+    const { authorized, funding } = state
     const chain = url.hostname.includes('calibration') ? calibration : mainnet
     const callResult = (data) => {
       if (data.startsWith(toFunctionSelector('getProvider(uint256)')))
@@ -160,12 +179,15 @@ export async function prepareBrowserPage(page, { seedDirectory = true, funded = 
   await page.addInitScript(
     ({ seedDirectory, funded, approved }) => {
       window.__driveFunding = { funded, approved }
+      window.__driveAuthorized = localStorage.getItem('__mockDriveAuthorized') === 'true'
       const address = '0x1111111111111111111111111111111111111111'
       const handlers = new Map()
       let accounts = [address]
-      let chainId = '0x13a'
+      let chainId = localStorage.getItem('filecoin-drive-network') === 'calibration' ? '0x4cb2f' : '0x13a'
+      window.__driveWalletRequests = []
       window.ethereum = {
         request: async ({ method, params }) => {
+          window.__driveWalletRequests.push(method)
           if (method === 'eth_requestAccounts' || method === 'eth_accounts') return accounts
           if (method === 'eth_chainId') return chainId
           if (method === 'wallet_switchEthereumChain') {
@@ -174,6 +196,7 @@ export async function prepareBrowserPage(page, { seedDirectory = true, funded = 
           }
           if (method === 'eth_sendTransaction') {
             window.__driveAuthorized = true
+            localStorage.setItem('__mockDriveAuthorized', 'true')
             return `0x${'a'.repeat(64)}`
           }
           throw new Error(`Unexpected wallet method: ${method}`)

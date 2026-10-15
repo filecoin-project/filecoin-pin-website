@@ -130,7 +130,8 @@ try {
   assert.equal(await restored.getByLabel('Piece CID', { exact: true }).inputValue(), backup[0].pieceCid)
   await restored.getByRole('button', { name: 'Close details', exact: true }).click()
   await restored.reload()
-  await restored.getByRole('button', { name: 'Connect wallet', exact: true }).click()
+  await restored.getByRole('button', { name: 'Disconnect', exact: true }).waitFor()
+  assert.deepEqual(await restored.evaluate(() => window.__driveWalletRequests), ['eth_accounts'])
   await restored.getByRole('button', { name: '2026', exact: true }).click()
   await restored.getByRole('button', { name: 'Annual report.pdf', exact: true }).waitFor()
   await restored.evaluate(() => window.ethereum.switchAccount('0x2222222222222222222222222222222222222222'))
@@ -145,9 +146,23 @@ try {
   await page.getByLabel('Network', { exact: true }).selectOption('calibration')
   await page.getByText('No files here yet. Upload to this folder.', { exact: true }).waitFor()
   assert.equal(await page.getByRole('button', { name: 'Annual report.pdf', exact: true }).count(), 0)
+  await page.reload()
+  assert.equal(await page.getByLabel('Network', { exact: true }).inputValue(), 'calibration')
+  await page.getByRole('button', { name: 'Disconnect', exact: true }).waitFor()
+  const restoredMethods = await page.evaluate(() => window.__driveWalletRequests)
+  assert.equal(restoredMethods.includes('eth_requestAccounts'), false)
+  assert.equal(restoredMethods.includes('wallet_switchEthereumChain'), false)
+  assert.equal(await page.evaluate(() => window.ethereum.request({ method: 'eth_chainId' })), '0x4cb2f')
+  if (process.env.DRIVE_TEST_WALLETCONNECT)
+    assert.equal(
+      await page.evaluate(() => window.__walletConnectPairing),
+      undefined,
+      'Reload must not start a new pairing'
+    )
   await page.getByLabel('Network', { exact: true }).selectOption('mainnet')
   await page.getByRole('button', { name: '2026', exact: true }).waitFor()
   await page.getByRole('button', { name: '2026', exact: true }).click()
+  await page.getByText('Session ready', { exact: true }).waitFor()
   await page.getByRole('button', { name: 'Annual report.pdf', exact: true }).waitFor()
   await page.setViewportSize({ width: 390, height: 844 })
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
@@ -160,11 +175,15 @@ try {
   await page.evaluate(() => window.ethereum.switchAccount('0x2222222222222222222222222222222222222222'))
   await page.getByText('No files here yet. Upload to this folder.', { exact: true }).waitFor()
   assert.equal(await page.getByRole('button', { name: 'Annual report.pdf', exact: true }).count(), 0)
-  if (process.env.DRIVE_TEST_WALLETCONNECT) {
-    await page.getByRole('button', { name: 'Disconnect', exact: true }).click()
-    await page.getByRole('heading', { name: 'A browser drive for Filecoin', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Disconnect', exact: true }).click()
+  await page.getByRole('heading', { name: 'A browser drive for Filecoin', exact: true }).waitFor()
+  if (process.env.DRIVE_TEST_WALLETCONNECT)
     assert.equal(await page.evaluate(() => window.__walletConnectDisconnected), true)
-  }
+  const loadsBeforeDisconnectReload = mockBrowser.sdkLoads()
+  await page.reload()
+  await page.getByRole('heading', { name: 'A browser drive for Filecoin', exact: true }).waitFor()
+  assert.equal(mockBrowser.sdkLoads(), loadsBeforeDisconnectReload)
+  assert.deepEqual(await page.evaluate(() => window.__driveWalletRequests), [])
   for (const setup of [
     { funded: false, approved: true },
     { funded: true, approved: false },

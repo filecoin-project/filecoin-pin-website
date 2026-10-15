@@ -14,24 +14,27 @@ import {
   scopeFor,
   UPLOAD_PERMISSIONS,
 } from '../lib/filecoin-pin/browser-wallet.ts'
-import { DEFAULT_NETWORK } from '../lib/filecoin-pin/config.ts'
 import {
   type BrowserProvider,
   connectWalletConnect,
+  restoreWalletConnect,
   type WalletConnectProvider,
   walletConnectAvailable,
 } from '../lib/filecoin-pin/wallet-connect.ts'
 import { readWalletConnectAccount } from '../lib/filecoin-pin/wallet-connect-accounts.ts'
+import { readNetworkPreference, saveNetworkPreference } from '../lib/local-storage/network.ts'
 import { type BrowserSession, loadBrowserSession, saveBrowserSession } from '../lib/local-storage/session-vault.ts'
+import { readWalletPreference, saveWalletPreference } from '../lib/local-storage/wallet-connection.ts'
 
 type InjectedProvider = BrowserProvider
-type WalletOption = { id: string; name: string; provider: InjectedProvider }
+type WalletOption = { id: string; name: string; rdns?: string; provider: InjectedProvider }
 interface WalletConnection {
   address: Address | null
   network: DriveNetwork
   session: BrowserSession | null
   sessionStatus: 'none' | 'checking' | 'active' | 'inactive'
   busy: boolean
+  restoring: boolean
   uploading: boolean
   error: string | null
   options: WalletOption[]
@@ -48,8 +51,11 @@ interface WalletConnection {
 const Context = createContext<WalletConnection | null>(null)
 
 export function BrowserWalletProvider({ children }: { children: ReactNode }) {
+  const [previousWallet] = useState(readWalletPreference)
+  const [restoring, setRestoring] = useState(Boolean(previousWallet))
+  const restoreEpoch = useRef(0)
   const [address, setAddress] = useState<Address | null>(null)
-  const [network, setNetwork] = useState<DriveNetwork>(DEFAULT_NETWORK)
+  const [network, setNetwork] = useState<DriveNetwork>(readNetworkPreference)
   const [session, setSession] = useState<BrowserSession | null>(null)
   const [sessionStatus, setSessionStatus] = useState<WalletConnection['sessionStatus']>('none')
   const [busy, setBusy] = useState(false)
@@ -65,11 +71,16 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const announce = (event: Event) => {
-      const detail = (event as CustomEvent<{ info: { uuid: string; name: string }; provider: InjectedProvider }>).detail
+      const detail = (
+        event as CustomEvent<{ info: { uuid: string; name: string; rdns?: string }; provider: InjectedProvider }>
+      ).detail
       setOptions((current) =>
         current.some((item) => item.id === detail.info.uuid)
           ? current
-          : [...current, { id: detail.info.uuid, name: detail.info.name, provider: detail.provider }]
+          : [
+              ...current,
+              { id: detail.info.uuid, name: detail.info.name, rdns: detail.info.rdns, provider: detail.provider },
+            ]
       )
     }
     window.addEventListener('eip6963:announceProvider', announce)
@@ -81,6 +92,52 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
       )
     return () => window.removeEventListener('eip6963:announceProvider', announce)
   }, [])
+
+  useEffect(() => {
+    if (!restoring || !previousWallet) return
+    const epoch = restoreEpoch.current
+    let cancelled = false
+    const injected = (window as Window & { ethereum?: InjectedProvider }).ethereum
+    const option =
+      previousWallet.type === 'injected'
+        ? options.find((entry) =>
+            previousWallet.rdns ? entry.rdns === previousWallet.rdns : entry.provider === injected
+          )
+        : undefined
+    // Give extensions time to announce; an unavailable wallet must not block the page.
+    const timeout = window.setTimeout(
+      () => {
+        cancelled = true
+        setRestoring(false)
+      },
+      previousWallet.type === 'injected' && !option ? 2000 : 8000
+    )
+    const restore = async () => {
+      try {
+        const restored =
+          previousWallet.type === 'walletconnect'
+            ? await restoreWalletConnect(network)
+            : option
+              ? { provider: option.provider, address: (await option.provider.request({ method: 'eth_accounts' }))[0] }
+              : null
+        if (cancelled || epoch !== restoreEpoch.current) return
+        if (restored?.address) {
+          const account = getAddress(restored.address)
+          setProvider(restored.provider)
+          setAddress(account)
+        }
+      } catch {
+        // A locked, expired or unavailable wallet returns to explicit Connect.
+      } finally {
+        if (!cancelled && epoch === restoreEpoch.current) setRestoring(false)
+      }
+    }
+    if (previousWallet.type === 'walletconnect' || option) void restore()
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+    }
+  }, [previousWallet, restoring, options, network])
 
   useEffect(() => {
     setSession(null)
@@ -234,6 +291,8 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
 
   const run = async (action: () => Promise<void>) => {
     if (locked.current) return
+    restoreEpoch.current++
+    setRestoring(false)
     locked.current = true
     setBusy(true)
     setError(null)
@@ -265,6 +324,7 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
         session,
         sessionStatus,
         busy,
+        restoring,
         uploading,
         error,
         options,
@@ -282,6 +342,7 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
             await selectChain(option.provider, network)
             setProvider(option.provider)
             setAddress(getAddress(accounts[0]))
+            saveWalletPreference({ type: 'injected', ...(option.rdns ? { rdns: option.rdns } : {}) })
           }),
         connectWalletConnect: () =>
           run(async () => {
@@ -291,6 +352,7 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
               const account = await readWalletConnectAccount(remote, network)
               setProvider(remote)
               setAddress(account)
+              saveWalletPreference({ type: 'walletconnect' })
             } catch (cause) {
               // Do not leave an unusable restored session that prevents a new
               // pairing when the selected chain or account was not approved.
@@ -300,6 +362,7 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
           }),
         disconnect: () =>
           run(async () => {
+            saveWalletPreference(null)
             await provider?.disconnect?.()
             setAddress(null)
             setSession(null)
@@ -311,6 +374,7 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
             if (provider) await selectChain(provider, target)
             setSession(null)
             setNetwork(target)
+            saveNetworkPreference(target)
           }),
         authorize: (days) =>
           run(async () => {

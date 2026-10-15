@@ -11,9 +11,9 @@ npm run dev
 
 Open `http://localhost:5173`. Use an Ethereum-compatible browser wallet. HTTPS or localhost is required for browser cryptography.
 
-For mobile wallets, choose **WalletConnect** to scan the QR code or open a mobile wallet. The app includes Beck’s public Reown project ID by default. To use another project, copy [`.env.example`](.env.example) to `.env.local`, set `VITE_WALLETCONNECT_PROJECT_ID`, and restart the dev server (or rebuild for production). Configure the project's allowed origins to include your production site. WalletConnect is loaded only when its button is used.
+For mobile wallets, choose **WalletConnect** to scan the QR code or open a mobile wallet. The app includes Beck’s public Reown project ID by default. To use another project, copy [`.env.example`](.env.example) to `.env.local`, set `VITE_WALLETCONNECT_PROJECT_ID`, and restart the dev server (or rebuild for production). Configure the project's allowed origins to include your production site. WalletConnect is loaded when explicitly chosen or when restoring a previously selected WalletConnect session.
 
-The default network is **Filecoin Mainnet**. **Calibration** is available for development and testing. Wallet sessions, datasets, files and folders are isolated by chain ID and wallet address. No shared deployment wallet or private key is required.
+First-time visitors default to **Filecoin Mainnet**. **Calibration** is available for development and testing. A successful manual network selection is remembered in this browser across reloads and disconnects; reconnecting requests that selected network from the wallet. A rejected wallet switch leaves the previous selection unchanged. Wallet sessions, datasets, files and folders are isolated by chain ID and wallet address. No shared deployment wallet or private key is required.
 
 ## Wallet setup
 
@@ -24,11 +24,13 @@ The default network is **Filecoin Mainnet**. **Calibration** is available for de
 
 You can revoke this browser's key from Wallet setup, or manage authorizations in Filecoin Pay Console. Disconnecting the wallet does not revoke its key. Session credentials are stored in IndexedDB, encrypted using a non-exportable AES-GCM wrapping key. The application origin can still use those credentials; this does not provide protection against malicious scripts on the origin.
 
+After a successful connection, the app remembers the chosen wallet type (and the injected wallet's stable discovery ID when available). On reload it silently restores an already authorized injected account, or reuses a valid WalletConnect session approved for the selected network. It does not automatically request account access, switch wallet networks, or start QR pairing. Locked wallets, expired sessions, or unavailable providers return to explicit Connect. Disconnect clears this reconnect preference; it does not clear the directory or revoke the storage session key.
+
 Disconnecting a WalletConnect wallet also ends its remote connection session. Wallets must support Filecoin's EVM network and transaction requests. Both networks are requested when pairing; if a wallet only approves one, switching to the other may require a new connection.
 
 ## Files and folders
 
-- File table with search, dates, copy counts and storage status.
+- File table with search across file names and folder paths, dates, copy counts and storage status. File contents are not searched.
 - Folder tree, nested virtual folders, breadcrumbs, display-name changes and file moves.
 - File details with IPFS root CID, piece CID, providers, datasets and transaction links.
 - Original-file download: retrieve and validate the CAR from a recorded provider, then extract the UnixFS file in the browser. An IPFS gateway link is available as a fallback. File details also offer a new-tab gateway preview for common browser-supported formats; media playback depends on the browser and encoding.
@@ -36,7 +38,7 @@ Disconnecting a WalletConnect wallet also ends its remote connection session. Wa
 
 Folders and display names are browser directory metadata. Moving or renaming a record does not change the stored content or its CID. Repeated uploads of identical content keep separate directory records. Deleting their shared piece affects all matching records; the deletion UI explains this before scheduling removals.
 
-Deletion resolves every matching piece instance across all pages. Providers accept batches of at most 35 removals per dataset, with a queue that drains at the next proving period. Larger removals retain their progress and show **Continue deletion**; retry when the queue has space. Directory backups preserve unfinished batches. Scheduled deletion records remain in the directory; confirmation means the removal was scheduled, not that the provider has already removed the bytes.
+Deletion resolves every matching piece instance across all pages. Providers accept batches of at most 35 removals per dataset, with a queue that drains at the next proving period. Larger removals retain their progress and show **Continue deletion**; retry when the queue has space. Directory backups preserve unfinished batches. Once every recorded copy has a confirmed removal-scheduling transaction and no remaining batch, the file is hidden from the normal list, search and count. Its metadata and transaction receipts remain in browser storage and directory backups. Partial removals stay available to continue. Archived receipts are preserved and are not reused to settle a later upload of identical content; pending transactions are checked before submitting another deletion.
 
 Deletion is scheduled for provider processing, rather than immediate erasure. IPFS caches may retain content. Piece removal does not terminate the whole dataset or immediately end every storage charge.
 
@@ -46,7 +48,7 @@ The file directory is stored in localStorage for the current wallet and network.
 
 Chain reads cannot reconstruct the original file names, virtual folders or IPFS root CIDs. Files uploaded elsewhere do not automatically appear in this directory. Refreshing chain state preserves known browser metadata.
 
-Uploads require the page to remain open; a session key does not make them background server jobs. The current upload/download path buffers data in browser memory, and uploads are limited to 200 MB. Each confirmed storage copy is saved immediately, even if subsequent replication or IPFS indexing fails. Reloading before a confirmation is received can still leave content without a directory record. Files are not encrypted and can be retrieved by their content identifiers.
+Uploads require the page to remain open; a session key does not make them background server jobs. The current upload/download path buffers data in browser memory, and uploads are limited to 200 MB. Each confirmed storage copy is saved immediately, even if subsequent replication or IPFS indexing fails. The upload network is fixed when the operation starts and does not change during balance refreshes or retries of balance reads. Reloading before a confirmation is received can still leave content without a directory record. Files are not encrypted and can be retrieved by their content identifiers.
 
 
 ## Development
@@ -62,8 +64,6 @@ For browser regression checks, run `npm run dev` in another terminal, install Ch
 See [CONTRIBUTING.md](CONTRIBUTING.md) for source layout and contribution conventions. Core code lives in [the wallet provider](src/context/browser-wallet-provider.tsx), [the upload hook](src/hooks/use-filecoin-upload.ts), and [the drive components](src/components/drive/).
 
 Pending IPFS root CIDs receive at most five additional background indexing checks, two minutes apart. The browser saves the attempt count and cooldown per wallet/network and CID, so reloads and reconnects do not restart the budget. Checks pause while the page is hidden. When the budget is exhausted, the file remains stored and downloadable; its status becomes `Stored · IPFS indexing unconfirmed`. File details offer `Retry indexing checks` to explicitly start another bounded round. This checks root-CID discoverability in IPNI, not full-file retrieval or replica health.
-
-Files whose recorded copies all have confirmed removal-scheduling transactions and no remaining batches are hidden from the normal file list, search and file count. Their metadata and transaction receipts remain in browser storage and directory backups. Partial removals stay available to continue. Hiding a record does not confirm physical erasure at providers or IPFS caches; uploading identical content again creates a separate visible record.
 
 ## Deployment
 

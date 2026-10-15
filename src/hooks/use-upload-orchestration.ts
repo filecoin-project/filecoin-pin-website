@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useUploadHistory } from '../context/upload-history-context.tsx'
 import { formatFileSize } from '../utils/format-file-size.ts'
-import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 import { useFilecoinUpload } from './use-filecoin-upload.ts'
 import { useUploadProgress } from './use-upload-progress.ts'
 
@@ -31,7 +30,6 @@ interface UploadedFile {
 export function useUploadOrchestration() {
   const { uploadState, uploadFile, resetUpload } = useFilecoinUpload()
   const { addUpload } = useUploadHistory()
-  const { wallet } = useFilecoinPinContext()
   const { uploadOutcome } = useUploadProgress({ stepStates: uploadState.stepStates, cid: uploadState.currentCid })
 
   const { isUploadSuccessful } = uploadOutcome
@@ -47,7 +45,7 @@ export function useUploadOrchestration() {
    * Build DatasetPiece from the primary copy result and add to history.
    */
   useEffect(() => {
-    if (!uploadState.pieceCid || !uploadedFile) {
+    if (!uploadState.pieceCid || !uploadedFile || !uploadState.network) {
       return
     }
 
@@ -94,7 +92,7 @@ export function useUploadOrchestration() {
       serviceURL: serviceUrlFor(primary),
       transactionHash:
         transactionFor(primary.providerId) || uploadState.transactionHashes[0] || uploadState.transactionHash || '',
-      network: uploadState.network || (wallet?.status === 'ready' ? wallet.data.network : 'calibration'),
+      network: uploadState.network,
       uploadedAt: uploadedFile.startedAt ?? Date.now(),
       pieceId: Number(primary.pieceId),
       copyCount: copies.length,
@@ -127,7 +125,6 @@ export function useUploadOrchestration() {
     uploadState.transactionHashes,
     uploadState.stepStates,
     uploadedFile,
-    wallet,
     addUpload,
     resetUpload,
   ])

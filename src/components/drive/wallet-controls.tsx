@@ -42,7 +42,7 @@ export function WalletControls() {
           </label>
           <Select
             containerClassName="min-w-[190px] flex-1 sm:flex-none"
-            disabled={wallet.busy || wallet.uploading}
+            disabled={wallet.busy || wallet.uploading || wallet.restoring}
             id="network"
             leadingIcon={<span className="h-1.5 w-1.5 rounded-full bg-brand-500" />}
             onChange={(event) => void wallet.switchNetwork(event.target.value as 'mainnet' | 'calibration')}
@@ -62,7 +62,7 @@ export function WalletControls() {
               </span>
               <ButtonBase
                 className="w-auto"
-                disabled={wallet.busy || wallet.uploading}
+                disabled={wallet.busy || wallet.uploading || wallet.restoring}
                 onClick={() => void wallet.disconnect()}
                 size="sm"
                 variant="secondary"
@@ -73,7 +73,12 @@ export function WalletControls() {
           ) : (
             <>
               {wallet.options.length > 1 && (
-                <Select aria-label="Wallet" onChange={(event) => setChoice(event.target.value)} value={choice}>
+                <Select
+                  aria-label="Wallet"
+                  disabled={wallet.busy || wallet.restoring}
+                  onChange={(event) => setChoice(event.target.value)}
+                  value={choice}
+                >
                   <option value="">Choose wallet</option>
                   {wallet.options.map((option) => (
                     <option key={option.id} value={option.id}>
@@ -84,16 +89,16 @@ export function WalletControls() {
               )}
               <ButtonBase
                 className="w-auto"
-                loading={wallet.busy}
+                loading={wallet.busy || wallet.restoring}
                 onClick={() => void wallet.connect(choice)}
                 size="sm"
               >
                 <Wallet aria-hidden="true" size={15} />
-                Connect wallet
+                {wallet.restoring ? 'Reconnecting…' : 'Connect wallet'}
               </ButtonBase>
               <ButtonBase
                 className="w-auto"
-                disabled={wallet.busy || !wallet.walletConnectAvailable}
+                disabled={wallet.busy || wallet.restoring || !wallet.walletConnectAvailable}
                 onClick={() => void wallet.connectWalletConnect()}
                 size="sm"
                 title={

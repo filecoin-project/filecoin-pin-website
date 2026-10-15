@@ -12,11 +12,11 @@ npm install
 
 ### 2. Browser Wallet Authentication
 
-The app uses the connected browser wallet and defaults to Filecoin Mainnet. Calibration is available in the network selector. It does not use deployment private keys or a shared session key.
+The app uses the connected browser wallet and defaults to Filecoin Mainnet on first visit. Successful manual network selections are saved in the browser and restored on reload. Calibration is available in the network selector. It does not use deployment private keys or a shared session key.
 
-Connect an Ethereum-compatible browser wallet. In Wallet setup, authorize a browser session with an explicit lifetime. The session is granted all four Warm Storage permissions: create data sets, add pieces, schedule piece removals, and terminate services. Deposit USDFC and approve storage payments separately with the owner wallet.
+Connect an Ethereum-compatible browser wallet. Reloads silently restore the selected wallet's existing permission or WalletConnect session; they never initiate a new account-access prompt, network switch or QR pairing. Explicit Disconnect disables automatic reconnection. In Wallet setup, authorize a browser session with an explicit lifetime. The session is granted all four Warm Storage permissions: create data sets, add pieces, schedule piece removals, and terminate services. Deposit USDFC and approve storage payments separately with the owner wallet.
 
-WalletConnect defaults to Beck’s registered public project ID. To override it, copy [`.env.example`](.env.example) to `.env.local`, set `VITE_WALLETCONNECT_PROJECT_ID`, then restart Vite. The remote provider and QR modal are loaded lazily by [`wallet-connect.ts`](src/lib/filecoin-pin/wallet-connect.ts). Injected and remote wallets share the same session authorization and wallet/network isolation.
+WalletConnect defaults to Beck’s registered public project ID. To override it, copy [`.env.example`](.env.example) to `.env.local`, set `VITE_WALLETCONNECT_PROJECT_ID`, then restart Vite. The remote provider and QR modal are loaded for explicit pairing or restoration of a previously selected WalletConnect session by [`wallet-connect.ts`](src/lib/filecoin-pin/wallet-connect.ts). Injected and remote wallets share the same session authorization and wallet/network isolation.
 
 Session credentials are encrypted in IndexedDB using a non-exportable AES-GCM wrapping key. Directory backups contain file metadata only. Scripts running on the same origin can still use stored credentials; encryption does not protect against a compromised application origin.
 

@@ -50,7 +50,7 @@ import { useFilecoinUpload } from './use-filecoin-upload.ts'
 
 const baseContext = {
   synapse: { storage: { createContexts: createContextsMock, prepare: prepareMock } },
-  wallet: { status: 'ready', data: { address: '0xabc' } },
+  wallet: { status: 'ready', data: { address: '0xabc', network: 'calibration' } },
   addDataSetId: vi.fn(),
   debugParams: { providerId: null, dataSetId: null },
 }

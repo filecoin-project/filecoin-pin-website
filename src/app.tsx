@@ -20,6 +20,12 @@ function App() {
               <Content />
             </UploadHistoryProvider>
           </FilecoinPinProvider>
+        ) : connection.restoring ? (
+          <main className="mx-auto max-w-[1440px] px-5 py-8 sm:px-8 lg:px-12">
+            <p className="text-sm text-muted" role="status">
+              Reconnecting your wallet…
+            </p>
+          </main>
         ) : (
           <Landing />
         )

@@ -1,5 +1,6 @@
 import type { EIP1193Provider } from 'viem'
 import { chains, type DriveNetwork } from './browser-wallet.ts'
+import { walletConnectSessionAccount } from './wallet-connect-accounts.ts'
 
 export type BrowserProvider = EIP1193Provider & {
   on?: (event: string, handler: (...args: unknown[]) => void) => void
@@ -9,7 +10,7 @@ export type BrowserProvider = EIP1193Provider & {
 
 export type WalletConnectProvider = BrowserProvider & {
   accounts: string[]
-  session?: { namespaces?: Record<string, { accounts?: string[]; chains?: string[] }> }
+  session?: { expiry?: number; namespaces?: Record<string, { accounts?: string[]; chains?: string[] }> }
   modal?: { setThemeMode: (theme: 'light' | 'dark') => void }
   connect: (options: { chains: number[]; optionalChains: number[] }) => Promise<void>
 }
@@ -64,4 +65,13 @@ export async function connectWalletConnect(network: DriveNetwork): Promise<Walle
       optionalChains: [chains[network === 'mainnet' ? 'calibration' : 'mainnet'].id],
     })
   return provider
+}
+
+/** Restore an approved session without starting pairing or requesting a chain switch. */
+export async function restoreWalletConnect(network: DriveNetwork) {
+  const provider = await getWalletConnectProvider(network)
+  if (!provider.session || (provider.session.expiry !== undefined && provider.session.expiry <= Date.now() / 1000))
+    return null
+  const address = walletConnectSessionAccount(provider, network)
+  return address ? { provider, address } : null
 }

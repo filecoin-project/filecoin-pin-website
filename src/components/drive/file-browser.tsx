@@ -180,20 +180,24 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
     if (!selected || !synapse || !ensurePermissions) return
     await ensurePermissions()
     // Identical uploads can share the same on-chain piece. Explain and track all affected records.
-    const aliases = history.filter((file) => file.pieceCid === selected.pieceCid)
+    // Archived receipts belong to earlier uploads and cannot settle a new removal.
+    const aliases = history.filter((file) => file.pieceCid === selected.pieceCid && !isDeletionScheduled(file))
     const datasetIds = [...new Set(aliases.flatMap((file) => file.datasetIds ?? [file.datasetId]))]
     const deletion: NonNullable<DatasetPiece['deletion']> = {}
     for (const alias of aliases)
       for (const [id, checkpoint] of Object.entries(alias.deletion ?? {})) {
-        // A stale alias must not overwrite a receipt already confirmed elsewhere.
-        if (!deletion[id]?.confirmed || deletion[id].remaining) deletion[id] = checkpoint
+        const previous = deletion[id]
+        // Always resolve an outstanding transaction before trusting another record's
+        // completed batch. A confirmed batch may also leave more instances to remove.
+        if (!previous || (previous.confirmed && (!checkpoint.confirmed || checkpoint.remaining)))
+          deletion[id] = checkpoint
       }
     for (const id of datasetIds) {
       const checkpoint = deletion[id]
       // A later upload of identical content can add another piece instance.
       // An older alias's confirmed receipt does not cover that new instance.
       if (
-        checkpoint?.confirmed &&
+        checkpoint &&
         aliases.some((alias) => (alias.datasetIds ?? [alias.datasetId]).includes(id) && !alias.deletion?.[id])
       )
         deletion[id] = { ...checkpoint, remaining: true }
