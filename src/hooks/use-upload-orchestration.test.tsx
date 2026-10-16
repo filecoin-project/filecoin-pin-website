@@ -188,3 +188,49 @@ it.each(['retry button', 'another directory save'] as const)(
     }
   }
 )
+
+it.each(['primary', 'secondary'] as const)(
+  'saves the surviving %s copy and finishes a partially successful upload',
+  async (role) => {
+    const copy =
+      role === 'primary'
+        ? { role, providerId: 4n, dataSetId: 1n, pieceId: 10n }
+        : { role, providerId: 5n, dataSetId: 2n, pieceId: 20n }
+    mocks.execute.mockImplementation(async (_synapse, _bytes, _cid, options) => {
+      const emit = options.onProgress
+      emit({
+        type: 'stored',
+        data: {
+          providerId: 4n,
+          pieceCid: { toString: () => 'bafkzcibcd4bdomn3tgwgrh3g532zopskstnbrd2n3sxfqbze7rxt7vqn7veigmy' },
+        },
+      })
+      emit({ type: 'copyComplete', data: { providerId: 5n } })
+      emit({ type: 'piecesAdded', data: { providerId: 4n, txHash: hashA } })
+      emit({ type: 'piecesAdded', data: { providerId: 5n, txHash: hashB } })
+      emit({
+        type: 'piecesConfirmed',
+        data: { dataSetId: copy.dataSetId, providerId: copy.providerId, pieceIds: [copy.pieceId] },
+      })
+      emit({ type: 'ipniProviderResults:failed', data: { error: new Error('One provider did not index the file') } })
+      // Commit failures appear in the final result without a copyFailed event.
+      return { copies: [copy], requestedCopies: 2, complete: false, ipniValidated: false, failedAttempts: [] }
+    })
+    const { result } = renderHook(useUploadOrchestration, { wrapper: UploadHistoryProvider })
+    await act(async () => {
+      await result.current.startUpload(new File(['hello'], 'partial.txt'), 'reports')
+    })
+    await waitFor(() => expect(result.current.uploadedFile).toBeNull())
+    const pieces = getCachedPieces(scope)
+    expect(pieces).toHaveLength(1)
+    expect(pieces?.[0]).toMatchObject({
+      fileName: 'partial.txt',
+      folderPath: 'reports',
+      cid: 'bafkreigh2akiscaildcgck5x5wqlooqkztdxqv5t5uwmybnv5brkw4zj3m',
+      datasetIds: [String(copy.dataSetId)],
+      transactionHashes: [role === 'primary' ? hashA : hashB],
+      copyCount: 1,
+      ipfsIndexed: false,
+    })
+  }
+)

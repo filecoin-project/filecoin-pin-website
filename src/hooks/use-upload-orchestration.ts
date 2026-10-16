@@ -92,18 +92,15 @@ export function useUploadOrchestration() {
     if (!copies?.length) {
       return
     }
-    const primary = copies.find((c) => c.role === 'primary')
-
-    if (!primary) {
-      return
-    }
+    // A partial upload may succeed only on a secondary provider.
+    const primary = copies.find((c) => c.role === 'primary') ?? copies[0]
 
     console.debug('[UploadOrchestration] Saving upload checkpoint, retry:', saveAttempt)
 
     pendingAutoExpandPieceCidsRef.current = new Set(pendingAutoExpandPieceCidsRef.current).add(uploadState.pieceCid)
 
     const providersById = uploadState.providersById
-    const orderedCopies = [primary, ...copies.filter((c) => c.role !== 'primary')]
+    const orderedCopies = [primary, ...copies.filter((c) => c !== primary)]
     const providerNameFor = (providerId: bigint | string) => providersById[String(providerId)]?.name ?? ''
     const serviceUrlFor = (c: (typeof copies)[number]) =>
       providersById[String(c.providerId)]?.pdp?.serviceURL ?? c.retrievalUrl ?? ''

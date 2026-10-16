@@ -47,7 +47,11 @@ export function createDirectoryStore<T>(keyFor: (scope: string) => string, decod
     const stored = decode(localStorage.getItem(keyFor(scope)))
     return (unsaved.get(scope) ?? []).reduce((value, update) => update(value), stored)
   }
-  const mutate = async (scope: string, update: (current: T) => T): Promise<T> =>
+  const mutate = async (
+    scope: string,
+    update: (current: T) => T,
+    { retainOnFailure = true }: { retainOnFailure?: boolean } = {}
+  ): Promise<T> =>
     withDirectoryLock(scope, () => {
       const updates = [...(unsaved.get(scope) ?? []), update]
       const raw = localStorage.getItem(keyFor(scope))
@@ -57,7 +61,7 @@ export function createDirectoryStore<T>(keyFor: (scope: string) => string, decod
       try {
         localStorage.setItem(keyFor(scope), serialized)
       } catch {
-        unsaved.set(scope, updates)
+        if (retainOnFailure) unsaved.set(scope, updates)
         window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: keyFor(scope) }))
         throw new Error(DIRECTORY_SAVE_ERROR)
       }

@@ -322,8 +322,16 @@ export const useDatasetPieces = () => {
 
   const updatePiece = useCallback(
     (id: string, patch: DirectoryPiecePatch) =>
-      mutatePieces((current) => current.map((file) => (file.id === id ? { ...file, ...patch } : file))),
-    [mutatePieces]
+      // Retry failed edits explicitly in the form; replaying them on a later
+      // checkpoint could overwrite another tab's newer name or folder.
+      commit(() =>
+        mutateCachedPieces(
+          walletAddress ?? '',
+          (current) => current.map((file) => (file.id === id ? { ...file, ...patch } : file)),
+          { retainOnFailure: false }
+        )
+      ),
+    [commit, walletAddress]
   )
 
   return {

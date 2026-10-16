@@ -321,3 +321,28 @@ it('finishes a queued write in its original scope without changing the newly sel
   expect(result.current.pieces).toEqual([other])
   expect(getCachedPieces(otherScope)).toEqual([other])
 })
+
+it('does not replay failed file edits over another tab on a later upload checkpoint', async () => {
+  const original = { ...cachedPiece('original'), folderPath: 'reports' }
+  setCachedPieces(WALLET, [original])
+  useFilecoinPinContextMock.mockReturnValue(makeContext({ status: 'ready', dataSetIds: [] }))
+  const { result } = renderHook(useDatasetPieces)
+  const write = vi.spyOn(localStorage, 'setItem').mockImplementationOnce(() => {
+    throw new Error('Quota exceeded')
+  })
+  await act(async () => {
+    await expect(
+      result.current.updatePiece(original.id, { fileName: 'older-edit.txt', folderPath: 'older-folder' })
+    ).rejects.toThrow('Unable to save')
+  })
+  write.mockRestore()
+  // Another page saves a newer edit after this page's write failed.
+  const newer = { ...original, fileName: 'newer-edit.txt', folderPath: 'newer-folder' }
+  localStorage.setItem(`filecoin-pin-piece-cache-v1-${WALLET}`, JSON.stringify([newer]))
+  const added = cachedPiece('new-upload')
+  await act(async () => result.current.addPiece(added))
+  expect(getCachedPieces(WALLET)).toEqual([added, newer])
+  // An explicit user retry can still save the edit after storage recovers.
+  await act(async () => result.current.updatePiece(original.id, { fileName: 'explicit-retry.txt' }))
+  expect(getCachedPieces(WALLET)?.[1]).toMatchObject({ fileName: 'explicit-retry.txt', folderPath: 'newer-folder' })
+})

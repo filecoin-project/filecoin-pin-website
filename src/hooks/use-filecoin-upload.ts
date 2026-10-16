@@ -433,10 +433,31 @@ export const useFilecoinUpload = () => {
         }
         logger.info('Upload completed')
 
-        setUploadState((prev) => ({
-          ...prev,
-          copies: result.copies,
-        }))
+        // The SDK resolves once all attempts settle, even if only some copies
+        // succeeded. Failed commits will never emit another piecesConfirmed.
+        setUploadState((prev) => {
+          const copies = result.copies
+          const expectedCopies = result.requestedCopies ?? Math.max(prev.expectedCopies, copies.length)
+          const reduced = copies.length < expectedCopies
+          return {
+            ...prev,
+            copies,
+            expectedCopies,
+            confirmedCopies: copies.length,
+            stepStates: prev.stepStates.map((step) => {
+              if (step.step === 'finalizing-transaction')
+                return { ...step, status: 'completed' as const, progress: 100 }
+              if (step.step === 'replicating')
+                return {
+                  ...step,
+                  status: reduced ? ('error' as const) : ('completed' as const),
+                  progress: 100,
+                  error: reduced ? `Stored with ${copies.length} of ${expectedCopies} storage copies.` : undefined,
+                }
+              return step
+            }),
+          }
+        })
 
         return rootCid
       } catch (error) {
