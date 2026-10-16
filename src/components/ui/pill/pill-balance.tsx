@@ -13,7 +13,7 @@ function PillBalance({ balances }: PillBalanceProps) {
       <div className="flex gap-3">
         {balances.map((balance) => (
           <div className="flex gap-1.5" key={balance.label}>
-            <span className="text-zinc-400">{balance.label}</span>
+            <span className="text-muted">{balance.label}</span>
             <span>{balance.value}</span>
           </div>
         ))}

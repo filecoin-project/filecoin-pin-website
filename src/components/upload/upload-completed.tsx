@@ -4,17 +4,16 @@ import {
   getIpfsGatewayDownloadLink,
   getIpfsGatewayRenderLink,
   getPieceExplorerLink,
-  getProviderExplorerLink,
   getSpCarDownloadLink,
 } from '@/utils/links.ts'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
+import { ProviderLink } from '../drive/provider-link.tsx'
 import { Alert } from '../ui/alert.tsx'
 import { BadgeReplication } from '../ui/badge-replication.tsx'
 import { ButtonLink } from '../ui/button/button-link.tsx'
 import { Card } from '../ui/card.tsx'
 import { DownloadButton } from '../ui/download-button.tsx'
 import { Heading } from '../ui/heading.tsx'
-import { TextLink } from '../ui/link.tsx'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
 import type { UploadStatusProps } from './upload-status.tsx'
 
@@ -49,7 +48,7 @@ function UploadCompleted({
   serviceURLs,
   hasIpniAnnounceFailure,
 }: UploadCompletedProps) {
-  const { dataSet } = useFilecoinPinContext()
+  const { dataSet, wallet } = useFilecoinPinContext()
 
   const fallbackDatasetId =
     dataSet.status === 'ready' && dataSet.dataSetIds.length > 0 ? String(dataSet.dataSetIds[0]) : ''
@@ -85,7 +84,9 @@ function UploadCompleted({
       {pieceCid && (
         <Card.Wrapper>
           <Card.InfoRow
-            subtitle={<TextWithCopyToClipboard href={getPieceExplorerLink(pieceCid)} text={pieceCid} />}
+            subtitle={
+              <TextWithCopyToClipboard href={getPieceExplorerLink(pieceCid, wallet.data?.network)} text={pieceCid} />
+            }
             title="Filecoin Piece CID"
           />
         </Card.Wrapper>
@@ -106,7 +107,12 @@ function UploadCompleted({
                 <Card.InfoRow
                   subtitle={
                     row.providerId ? (
-                      <TextLink href={getProviderExplorerLink(row.providerId)}>{providerLabel}</TextLink>
+                      <ProviderLink
+                        network={wallet.data?.network === 'mainnet' ? 'mainnet' : 'calibration'}
+                        providerId={row.providerId}
+                      >
+                        {providerLabel}
+                      </ProviderLink>
                     ) : (
                       providerLabel
                     )
@@ -117,7 +123,7 @@ function UploadCompleted({
                     <DownloadButton href={getSpCarDownloadLink(cid, row.serviceURL, fileName)} />
                   )}
                 </Card.InfoRow>
-                <ButtonLink href={getDatasetExplorerLink(row.dsId)}>View proofs</ButtonLink>
+                <ButtonLink href={getDatasetExplorerLink(row.dsId, wallet.data?.network)}>View proofs</ButtonLink>
               </Card.Wrapper>
             )
           })}

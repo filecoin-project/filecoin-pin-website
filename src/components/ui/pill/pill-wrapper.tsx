@@ -12,7 +12,7 @@ function PillWrapper({ children, ariaLabel, href, className }: PillWrapperProps)
   return (
     <div
       className={cn(
-        'relative rounded-sm bg-zinc-800 px-3 py-1.5 font-mono text-sm text-zinc-100 focus-within:brand-outline',
+        'relative rounded-sm bg-surface-raised px-3 py-1.5 font-mono text-sm text-foreground focus-within:brand-outline',
         className
       )}
     >

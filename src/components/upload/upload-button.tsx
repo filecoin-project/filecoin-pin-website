@@ -71,7 +71,7 @@ export function UploadButton({
       <div className="h-3">
         {error && (
           <FormField name="file">
-            <FormMessage className="text-sm text-red-500 mt-1 break-words max-w-full">{error}</FormMessage>
+            <FormMessage className="text-sm text-danger mt-1 break-words max-w-full">{error}</FormMessage>
           </FormField>
         )}
       </div>

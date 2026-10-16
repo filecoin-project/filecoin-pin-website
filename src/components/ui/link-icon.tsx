@@ -9,7 +9,7 @@ type LinkIconProps = {
 function LinkIcon({ icon: Icon, text, href }: LinkIconProps) {
   return (
     <ExternalLink
-      className="flex w-fit gap-2 font-medium text-zinc-400  hover:text-white outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:ring-offset-2"
+      className="flex w-fit gap-2 font-medium text-muted  hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:ring-offset-2"
       href={href}
     >
       <Icon className="h-6 w-6" />

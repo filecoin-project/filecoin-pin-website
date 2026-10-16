@@ -35,6 +35,28 @@ for (const name of ['localStorage', 'sessionStorage'] as const) {
   })
 }
 
+// jsdom has no Web Locks. Serialize same-name requests here; browser tests use native locks across real tabs.
+const lockTails = new Map<string, Promise<unknown>>()
+Object.defineProperty(navigator, 'locks', {
+  configurable: true,
+  value: {
+    request: (name: string, optionsOrOperation: LockOptions | LockGrantedCallback, callback?: LockGrantedCallback) => {
+      const operation = typeof optionsOrOperation === 'function' ? optionsOrOperation : callback
+      if (!operation) throw new TypeError('A lock callback is required')
+      if (typeof optionsOrOperation !== 'function' && optionsOrOperation.ifAvailable && lockTails.has(name))
+        return Promise.resolve().then(() => operation(null))
+      const run = () => operation({ name, mode: 'exclusive' } as Lock)
+      const result = (lockTails.get(name) ?? Promise.resolve()).then(run, run)
+      const tail = result.catch(() => undefined)
+      lockTails.set(name, tail)
+      void tail.then(() => {
+        if (lockTails.get(name) === tail) lockTails.delete(name)
+      })
+      return result
+    },
+  },
+})
+
 // Cleanup after each test
 afterEach(() => {
   cleanup()

@@ -2,12 +2,20 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- TODO: add proper favicon -->
-    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/svg+xml" href="/filecoin-mark.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Filecoin Pin Demo</title>
-    <!-- TODO: add proper meta description -->
-    <meta name="description" content="Filecoin Pin Website">
+    <script>
+      (() => {
+        let preference;
+        try { preference = localStorage.getItem('filecoin-drive-theme'); } catch {}
+        const theme = preference === 'light' || preference === 'dark'
+          ? preference : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+      })();
+    </script>
+    <title>Filecoin Drive</title>
+    <meta name="description" content="Upload, download and manage files on Filecoin with your own wallet and a portable browser directory.">
     <script async src="https://plausible.io/js/pa-DdqgKMNgoi0ZkQCqD5DSZ.js"></script>
     <script>
       window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};

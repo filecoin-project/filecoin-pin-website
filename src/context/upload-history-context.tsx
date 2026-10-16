@@ -1,5 +1,5 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo } from 'react'
-import type { DatasetPiece } from '../hooks/use-dataset-pieces.ts'
+import type { DatasetPiece, DirectoryPiecePatch, PieceMutation } from '../hooks/use-dataset-pieces.ts'
 import { useDatasetPieces } from '../hooks/use-dataset-pieces.ts'
 
 export interface UploadHistoryContextValue {
@@ -7,6 +7,10 @@ export interface UploadHistoryContextValue {
    * All completed uploads for the current dataset
    */
   history: DatasetPiece[]
+  updateUpload: (id: string, patch: DirectoryPiecePatch) => Promise<void>
+  mutateHistory: (update: PieceMutation) => Promise<void>
+  getLatestHistory: () => DatasetPiece[]
+  hasUnsavedChanges: boolean
 
   /**
    * Get a specific upload by its CID
@@ -31,7 +35,7 @@ export interface UploadHistoryContextValue {
   /**
    * Add a new upload to history without refetching from backend
    */
-  addUpload: (piece: DatasetPiece) => void
+  addUpload: (piece: DatasetPiece) => Promise<void>
 
   /**
    * Loading state for history fetching
@@ -85,7 +89,18 @@ const UploadHistoryContext = createContext<UploadHistoryContextValue | undefined
  * ```
  */
 export function UploadHistoryProvider({ children }: { children: ReactNode }) {
-  const { pieces, refreshPieces, addPiece, isLoading, error, hasLoaded } = useDatasetPieces()
+  const {
+    pieces,
+    updatePiece,
+    mutatePieces,
+    getLatestPieces,
+    refreshPieces,
+    addPiece,
+    hasUnsavedChanges,
+    isLoading,
+    error,
+    hasLoaded,
+  } = useDatasetPieces()
 
   const getUploadByCid = useCallback(
     (cid: string) => {
@@ -111,6 +126,10 @@ export function UploadHistoryProvider({ children }: { children: ReactNode }) {
   const value = useMemo<UploadHistoryContextValue>(
     () => ({
       history: pieces,
+      updateUpload: updatePiece,
+      mutateHistory: mutatePieces,
+      getLatestHistory: getLatestPieces,
+      hasUnsavedChanges,
       getUploadByCid,
       getUploadByPieceCid,
       getUploadById,
@@ -120,7 +139,21 @@ export function UploadHistoryProvider({ children }: { children: ReactNode }) {
       error,
       hasLoaded,
     }),
-    [pieces, getUploadByCid, getUploadByPieceCid, getUploadById, refreshPieces, addPiece, isLoading, error, hasLoaded]
+    [
+      pieces,
+      updatePiece,
+      mutatePieces,
+      getLatestPieces,
+      hasUnsavedChanges,
+      getUploadByCid,
+      getUploadByPieceCid,
+      getUploadById,
+      refreshPieces,
+      addPiece,
+      isLoading,
+      error,
+      hasLoaded,
+    ]
   )
 
   return <UploadHistoryContext.Provider value={value}>{children}</UploadHistoryContext.Provider>

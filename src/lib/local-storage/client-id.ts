@@ -1,11 +1,6 @@
 /**
  * Per-browser client identity.
  *
- * The demo runs on a single shared wallet, so without a discriminator every
- * visitor's uploads land in the same Synapse data set(s) (matched by the
- * default `source` / `withIPFSIndexing` metadata). That makes the history view
- * show other users' files and makes it enumerate hundreds of pieces on load.
- *
  * We inject this `clientId` as data-set-level metadata at upload time. Synapse
  * smart-select matches data sets by *exact* metadata equality, so a unique
  * clientId forces this browser into its OWN data set (created on first upload,
@@ -45,7 +40,7 @@ const clearLegacyDataSetIds = (): void => {
   const toRemove: string[] = []
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i)
-    if (key?.includes('filecoin-pin-data-set-id')) {
+    if (key?.includes('filecoin-pin-data-set-id') && !/\d+:0x[0-9a-f]{40}/i.test(key)) {
       toRemove.push(key)
     }
   }

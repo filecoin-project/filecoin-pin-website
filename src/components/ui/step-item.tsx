@@ -7,7 +7,7 @@ type StepItemProps = {
 
 function StepItem({ step, children }: StepItemProps) {
   return (
-    <div className="flex items-start gap-4 text-zinc-400">
+    <div className="flex items-start gap-4 text-muted">
       <BadgeNumber number={step} />
       {children}
     </div>

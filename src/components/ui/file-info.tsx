@@ -17,7 +17,7 @@ function FileInfo({ fileName, fileSize, badgeStatus, children }: FileInfoProps) 
             {fileName}
           </span>
         </Heading>
-        <p className="text-zinc-400">{fileSize}</p>
+        <p className="text-muted">{fileSize}</p>
       </div>
       <div className="flex items-center gap-3 flex-shrink-0">
         <BadgeStatus status={badgeStatus} />

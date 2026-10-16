@@ -1,6 +1,8 @@
 'use client'
 
 import { FormControl, FormField, FormLabel } from '@radix-ui/react-form'
+import prettyBytes from 'pretty-bytes'
+import { useId, useState } from 'react'
 import { SelectedFile } from '../file-picker/selected-file.tsx'
 import { UploadInstructions } from '../file-picker/upload-instructions.tsx'
 
@@ -12,6 +14,8 @@ export type FormFileInputProps = {
 }
 
 export function FilePicker({ file, onChange, maxSize, accept = ['*'], ...rest }: FormFileInputProps) {
+  const [error, setError] = useState('')
+  const errorId = useId()
   return (
     <FormField name="file">
       <div className="group/container relative h-60 w-full md:h-52">
@@ -23,6 +27,8 @@ export function FilePicker({ file, onChange, maxSize, accept = ['*'], ...rest }:
               <input
                 {...rest}
                 accept={accept.join(',')}
+                aria-describedby={error ? errorId : undefined}
+                aria-invalid={Boolean(error)}
                 className="peer absolute inset-0 z-10 opacity-0 not-disabled:cursor-pointer disabled:cursor-not-allowed"
                 multiple={false}
                 onChange={loadFile}
@@ -35,15 +41,28 @@ export function FilePicker({ file, onChange, maxSize, accept = ['*'], ...rest }:
           </>
         )}
       </div>
+      {error && (
+        <p className="mt-2 text-sm text-danger" id={errorId} role="alert">
+          {error}
+        </p>
+      )}
     </FormField>
   )
 
   function resetFile() {
+    setError('')
     onChange(null)
   }
 
   function loadFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files
-    onChange(files ? files[0] : null)
+    const next = e.target.files?.[0] ?? null
+    if (next && next.size > maxSize) {
+      setError(`File is too large. Maximum size is ${prettyBytes(maxSize)}.`)
+      e.target.value = ''
+      onChange(null)
+      return
+    }
+    setError('')
+    onChange(next)
   }
 }
