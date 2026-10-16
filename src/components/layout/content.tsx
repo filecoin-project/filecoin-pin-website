@@ -19,7 +19,7 @@ export default function Content() {
   const { wallet, synapse, storageSetup, refreshWallet } = useFilecoinPinContext()
   // Keep the operation mounted here: closing a panel only changes its visibility.
   const orchestration = useUploadOrchestration()
-  const { activeUpload, uploadedFile, startUpload, dragDropKey } = orchestration
+  const { activeUpload, uploadedFile, startUpload, dragDropKey, directorySaveError, isSavingDirectory } = orchestration
   const [folder, setFolder] = useState('')
   const [uploadFolder, setUploadFolder] = useState('')
   const [panel, setPanel] = useState<'wallet' | 'upload' | 'activity' | null>(null)
@@ -108,22 +108,26 @@ export default function Content() {
             className="order-first rounded-xl border border-border bg-surface p-4 xl:order-last"
           >
             <div className="flex items-center gap-2 text-sm font-medium">
-              {activeUpload.error ? (
+              {activeUpload.error || directorySaveError ? (
                 <AlertTriangle aria-hidden="true" className="text-danger" size={16} />
               ) : (
                 <Loader2 aria-hidden="true" className="animate-spin text-accent" size={16} />
               )}
-              {activeUpload.error ? 'Upload failed' : 'Current upload'}
+              {directorySaveError ? 'Directory not saved' : activeUpload.error ? 'Upload failed' : 'Current upload'}
             </div>
             <p className="mt-2 truncate text-sm" title={uploadedFile.file.name}>
               {uploadedFile.file.name}
             </p>
             <p className="mt-1 text-xs text-muted" role="status">
-              {activeUpload.error
-                ? 'Open details to retry or dismiss.'
-                : uploadStep
-                  ? getStepLabel(uploadStep.step)
-                  : 'Finishing upload…'}
+              {directorySaveError
+                ? 'Open details to retry saving the file directory.'
+                : activeUpload.error
+                  ? 'Open details to retry or dismiss.'
+                  : uploadStep
+                    ? getStepLabel(uploadStep.step)
+                    : isSavingDirectory
+                      ? 'Saving file directory…'
+                      : 'Finishing upload…'}
             </p>
             <p className="mt-2 text-xs text-muted">
               {completedSteps} / {activeUpload.stepStates.length} stages completed

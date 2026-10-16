@@ -47,9 +47,15 @@ Deletion resolves every matching piece instance across all pages. Providers acce
 
 Deletion is scheduled for provider processing, rather than immediate erasure. IPFS caches may retain content. Piece removal does not terminate the whole dataset or immediately end every storage charge.
 
+Only one tab can delete the same content for a wallet and network at a time. Another tab reports that deletion is already in progress; after it finishes or fails, **Continue deletion** reads the latest saved checkpoints. This operation lock is separate from the short directory-save lock. Receipts update only their dataset and do not overwrite a newer transaction when a failed save is retried.
+
 ## Persistence and limitations
 
 The file directory is stored in localStorage for the current wallet and network. Export a **directory backup** before clearing browser data or changing browsers. Import accepts backups only for the selected wallet and network and merges records without overwriting existing entries. Backups exclude session credentials.
+
+Directory changes use Web Locks to merge against the latest saved records across tabs on the same origin in the same browser profile. Files and folders synchronize between tabs and are read again when a page becomes visible, regains focus, resumes from a frozen state or is restored from the browser's page cache. These resume reads do not query the chain. Different browsers, devices and deployment origins still require directory export/import. Reload existing Drive tabs after deploying this update so every writer uses the same locking protocol.
+
+Directory writes require a browser with Web Locks over HTTPS or localhost. Unsupported browsers report an error; uploads stop before packing or making storage requests, and deletions stop before submitting transactions. If a directory save fails, keep the page open and export a backup. Unsaved changes remain in that page's memory and are merged with the latest stored directory on the next save attempt. Upload details offer **Retry saving** to save confirmed file metadata without uploading again. Once the final checkpoint is saved, either through this button or another directory edit, the upload panel finishes and another upload can start.
 
 Chain reads cannot reconstruct the original file names, virtual folders or IPFS root CIDs. Files uploaded elsewhere do not automatically appear in this directory. Refreshing chain state preserves known browser metadata.
 

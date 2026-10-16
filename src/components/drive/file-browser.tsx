@@ -14,14 +14,14 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useUploadHistory } from '../../context/upload-history-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { useDownloadQueue } from '../../hooks/use-download-queue.ts'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { IPFS_CHECK_LIMIT, resetIndexingChecks } from '../../hooks/use-ipfs-indexing.ts'
-import { scheduleFileDeletion } from '../../lib/filecoin-pin/delete.ts'
+import { scheduleFileDeletion, withFileDeletionLock } from '../../lib/filecoin-pin/delete.ts'
 import { saveBlob } from '../../lib/filecoin-pin/download.ts'
 import { addStoredDataSetId } from '../../lib/local-storage/data-set.ts'
 import {
@@ -30,8 +30,9 @@ import {
   parseDirectoryBackup,
   readFolders,
   saveFolders,
+  subscribeFolders,
 } from '../../lib/local-storage/drive-directory.ts'
-import { isDeletionScheduled } from '../../utils/file-deletion.ts'
+import { applyDeletionUpdate, isDeletionScheduled } from '../../utils/file-deletion.ts'
 import {
   getDatasetExplorerLink,
   getIpfsGatewayDownloadLink,
@@ -66,15 +67,23 @@ interface Props {
   uploadDisabled?: boolean
 }
 export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled = false }: Props) {
-  const { history, updateUpload, replaceHistory, error: directoryError } = useUploadHistory()
+  const { history, updateUpload, mutateHistory, getLatestHistory, error: directoryError } = useUploadHistory()
   const { synapse, storageScope, ensurePermissions, addDataSetId } = useFilecoinPinContext()
   const connection = useBrowserWallet()
   const [folders, setFolders] = useState(() => readFolders(storageScope ?? ''))
+  useEffect(() => {
+    if (!storageScope) return
+    const sync = () => setFolders(readFolders(storageScope))
+    const unsubscribe = subscribeFolders(storageScope, sync)
+    sync()
+    return unsubscribe
+  }, [storageScope])
   const [search, setSearch] = useState('')
   const [newFolder, setNewFolder] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [moveTo, setMoveTo] = useState('')
   const [rename, setRename] = useState('')
+  const originalDirectory = useRef({ fileName: '', folderPath: '' })
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [working, setWorking] = useState(false)
@@ -108,6 +117,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
     setSelectedId(file.id)
     setMoveTo(file.folderPath ?? '')
     setRename(file.fileName)
+    originalDirectory.current = { fileName: file.fileName, folderPath: file.folderPath ?? '' }
     setDeleteConsent(false)
     setError('')
   }
@@ -136,32 +146,40 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
     setNotice('')
     enqueueDownload(file)
   }
-  const createFolder = () => {
-    try {
+  const createFolder = () =>
+    act(async () => {
       if (!newFolder.trim()) return
       const path = normalizeFolder([folder, newFolder.trim()].filter(Boolean).join('/'))
-      const next = directoryFolders(history, [...folders, path])
-      saveFolders(storageScope ?? '', next)
-      setFolders(next)
+      await saveFolders(storageScope ?? '', [path])
       setNewFolder('')
       onFolderChange(path)
-      setError('')
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to create folder')
-    }
-  }
+    })
   const exportDirectory = () => {
-    const blob = new Blob(
-      [JSON.stringify({ version: 1, scope: storageScope, files: history, folders: allFolders }, null, 2)],
-      { type: 'application/json' }
-    )
+    const files = getLatestHistory()
+    const folders = directoryFolders(files, readFolders(storageScope ?? ''))
+    const blob = new Blob([JSON.stringify({ version: 1, scope: storageScope, files, folders }, null, 2)], {
+      type: 'application/json',
+    })
     saveBlob(blob, `filecoin-directory-${connection.network}-${connection.address}.json`)
   }
+  const saveDirectoryChanges = () =>
+    act(async () => {
+      if (!selected) return
+      // Submit only edited fields so a rename cannot revert another tab's folder move.
+      await updateUpload(selected.id, {
+        ...(rename.trim() === originalDirectory.current.fileName ? {} : { fileName: rename.trim() }),
+        ...(moveTo === originalDirectory.current.folderPath ? {} : { folderPath: moveTo }),
+      })
+      const saved = getLatestHistory().find((file) => file.id === selected.id)
+      if (saved) {
+        originalDirectory.current = { fileName: saved.fileName, folderPath: saved.folderPath ?? '' }
+        setRename(saved.fileName)
+        setMoveTo(saved.folderPath ?? '')
+      }
+    })
   const importDirectory = async (file: File) => {
     if (file.size > 10_000_000) throw new Error('Directory backups must be smaller than 10 MB')
     const parsed = parseDirectoryBackup(await file.text(), storageScope ?? '', connection.network)
-    const byId = new Map(history.map((record) => [record.id, record]))
-    for (const record of parsed.files) if (!byId.has(record.id)) byId.set(record.id, record)
     for (const record of parsed.files)
       for (const id of record.datasetIds ?? [record.datasetId]) {
         if (!Number.isSafeInteger(Number(id))) throw new Error('Dataset ID exceeds browser storage limits')
@@ -171,51 +189,54 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
         addStoredDataSetId(storageScope ?? '', Number(id))
         addDataSetId(BigInt(id))
       }
-    saveFolders(storageScope ?? '', [...folders, ...parsed.folders])
-    setFolders(directoryFolders([], [...folders, ...parsed.folders]))
-    replaceHistory([...byId.values()])
+    await mutateHistory((current) => {
+      const byId = new Map(current.map((record) => [record.id, record]))
+      for (const record of parsed.files) if (!byId.has(record.id)) byId.set(record.id, record)
+      return [...byId.values()]
+    })
+    await saveFolders(storageScope ?? '', parsed.folders)
   }
   const deleteFile = async () => {
-    if (!selected || !synapse || !ensurePermissions) return
-    await ensurePermissions()
-    // Identical uploads can share the same on-chain piece. Explain and track all affected records.
-    // Archived receipts belong to earlier uploads and cannot settle a new removal.
-    const aliases = history.filter((file) => file.pieceCid === selected.pieceCid && !isDeletionScheduled(file))
-    const datasetIds = [...new Set(aliases.flatMap((file) => file.datasetIds ?? [file.datasetId]))]
-    const deletion: NonNullable<DatasetPiece['deletion']> = {}
-    for (const alias of aliases)
-      for (const [id, checkpoint] of Object.entries(alias.deletion ?? {})) {
-        const previous = deletion[id]
-        // Always resolve an outstanding transaction before trusting another record's
-        // completed batch. A confirmed batch may also leave more instances to remove.
-        if (!previous || (previous.confirmed && (!checkpoint.confirmed || checkpoint.remaining)))
-          deletion[id] = checkpoint
-      }
-    for (const id of datasetIds) {
-      const checkpoint = deletion[id]
-      // A later upload of identical content can add another piece instance.
-      // An older alias's confirmed receipt does not cover that new instance.
-      if (
-        checkpoint &&
-        aliases.some((alias) => (alias.datasetIds ?? [alias.datasetId]).includes(id) && !alias.deletion?.[id])
+    if (!selected || !synapse || !ensurePermissions || !storageScope) return
+    await withFileDeletionLock(storageScope, selected.pieceCid, async () => {
+      // Retry retained checkpoints before starting another chain operation.
+      await mutateHistory((current) => current)
+      await ensurePermissions()
+      // Identical uploads can share the same on-chain piece. Explain and track all affected records.
+      // Archived receipts belong to earlier uploads and cannot settle a new removal.
+      const aliases = getLatestHistory().filter(
+        (file) => file.pieceCid === selected.pieceCid && !isDeletionScheduled(file)
       )
-        deletion[id] = { ...checkpoint, remaining: true }
-    }
-    await scheduleFileDeletion(synapse, { ...selected, datasetIds, deletion }, (changed) => {
-      replaceHistory(
-        history.map((file) =>
-          file.pieceCid === selected.pieceCid && !isDeletionScheduled(file)
-            ? {
-                ...file,
-                deletion: Object.fromEntries(
-                  Object.entries(changed.deletion ?? {}).filter(([id]) =>
-                    (file.datasetIds ?? [file.datasetId]).includes(id)
-                  )
-                ),
-              }
-            : file
+      const aliasIds = new Set(aliases.map((file) => file.id))
+      const datasetIds = [...new Set(aliases.flatMap((file) => file.datasetIds ?? [file.datasetId]))]
+      const deletion: NonNullable<DatasetPiece['deletion']> = {}
+      for (const alias of aliases)
+        for (const [id, checkpoint] of Object.entries(alias.deletion ?? {})) {
+          const previous = deletion[id]
+          // Always resolve an outstanding transaction before trusting another record's
+          // completed batch. A confirmed batch may also leave more instances to remove.
+          if (!previous || (previous.confirmed && (!checkpoint.confirmed || checkpoint.remaining)))
+            deletion[id] = checkpoint
+        }
+      for (const id of datasetIds) {
+        const checkpoint = deletion[id]
+        // A later upload of identical content can add another piece instance.
+        // An older alias's pending or confirmed receipt does not cover that new instance.
+        if (
+          checkpoint &&
+          aliases.some((alias) => (alias.datasetIds ?? [alias.datasetId]).includes(id) && !alias.deletion?.[id])
         )
+          deletion[id] = { ...checkpoint, remaining: true }
+      }
+      // Keep all targeted aliases resumable even if a provider fails before its first transaction.
+      await mutateHistory((current) =>
+        current.map((file) => (aliasIds.has(file.id) && !file.deletion ? { ...file, deletion: {} } : file))
       )
+      await scheduleFileDeletion(synapse, { ...selected, datasetIds, deletion }, async (_changed, change) => {
+        await mutateHistory((current) =>
+          current.map((file) => (aliasIds.has(file.id) ? applyDeletionUpdate(file, change) : file))
+        )
+      })
     })
     setDeleteConsent(false)
     setSelectedId(null)
@@ -610,14 +631,12 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                         </p>
                         <Button
                           disabled={disabled || !storageScope}
-                          onClick={() => {
-                            try {
-                              resetIndexingChecks(storageScope ?? '', selected.cid)
-                              updateUpload({ ...selected, ipfsCheckAttempts: 0 })
-                            } catch {
-                              setError('Unable to save indexing check settings in this browser.')
-                            }
-                          }}
+                          onClick={() =>
+                            void act(async () => {
+                              await resetIndexingChecks(storageScope ?? '', selected.cid)
+                              await updateUpload(selected.id, { ipfsCheckAttempts: 0 })
+                            })
+                          }
                           size="sm"
                           variant="secondary"
                         >
@@ -720,7 +739,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                   </label>
                   <Button
                     disabled={disabled || !rename.trim()}
-                    onClick={() => updateUpload({ ...selected, fileName: rename.trim(), folderPath: moveTo })}
+                    onClick={saveDirectoryChanges}
                     size="sm"
                     variant="secondary"
                   >

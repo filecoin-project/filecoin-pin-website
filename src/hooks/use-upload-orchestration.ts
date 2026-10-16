@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useUploadHistory } from '../context/upload-history-context.tsx'
+import { DIRECTORY_SAVE_ERROR } from '../lib/local-storage/directory-store.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
 import { useFilecoinUpload } from './use-filecoin-upload.ts'
 import { useUploadProgress } from './use-upload-progress.ts'
@@ -29,16 +30,48 @@ interface UploadedFile {
  */
 export function useUploadOrchestration() {
   const { uploadState, uploadFile, resetUpload } = useFilecoinUpload()
-  const { addUpload } = useUploadHistory()
+  const { addUpload, history, hasUnsavedChanges } = useUploadHistory()
   const { uploadOutcome } = useUploadProgress({ stepStates: uploadState.stepStates, cid: uploadState.currentCid })
 
   const { isUploadSuccessful } = uploadOutcome
 
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null)
+  const [directorySaveError, setDirectorySaveError] = useState<string | null>(null)
+  const [isSavingDirectory, setIsSavingDirectory] = useState(false)
+  const [saveAttempt, setSaveAttempt] = useState(0)
   // Piece CIDs that should be auto-expanded when they appear in history (consumed by useUploadExpansion)
   const pendingAutoExpandPieceCidsRef = useRef<Set<string>>(new Set())
   // Key to force DragNDrop remount (clears its internal file state)
   const [dragDropKey, setDragDropKey] = useState(0)
+  const finishUpload = useCallback(() => {
+    setUploadedFile(null)
+    resetUpload()
+    setDragDropKey((prev) => prev + 1)
+  }, [resetUpload])
+
+  // Another directory action can persist the retained checkpoint after a quota failure.
+  useEffect(() => {
+    if (
+      directorySaveError !== DIRECTORY_SAVE_ERROR ||
+      isSavingDirectory ||
+      hasUnsavedChanges !== false ||
+      !history.some((file) => file.id === uploadedFile?.id)
+    )
+      return
+    setDirectorySaveError(null)
+    if (!uploadState.isUploading && !uploadState.error && isUploadSuccessful && uploadState.copies) finishUpload()
+  }, [
+    directorySaveError,
+    isSavingDirectory,
+    hasUnsavedChanges,
+    history,
+    uploadedFile?.id,
+    uploadState.isUploading,
+    uploadState.error,
+    isUploadSuccessful,
+    uploadState.copies,
+    finishUpload,
+  ])
 
   /**
    * Handle upload completion:
@@ -65,7 +98,7 @@ export function useUploadOrchestration() {
       return
     }
 
-    console.debug('[UploadOrchestration] Upload completed, adding to history')
+    console.debug('[UploadOrchestration] Saving upload checkpoint, retry:', saveAttempt)
 
     pendingAutoExpandPieceCidsRef.current = new Set(pendingAutoExpandPieceCidsRef.current).add(uploadState.pieceCid)
 
@@ -103,14 +136,27 @@ export function useUploadOrchestration() {
       transactionHashes: orderedCopies.map((copy) => transactionFor(copy.providerId)),
     }
 
-    addUpload(newPiece)
-
-    // Checkpoint confirmed storage before replication/indexing finish. Keep the
-    // active operation and its lock until the SDK has actually returned.
-    if (uploadState.isUploading || uploadState.error || !isUploadSuccessful || !uploadState.copies) return
-    setUploadedFile(null)
-    resetUpload()
-    setDragDropKey((prev) => prev + 1)
+    let current = true
+    setIsSavingDirectory(true)
+    void addUpload(newPiece)
+      .then(() => {
+        if (!current) return
+        setIsSavingDirectory(false)
+        setDirectorySaveError(null)
+        // Do not discard the active file until its final directory checkpoint is durable.
+        if (uploadState.isUploading || uploadState.error || !isUploadSuccessful || !uploadState.copies) return
+        finishUpload()
+      })
+      .catch((error) => {
+        console.error('[UploadOrchestration] Unable to save upload checkpoint:', error)
+        if (current) {
+          setIsSavingDirectory(false)
+          setDirectorySaveError(error instanceof Error ? error.message : DIRECTORY_SAVE_ERROR)
+        }
+      })
+    return () => {
+      current = false
+    }
   }, [
     isUploadSuccessful,
     uploadState.pieceCid,
@@ -126,7 +172,8 @@ export function useUploadOrchestration() {
     uploadState.stepStates,
     uploadedFile,
     addUpload,
-    resetUpload,
+    finishUpload,
+    saveAttempt,
   ])
 
   const handleUpload = useCallback(
@@ -136,6 +183,9 @@ export function useUploadOrchestration() {
       pendingAutoExpandPieceCidsRef.current = new Set()
 
       const id = crypto.randomUUID()
+      setDirectorySaveError(null)
+      setIsSavingDirectory(false)
+      setSaveAttempt(0)
       setUploadedFile({ file, cid: '', id, folderPath, startedAt: Date.now() })
 
       // Expose completion so callers can release their operation lock even on early failures.
@@ -155,6 +205,8 @@ export function useUploadOrchestration() {
   const cancelUpload = useCallback(() => {
     console.debug('[UploadOrchestration] Canceling upload')
     setUploadedFile(null)
+    setDirectorySaveError(null)
+    setIsSavingDirectory(false)
     resetUpload()
     setDragDropKey((prev) => prev + 1)
   }, [resetUpload])
@@ -168,6 +220,8 @@ export function useUploadOrchestration() {
     return handleUpload(uploadedFile.file, uploadedFile.folderPath)
   }, [uploadedFile, handleUpload])
 
+  const retryDirectorySave = useCallback(() => setSaveAttempt((attempt) => attempt + 1), [])
+
   return {
     uploadedFile,
     activeUpload: uploadState,
@@ -176,5 +230,8 @@ export function useUploadOrchestration() {
     startUpload: handleUpload,
     retryUpload,
     cancelUpload,
+    directorySaveError,
+    isSavingDirectory,
+    retryDirectorySave,
   }
 }

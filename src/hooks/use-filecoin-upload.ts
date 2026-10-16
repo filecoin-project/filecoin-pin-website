@@ -15,6 +15,7 @@ import { ensureSessionKeyPermissions } from '../lib/filecoin-pin/synapse.ts'
 import { prepareUploadContexts } from '../lib/filecoin-pin/upload-funding.ts'
 import { getOrCreateClientId } from '../lib/local-storage/client-id.ts'
 import { addStoredDataSetId, clearStoredDataSetIds, getStoredDataSetIds } from '../lib/local-storage/data-set.ts'
+import { requireDirectoryLocks } from '../lib/local-storage/directory-store.ts'
 import type { StepState } from '../types/upload/step.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 import { useWaitableRef } from './use-waitable-ref.ts'
@@ -127,6 +128,7 @@ export const useFilecoinUpload = () => {
           throw new Error('Wait for wallet setup to finish before uploading.')
         if (file.size > MAX_FILE_SIZE)
           throw new Error(`Files must be ${prettyBytes(MAX_FILE_SIZE)} or smaller for browser uploads.`)
+        requireDirectoryLocks()
         updateStepState('creating-car', { status: 'in-progress', progress: 0 })
         logger.info('Creating CAR from file')
 

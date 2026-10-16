@@ -2,6 +2,19 @@ import { from as pieceFrom } from '@filoz/synapse-core/piece'
 import { CID } from 'multiformats/cid'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { isDeletionScheduled } from '../../utils/file-deletion.ts'
+import { createDirectoryStore } from './directory-store.ts'
+
+const folderStore = createDirectoryStore<string[]>(
+  (scope) => `filecoin-drive-folders-${scope}`,
+  (raw) => {
+    const values: unknown = JSON.parse(raw ?? '[]')
+    if (!Array.isArray(values) || !values.every((value) => typeof value === 'string'))
+      throw new Error('Invalid browser folder directory.')
+    return directoryFolders([], values)
+  }
+)
+
+export const subscribeFolders = folderStore.subscribe
 
 export function normalizeFolder(path: string): string {
   const parts = path.replaceAll('\\', '/').split('/').filter(Boolean)
@@ -26,20 +39,15 @@ export function directoryFolders(files: DatasetPiece[], folders: string[]): stri
 
 export function readFolders(scope: string): string[] {
   try {
-    const raw: unknown = JSON.parse(localStorage.getItem(`filecoin-drive-folders-${scope}`) ?? '[]')
-    return Array.isArray(raw)
-      ? directoryFolders(
-          [],
-          raw.filter((value): value is string => typeof value === 'string')
-        )
-      : []
+    return folderStore.read(scope)
   } catch {
     return []
   }
 }
 
-export function saveFolders(scope: string, folders: string[]) {
-  localStorage.setItem(`filecoin-drive-folders-${scope}`, JSON.stringify(directoryFolders([], folders)))
+export function saveFolders(scope: string, folders: string[]): Promise<string[]> {
+  const normalized = directoryFolders([], folders)
+  return folderStore.mutate(scope, (current) => directoryFolders([], [...current, ...normalized]))
 }
 
 export function parseDirectoryBackup(

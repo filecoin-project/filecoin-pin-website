@@ -19,15 +19,15 @@ beforeEach(() => {
 })
 afterEach(() => vi.useRealTimers())
 
-it('persists five attempts and cooldown across reloads and isolates wallets', () => {
+it('persists five attempts and cooldown across reloads and isolates wallets', async () => {
   for (let attempt = 0; attempt < 5; attempt++) {
     const now = attempt * IPFS_CHECK_INTERVAL
-    expect(reserveIndexingCheck('wallet-a', cid, now)?.attempts).toBe(attempt + 1)
-    expect(reserveIndexingCheck('wallet-a', cid, now + 1000)).toBeNull()
+    expect((await reserveIndexingCheck('wallet-a', cid, now))?.attempts).toBe(attempt + 1)
+    expect(await reserveIndexingCheck('wallet-a', cid, now + 1000)).toBeNull()
   }
-  expect(reserveIndexingCheck('wallet-a', cid, 1_000_000)).toBeNull()
+  expect(await reserveIndexingCheck('wallet-a', cid, 1_000_000)).toBeNull()
   expect(readIndexingChecks('wallet-a')[cid].attempts).toBe(5)
-  expect(reserveIndexingCheck('wallet-b', cid, 1_000_000)?.attempts).toBe(1)
+  expect((await reserveIndexingCheck('wallet-b', cid, 1_000_000))?.attempts).toBe(1)
 })
 
 it('stops after five misses, including network errors, and does not restart on remount', async () => {
@@ -88,11 +88,20 @@ it('skips deleted records and aborts outstanding requests when switching wallets
   expect(update).not.toHaveBeenCalled()
 })
 
-it('allows a new bounded round only when checks are explicitly reset', () => {
-  for (let i = 0; i < 5; i++) reserveIndexingCheck('wallet-a', cid, i * IPFS_CHECK_INTERVAL)
-  expect(reserveIndexingCheck('wallet-a', cid, 1_000_000)).toBeNull()
-  resetIndexingChecks('wallet-a', cid)
-  expect(reserveIndexingCheck('wallet-a', cid, 1_000_000)?.attempts).toBe(1)
+it('allows a new bounded round only when checks are explicitly reset', async () => {
+  for (let i = 0; i < 5; i++) await reserveIndexingCheck('wallet-a', cid, i * IPFS_CHECK_INTERVAL)
+  expect(await reserveIndexingCheck('wallet-a', cid, 1_000_000)).toBeNull()
+  await resetIndexingChecks('wallet-a', cid)
+  expect((await reserveIndexingCheck('wallet-a', cid, 1_000_000))?.attempts).toBe(1)
+})
+
+it('shares the cooldown when two tabs reserve a check at the same time', async () => {
+  const reservations = await Promise.all([
+    reserveIndexingCheck('wallet-a', cid, 0),
+    reserveIndexingCheck('wallet-a', cid, 0),
+  ])
+  expect(reservations.filter(Boolean)).toHaveLength(1)
+  expect(readIndexingChecks('wallet-a')[cid].attempts).toBe(1)
 })
 
 it('does not make requests if the browser cannot persist the retry budget', async () => {

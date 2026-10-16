@@ -73,6 +73,24 @@ beforeEach(() => {
   prepareMock.mockResolvedValue({ costs: { ready: true } })
 })
 
+it('refuses uploads before packing when safe directory writes are unavailable', async () => {
+  useFilecoinPinContextMock.mockReturnValue(baseContext)
+  const locks = navigator.locks
+  Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined })
+  try {
+    const { result } = renderHook(useFilecoinUpload)
+    await act(async () => {
+      await expect(result.current.uploadFile(testFile)).rejects.toThrow('cannot safely update the file directory')
+    })
+    expect(createCarFromFileMock).not.toHaveBeenCalled()
+    expect(checkUploadReadinessMock).not.toHaveBeenCalled()
+    expect(executeUploadMock).not.toHaveBeenCalled()
+    expect(result.current.uploadState.isUploading).toBe(false)
+  } finally {
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: locks })
+  }
+})
+
 describe('useFilecoinUpload providerId debug param', () => {
   const getOpts = () => executeUploadMock.mock.lastCall?.at(-1)
 

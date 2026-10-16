@@ -1,6 +1,7 @@
 import { checkIpniIndexer } from 'filecoin-pin/core/utils'
 import { CID } from 'multiformats/cid'
 import { useEffect, useRef } from 'react'
+import { withDirectoryLock } from '../lib/local-storage/directory-store.ts'
 import type { DatasetPiece } from './use-dataset-pieces.ts'
 
 export const IPFS_CHECK_LIMIT = 5
@@ -18,26 +19,30 @@ export function readIndexingChecks(scope: string): Record<string, CheckRecord> {
   }
 }
 
-export function reserveIndexingCheck(scope: string, cid: string, now: number): CheckRecord | null {
-  const records = readIndexingChecks(scope)
-  const previous = records[cid] ?? { attempts: 0, nextAt: 0 }
-  if (previous.indexed || previous.attempts >= IPFS_CHECK_LIMIT || previous.nextAt > now) return null
-  const record = { attempts: previous.attempts + 1, nextAt: now + IPFS_CHECK_INTERVAL }
-  // Save before the request so reloads and failed requests cannot reset the budget.
-  localStorage.setItem(keyFor(scope), JSON.stringify({ ...records, [cid]: record }))
-  return record
+export async function reserveIndexingCheck(scope: string, cid: string, now: number): Promise<CheckRecord | null> {
+  return withDirectoryLock(scope, () => {
+    const records = readIndexingChecks(scope)
+    const previous = records[cid] ?? { attempts: 0, nextAt: 0 }
+    if (previous.indexed || previous.attempts >= IPFS_CHECK_LIMIT || previous.nextAt > now) return null
+    const record = { attempts: previous.attempts + 1, nextAt: now + IPFS_CHECK_INTERVAL }
+    // Save before the request so reloads and failed requests cannot reset the budget.
+    localStorage.setItem(keyFor(scope), JSON.stringify({ ...records, [cid]: record }))
+    return record
+  })
 }
 
-export function resetIndexingChecks(scope: string, cid: string) {
-  const records = readIndexingChecks(scope)
-  delete records[cid]
-  localStorage.setItem(keyFor(scope), JSON.stringify(records))
+export async function resetIndexingChecks(scope: string, cid: string) {
+  await withDirectoryLock(scope, () => {
+    const records = readIndexingChecks(scope)
+    delete records[cid]
+    localStorage.setItem(keyFor(scope), JSON.stringify(records))
+  })
 }
 
 export function useIpfsIndexing(
   scope: string | null,
   pieces: DatasetPiece[],
-  update: (cid: string, indexed: boolean, attempts: number) => void
+  update: (cid: string, indexed: boolean, attempts: number) => void | Promise<void>
 ) {
   const latest = useRef({ pieces, update })
   latest.current = { pieces, update }
@@ -60,20 +65,21 @@ export function useIpfsIndexing(
           seen.add(file.cid)
           const previous = readIndexingChecks(scope)[file.cid]
           if (latest.current.pieces.some((record) => record.cid === file.cid && record.ipfsIndexed === true)) {
-            latest.current.update(file.cid, true, previous?.attempts ?? 0)
+            await latest.current.update(file.cid, true, previous?.attempts ?? 0)
             continue
           }
           if (previous?.indexed || (previous?.attempts ?? 0) >= IPFS_CHECK_LIMIT) {
-            latest.current.update(file.cid, previous?.indexed === true, previous?.attempts ?? IPFS_CHECK_LIMIT)
+            await latest.current.update(file.cid, previous?.indexed === true, previous?.attempts ?? IPFS_CHECK_LIMIT)
             continue
           }
           let record: CheckRecord | null
           try {
-            record = reserveIndexingCheck(scope, file.cid, Date.now())
+            record = await reserveIndexingCheck(scope, file.cid, Date.now())
           } catch {
             // Without a durable budget we must not start automatic requests.
             break
           }
+          if (stopped) break
           if (!record) continue
           request = new AbortController()
           const timeout = window.setTimeout(() => request?.abort(), REQUEST_TIMEOUT)
@@ -93,13 +99,15 @@ export function useIpfsIndexing(
           }
           if (stopped) break
           if (indexed) {
-            const records = readIndexingChecks(scope)
-            localStorage.setItem(
-              keyFor(scope),
-              JSON.stringify({ ...records, [file.cid]: { ...record, indexed: true } })
-            )
+            await withDirectoryLock(scope, () => {
+              const records = readIndexingChecks(scope)
+              localStorage.setItem(
+                keyFor(scope),
+                JSON.stringify({ ...records, [file.cid]: { ...(records[file.cid] ?? record), indexed: true } })
+              )
+            })
           }
-          latest.current.update(file.cid, indexed, record.attempts)
+          if (!stopped) await latest.current.update(file.cid, indexed, record.attempts)
         }
       } catch {
         // Storage may become unavailable mid-check; retain the reserved budget.

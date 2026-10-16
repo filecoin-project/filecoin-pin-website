@@ -72,11 +72,12 @@ The main logic demonstrating `filecoin-pin` usage:
 - [`src/lib/filecoin-pin/browser-wallet.ts`](src/lib/filecoin-pin/browser-wallet.ts) — owner and session clients with chain permission validation.
 - [`src/lib/local-storage/session-vault.ts`](src/lib/local-storage/session-vault.ts) — encrypted browser session persistence.
 - [`src/lib/local-storage/drive-directory.ts`](src/lib/local-storage/drive-directory.ts) — virtual folders and validated directory backups.
+- [`src/lib/local-storage/directory-store.ts`](src/lib/local-storage/directory-store.ts) — short per-wallet/network Web Locks, directory notifications and recovery of unsaved local mutations. All live file and folder changes must use this shared persistence path; never save a captured React history array over the directory.
 - [`src/components/drive/`](src/components/drive/) — wallet setup, file table, folder navigation and file details.
 - [`src/lib/filecoin-pin/download.ts`](src/lib/filecoin-pin/download.ts) and [`delete.ts`](src/lib/filecoin-pin/delete.ts) — original-file retrieval and resumable scheduling of removals.
 - [`src/lib/filecoin-pin/upload-funding.ts`](src/lib/filecoin-pin/upload-funding.ts) — read-only funding quotes for the exact storage contexts used by an upload.
 
-To run the mocked browser checks, start `npm run dev`, install Chromium with `npx playwright install chromium`, then run `npm run test:drive`. On a machine with Chrome installed, use `PLAYWRIGHT_CHANNEL=chrome npm run test:drive`. The checks mock wallet requests and external RPCs and do not submit transactions to a live network.
+To run the mocked browser checks, start `npm run dev`, install Chromium with `npx playwright install chromium`, then run `npm run test:drive`. On a machine with Chrome installed, use `PLAYWRIGHT_CHANNEL=chrome npm run test:drive`. The checks mock wallet requests and external RPCs and do not submit transactions to a live network. They also open two pages in one browser context to exercise native Web Locks, concurrent directory/folder writes, same-content deletion exclusion, storage events and rereading missed changes on resume. Mobile viewport checks cover layout, not physical-device browser compatibility.
 
 To exercise the WalletConnect UI without a live relay, use the running dev server and run `DRIVE_TEST_WALLETCONNECT=1 npm run test:drive`. This replaces the remote SDK with a mock and checks lazy loading, pairing parameters, authorization, network/account isolation and disconnect. Use `DRIVE_TEST_URL` if the dev server is on another port. A real project ID and a Filecoin-compatible mobile wallet are required for live QR pairing validation.
 

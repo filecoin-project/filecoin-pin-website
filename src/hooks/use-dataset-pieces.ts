@@ -1,13 +1,18 @@
 import { getDetailedDataSet } from 'filecoin-pin/core/data-set'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { addCachedPiece, getCachedPieces, setCachedPieces } from '../lib/local-storage/piece-cache.ts'
+import { DIRECTORY_SAVE_ERROR } from '../lib/local-storage/directory-store.ts'
+import {
+  addCachedPiece,
+  getCachedPieces,
+  hasUnsavedPieces,
+  mergeStorageCopies,
+  mutateCachedPieces,
+  subscribeCachedPieces,
+} from '../lib/local-storage/piece-cache.ts'
 import { isDeletionScheduled } from '../utils/file-deletion.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 import { useIpfsIndexing } from './use-ipfs-indexing.ts'
-
-const DIRECTORY_SAVE_ERROR =
-  'Unable to save the browser directory. Keep this page open and export a directory backup before reloading.'
 
 export interface DatasetPiece {
   id: string
@@ -47,6 +52,9 @@ export interface DatasetPiece {
   transactionHashes?: string[]
 }
 
+export type DirectoryPiecePatch = Partial<Pick<DatasetPiece, 'fileName' | 'folderPath' | 'ipfsCheckAttempts'>>
+export type PieceMutation = (current: DatasetPiece[]) => DatasetPiece[]
+
 /**
  * Fetches and normalizes dataset pieces for the active wallet.
  *
@@ -67,6 +75,65 @@ export const useDatasetPieces = () => {
 
   const walletAddress = storageScope ?? (wallet.status === 'ready' ? wallet.data.address : null)
   const network = wallet.status === 'ready' ? wallet.data.network : 'calibration'
+  const currentScope = useRef(walletAddress)
+  const autoLoadedRef = useRef(false)
+  currentScope.current = walletAddress
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+
+  const commit = useCallback(
+    async (operation: () => Promise<DatasetPiece[]>) => {
+      if (!walletAddress) throw new Error('Connect a wallet before updating the directory.')
+      try {
+        await operation()
+        if (mounted.current && currentScope.current === walletAddress) {
+          setPieces(getCachedPieces(walletAddress) ?? [])
+          setHasLoaded(true)
+          setError(null)
+        }
+      } catch (cause) {
+        if (mounted.current && currentScope.current === walletAddress) {
+          // Failed writes retain their semantic mutations for export and a later save retry.
+          setPieces(getCachedPieces(walletAddress) ?? [])
+          setError(cause instanceof Error ? cause.message : 'Unable to update the browser directory.')
+        }
+        throw cause
+      }
+    },
+    [walletAddress]
+  )
+
+  const mutatePieces = useCallback(
+    (update: PieceMutation) => commit(() => mutateCachedPieces(walletAddress ?? '', update)),
+    [commit, walletAddress]
+  )
+
+  const getLatestPieces = useCallback(
+    () => (walletAddress ? (getCachedPieces(walletAddress) ?? []) : []),
+    [walletAddress]
+  )
+
+  useEffect(() => {
+    autoLoadedRef.current = false
+    setHasLoaded(false)
+    setError(null)
+    if (!walletAddress) {
+      setPieces([])
+      return
+    }
+    const sync = () => {
+      setPieces(getCachedPieces(walletAddress) ?? [])
+      if (hasUnsavedPieces(walletAddress)) setError(DIRECTORY_SAVE_ERROR)
+    }
+    const unsubscribe = subscribeCachedPieces(walletAddress, sync)
+    sync()
+    return unsubscribe
+  }, [walletAddress])
 
   const dataSetIdsKey = dataSet.status === 'ready' ? dataSet.dataSetIds.map((id) => String(id)).join(',') : ''
   const dataSetIds = useMemo<bigint[]>(
@@ -164,71 +231,40 @@ export const useDatasetPieces = () => {
       }
 
       // Chain reads update storage facts without overwriting the browser's names, paths or CIDs.
-      const cached = walletAddress ? (getCachedPieces(walletAddress) ?? []) : []
-      const merged = cached.map((file) => {
-        // Archived receipts describe the copies removed at that time, not future uploads.
-        if (isDeletionScheduled(file)) return file
-        const live = piecesByCid.get(file.pieceCid)
-        if (!live) return file
-        // Preserve browser metadata and recorded copies, but include copies
-        // discovered on chain. Incomplete chain reads must not remove copies.
-        const recordedIds = file.datasetIds ?? [file.datasetId]
-        const liveIds = live.datasetIds ?? [live.datasetId]
-        const datasetIds = [...new Set([...recordedIds, ...liveIds])]
-        const mergeField = (
-          plural: 'providerIds' | 'providerNames' | 'serviceURLs' | 'transactionHashes',
-          singular: 'providerId' | 'providerName' | 'serviceURL' | 'transactionHash'
-        ) =>
-          datasetIds.map((id) => {
-            const recordedIndex = recordedIds.indexOf(id)
-            const liveIndex = liveIds.indexOf(id)
-            return (
-              (recordedIndex < 0
-                ? undefined
-                : file[plural]?.[recordedIndex] || (recordedIndex === 0 ? file[singular] : undefined)) ||
-              (liveIndex < 0 ? '' : live[plural]?.[liveIndex] || live[singular]) ||
-              ''
-            )
-          })
-        return {
-          ...live,
-          ...file,
-          datasetIds,
-          copyCount: datasetIds.length,
-          providerIds: mergeField('providerIds', 'providerId'),
-          providerNames: mergeField('providerNames', 'providerName'),
-          serviceURLs: mergeField('serviceURLs', 'serviceURL'),
-          transactionHashes: mergeField('transactionHashes', 'transactionHash'),
-        }
-      })
-      const known = new Set(cached.map((file) => file.pieceCid))
-      merged.push(...[...piecesByCid.values()].filter((file) => !known.has(file.pieceCid)))
-      merged.sort((a, b) => (b.pieceId || 0) - (a.pieceId || 0))
-
-      console.debug('[DatasetPieces] Merged', merged.length, 'unique pieces across', dataSetIds.length, 'datasets')
-      setPieces(merged)
+      const merge = (cached: DatasetPiece[]) => {
+        const merged = cached.map((file) => {
+          // Archived receipts describe the copies removed at that time, not future uploads.
+          if (isDeletionScheduled(file)) return file
+          const live = piecesByCid.get(file.pieceCid)
+          if (!live) return file
+          return mergeStorageCopies(file, live)
+        })
+        const known = new Set(cached.map((file) => file.pieceCid))
+        merged.push(...[...piecesByCid.values()].filter((file) => !known.has(file.pieceCid)))
+        return merged.sort((a, b) => (b.pieceId || 0) - (a.pieceId || 0))
+      }
       // A failed dataset fetch yields a partial list; caching it would
       // silently drop those pieces from history on every later visit.
       const hadFailures = datasets.some((entry) => entry == null)
-      if (walletAddress && !hadFailures) {
-        if (!setCachedPieces(walletAddress, merged)) setError(DIRECTORY_SAVE_ERROR)
-      }
+      if (walletAddress && !hadFailures) await mutatePieces(merge)
+      else if (mounted.current && currentScope.current === walletAddress) setPieces(merge(getLatestPieces()))
     } catch (err) {
       console.error('[DatasetPieces] Failed to load pieces:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load pieces')
-      setPieces([])
+      if (mounted.current && currentScope.current === walletAddress)
+        setError(err instanceof Error ? err.message : 'Failed to load pieces')
     } finally {
-      setIsLoading(false)
-      setHasLoaded(true)
+      if (mounted.current && currentScope.current === walletAddress) {
+        setIsLoading(false)
+        setHasLoaded(true)
+      }
     }
-  }, [dataSetIds, network, walletAddress, synapse])
+  }, [dataSetIds, network, walletAddress, synapse, mutatePieces, getLatestPieces])
 
   // Load history at most once per page visit: from the localStorage cache when
   // available (zero RPC calls), falling back to one chain enumeration when the
   // cache is missing (e.g. cleared storage). Deliberately NOT re-run when the
   // wallet object refreshes or when an upload appends a new dataset id —
   // uploads update history locally via addPiece.
-  const autoLoadedRef = useRef(false)
   useEffect(() => {
     if (autoLoadedRef.current) return
     // Only arm once the dataset manager has settled. While it is idle/
@@ -262,73 +298,40 @@ export const useDatasetPieces = () => {
 
   const updateIndexing = useCallback(
     (cid: string, indexed: boolean, attempts: number) => {
-      setPieces((previous) => {
-        const changed = previous.some(
-          (file) =>
-            file.cid === cid &&
-            !file.deletion &&
-            (indexed || file.ipfsIndexed !== true) &&
-            (file.ipfsIndexed !== indexed || file.ipfsCheckAttempts !== attempts)
-        )
-        if (!changed) return previous
-        const next = previous.map((file) =>
+      return mutatePieces((previous) =>
+        previous.map((file) =>
           file.cid === cid && !file.deletion && (indexed || file.ipfsIndexed !== true)
-            ? { ...file, ipfsIndexed: indexed, ipfsCheckAttempts: attempts }
+            ? { ...file, ipfsIndexed: indexed, ipfsCheckAttempts: Math.max(file.ipfsCheckAttempts ?? 0, attempts) }
             : file
         )
-        if (walletAddress && !setCachedPieces(walletAddress, next)) setError(DIRECTORY_SAVE_ERROR)
-        return next
-      })
+      )
     },
-    [walletAddress]
+    [mutatePieces]
   )
   useIpfsIndexing(walletAddress, pieces, updateIndexing)
 
   const refreshPieces = useCallback(() => {
-    loadPieces()
+    return loadPieces()
   }, [loadPieces])
 
   /** Add a piece to the history without refetching from backend (used after upload completes). */
   const addPiece = useCallback(
-    (piece: DatasetPiece) => {
-      setPieces((prev) => {
-        const updated = [piece, ...prev.filter((file) => file.id !== piece.id)]
-        return updated
-      })
-      if (walletAddress) {
-        if (!addCachedPiece(walletAddress, piece)) setError(DIRECTORY_SAVE_ERROR)
-      }
-    },
-    [walletAddress]
+    (piece: DatasetPiece) => commit(() => addCachedPiece(walletAddress ?? '', piece)),
+    [commit, walletAddress]
   )
 
   const updatePiece = useCallback(
-    (piece: DatasetPiece) => {
-      setPieces((prev) => {
-        const next = prev.map((file) => (file.id === piece.id ? piece : file))
-        if (walletAddress && !setCachedPieces(walletAddress, next)) setError(DIRECTORY_SAVE_ERROR)
-        return next
-      })
-    },
-    [walletAddress]
-  )
-
-  const replacePieces = useCallback(
-    (next: DatasetPiece[]) => {
-      setPieces(next)
-      setHasLoaded(true)
-      if (walletAddress && !setCachedPieces(walletAddress, next)) {
-        setError(DIRECTORY_SAVE_ERROR)
-        throw new Error(DIRECTORY_SAVE_ERROR)
-      }
-    },
-    [walletAddress]
+    (id: string, patch: DirectoryPiecePatch) =>
+      mutatePieces((current) => current.map((file) => (file.id === id ? { ...file, ...patch } : file))),
+    [mutatePieces]
   )
 
   return {
     updatePiece,
-    replacePieces,
+    mutatePieces,
+    getLatestPieces,
     pieces,
+    hasUnsavedChanges: walletAddress ? hasUnsavedPieces(walletAddress) : false,
     isLoading,
     error,
     refreshPieces,

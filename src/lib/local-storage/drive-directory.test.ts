@@ -20,8 +20,8 @@ const record = {
 const backupFor = (file: object) => JSON.stringify({ version: 1, scope: '314:alice', files: [file], folders: [] })
 
 describe('browser directory boundaries', () => {
-  it('keeps folders separate across wallets and networks', () => {
-    saveFolders('314:alice', ['reports/2026'])
+  it('keeps folders separate across wallets and networks', async () => {
+    await saveFolders('314:alice', ['reports/2026'])
     expect(readFolders('314:alice')).toEqual(['reports', 'reports/2026'])
     expect(readFolders('314:bob')).toEqual([])
     expect(readFolders('314159:alice')).toEqual([])

@@ -6,7 +6,34 @@ interface UploadErrorProps {
 }
 
 function UploadError({ orchestration }: UploadErrorProps) {
-  const { activeUpload, uploadedFile, retryUpload, cancelUpload } = orchestration
+  const {
+    activeUpload,
+    uploadedFile,
+    retryUpload,
+    cancelUpload,
+    directorySaveError,
+    isSavingDirectory,
+    retryDirectorySave,
+  } = orchestration
+
+  if (directorySaveError) {
+    return (
+      <Alert
+        button={{
+          children: isSavingDirectory ? 'Saving…' : 'Retry saving',
+          onClick: retryDirectorySave,
+          disabled: isSavingDirectory,
+        }}
+        description={directorySaveError}
+        message={
+          activeUpload.isUploading
+            ? 'File directory not saved'
+            : 'Stored file details could not be saved in this browser'
+        }
+        variant="error"
+      />
+    )
+  }
 
   if (!activeUpload.error) {
     return null

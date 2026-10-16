@@ -85,6 +85,7 @@ export type AlertVariant = NonNullable<VariantProps<typeof alertVariants>['varia
 type ButtonType = {
   children: React.ReactNode
   onClick?: React.ComponentProps<'button'>['onClick']
+  disabled?: boolean
 }
 
 type AlertProps = {

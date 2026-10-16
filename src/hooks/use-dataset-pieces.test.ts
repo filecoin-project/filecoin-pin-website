@@ -14,7 +14,7 @@ vi.mock('./use-filecoin-pin-context.ts', () => ({
   useFilecoinPinContext: useFilecoinPinContextMock,
 }))
 
-import { setCachedPieces } from '../lib/local-storage/piece-cache.ts'
+import { getCachedPieces, setCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import { type DatasetPiece, useDatasetPieces } from './use-dataset-pieces.ts'
 
 const WALLET = '0xabc'
@@ -144,24 +144,37 @@ it('adds newly discovered copies without counting repeated pieces in one dataset
   })
 })
 
-it('retains an in-memory deletion checkpoint and reports failed persistence before continuing', async () => {
+it('retains a failed deletion checkpoint and retries it against the latest stored directory', async () => {
   const original = cachedPiece('piece')
   setCachedPieces(WALLET, [original])
   useFilecoinPinContextMock.mockReturnValue(makeContext({ status: 'ready', dataSetIds: [1n] }))
   const { result } = renderHook(() => useDatasetPieces())
   await waitFor(() => expect(result.current.hasLoaded).toBe(true))
-  vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+  const write = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
     throw new Error('Quota exceeded')
   })
   const checkpoint = {
     ...original,
     deletion: { '1': { transactionHash: `0x${'a'.repeat(64)}`, confirmed: false } },
   }
-  act(() => {
-    expect(() => result.current.replacePieces([checkpoint])).toThrow('export a directory backup')
+  await act(async () => {
+    await expect(
+      result.current.mutatePieces((current) =>
+        current.map((file) => (file.id === original.id ? { ...file, deletion: checkpoint.deletion } : file))
+      )
+    ).rejects.toThrow('export a directory backup')
   })
   expect(result.current.pieces).toEqual([checkpoint])
   expect(result.current.error).toContain('Keep this page open')
+  write.mockRestore()
+  // A different tab saves another file while this page still holds its unsaved receipt.
+  const added = cachedPiece('new')
+  localStorage.setItem(`filecoin-pin-piece-cache-v1-${WALLET}`, JSON.stringify([original, added]))
+  act(() => window.dispatchEvent(new Event('focus')))
+  expect(result.current.pieces).toEqual([checkpoint, added])
+  await act(async () => result.current.updatePiece(original.id, { fileName: 'renamed.txt' }))
+  expect(getCachedPieces(WALLET)).toEqual([{ ...checkpoint, fileName: 'renamed.txt' }, added])
+  expect(result.current.error).toBeNull()
 })
 
 it('keeps archived removal receipts stable when chain refresh discovers later copies of the same content', async () => {
@@ -181,7 +194,130 @@ it('keeps archived removal receipts stable when chain refresh discovers later co
   await waitFor(() => expect(result.current.isLoading).toBe(false))
   expect(getDetailedDataSetMock).toHaveBeenCalledTimes(2)
   expect(result.current.pieces).toEqual([archived])
-  act(() => result.current.addPiece({ ...cachedPiece('same-piece'), id: 'new-upload', datasetId: '2' }))
+  await act(async () => result.current.addPiece({ ...cachedPiece('same-piece'), id: 'new-upload', datasetId: '2' }))
   expect(result.current.pieces).toHaveLength(2)
   expect(result.current.pieces.find((record) => record.id === 'new-upload')?.deletion).toBeUndefined()
+})
+
+it('preserves concurrent additions and patches from separate directory consumers', async () => {
+  const original = cachedPiece('original')
+  setCachedPieces(WALLET, [original])
+  useFilecoinPinContextMock.mockReturnValue(makeContext({ status: 'ready', dataSetIds: [] }))
+  const tabA = renderHook(useDatasetPieces)
+  const tabB = renderHook(useDatasetPieces)
+  const newFile = cachedPiece('new')
+  await act(async () => {
+    await Promise.all([
+      tabB.result.current.addPiece(newFile),
+      tabA.result.current.updatePiece(original.id, { fileName: 'renamed.txt' }),
+    ])
+  })
+  expect(getCachedPieces(WALLET)).toEqual([newFile, { ...original, fileName: 'renamed.txt' }])
+  expect(tabA.result.current.pieces).toEqual(tabB.result.current.pieces)
+})
+
+it('merges later upload checkpoints without reverting user edits, indexing or deletion progress', async () => {
+  const original = { ...cachedPiece('original'), ipfsIndexed: false }
+  setCachedPieces(WALLET, [original])
+  useFilecoinPinContextMock.mockReturnValue(makeContext({ status: 'ready', dataSetIds: [] }))
+  const { result } = renderHook(useDatasetPieces)
+  const deletion = { '1': { transactionHash: `0x${'a'.repeat(64)}`, confirmed: false } }
+  await act(async () => {
+    await result.current.updatePiece(original.id, { fileName: 'renamed.txt', folderPath: 'reports' })
+    await result.current.mutatePieces((current) => current.map((file) => ({ ...file, ipfsIndexed: true, deletion })))
+    await result.current.addPiece({ ...original, datasetIds: ['1', '2'], providerIds: ['4', '5'], copyCount: 2 })
+    // An older one-copy checkpoint can arrive after the final checkpoint was queued.
+    await result.current.addPiece(original)
+  })
+  expect(getCachedPieces(WALLET)?.[0]).toMatchObject({
+    fileName: 'renamed.txt',
+    folderPath: 'reports',
+    ipfsIndexed: true,
+    deletion,
+    datasetIds: ['1', '2'],
+    copyCount: 2,
+  })
+})
+
+it('reads local changes on resume without chain reads or write-back loops', async () => {
+  const original = cachedPiece('original')
+  setCachedPieces(WALLET, [original])
+  useFilecoinPinContextMock.mockReturnValue(makeContext({ status: 'ready', dataSetIds: [] }))
+  const { result } = renderHook(useDatasetPieces)
+  const write = vi.spyOn(localStorage, 'setItem')
+  for (const event of ['focus', 'pageshow', 'visibilitychange', 'resume']) {
+    const changed = { ...original, fileName: event }
+    setCachedPieces(WALLET, [changed])
+    write.mockClear()
+    act(() => (event === 'visibilitychange' || event === 'resume' ? document : window).dispatchEvent(new Event(event)))
+    expect(result.current.pieces).toEqual([changed])
+    expect(write).not.toHaveBeenCalled()
+  }
+  expect(getDetailedDataSetMock).not.toHaveBeenCalled()
+})
+
+it('merges a delayed chain refresh against the directory saved while its RPC was pending', async () => {
+  const original = cachedPiece('original')
+  setCachedPieces(WALLET, [original])
+  useFilecoinPinContextMock.mockReturnValue(makeContext({ status: 'ready', dataSetIds: [1n] }))
+  let finish!: (value: object) => void
+  getDetailedDataSetMock.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve
+      })
+  )
+  const { result } = renderHook(useDatasetPieces)
+  let refreshing!: Promise<void>
+  act(() => {
+    refreshing = result.current.refreshPieces()
+  })
+  const added = cachedPiece('new')
+  await act(async () => {
+    await result.current.addPiece(added)
+    await result.current.updatePiece(original.id, { fileName: 'edited-during-refresh.txt' })
+    finish({ pieces: [], provider: null })
+    await refreshing
+  })
+  expect(getCachedPieces(WALLET)).toEqual([added, { ...original, fileName: 'edited-during-refresh.txt' }])
+})
+
+it('finishes a queued write in its original scope without changing the newly selected wallet', async () => {
+  const original = cachedPiece('original')
+  const otherScope = '314159:other-wallet'
+  const other = cachedPiece('other')
+  setCachedPieces(WALLET, [original])
+  setCachedPieces(otherScope, [other])
+  useFilecoinPinContextMock.mockReturnValue(makeContext({ status: 'ready', dataSetIds: [] }))
+  const { result, rerender } = renderHook(useDatasetPieces)
+  let release!: () => void
+  let acquired!: () => void
+  const ready = new Promise<void>((resolve) => {
+    acquired = resolve
+  })
+  const holding = navigator.locks.request(`filecoin-drive-directory-${WALLET}`, async () => {
+    acquired()
+    await new Promise<void>((resolve) => {
+      release = resolve
+    })
+  })
+  await ready
+  let saving!: Promise<void>
+  act(() => {
+    saving = result.current.updatePiece(original.id, { fileName: 'old-wallet-edit.txt' })
+  })
+  useFilecoinPinContextMock.mockReturnValue({
+    ...makeContext({ status: 'ready', dataSetIds: [] }),
+    storageScope: otherScope,
+  })
+  rerender()
+  expect(result.current.pieces).toEqual([other])
+  await act(async () => {
+    release()
+    await holding
+    await saving
+  })
+  expect(getCachedPieces(WALLET)?.[0].fileName).toBe('old-wallet-edit.txt')
+  expect(result.current.pieces).toEqual([other])
+  expect(getCachedPieces(otherScope)).toEqual([other])
 })

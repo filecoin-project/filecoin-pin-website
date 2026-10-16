@@ -42,6 +42,11 @@ const createMockOrchestration = (
     },
     pendingAutoExpandPieceCids: new Set(),
     dragDropKey: 0,
+    directorySaveError: null,
+    isSavingDirectory: false,
+    retryDirectorySave: () => {
+      console.log('Retry directory save clicked')
+    },
     startUpload: async () => {
       console.log('Start upload clicked')
     },

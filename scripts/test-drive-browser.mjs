@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { chromium } from 'playwright'
+import { checkDirectoryTabs } from './check-drive-directory-tabs.mjs'
 import { prepareBrowserPage } from './drive-browser-fixtures.mjs'
 
 // Run against npm run dev. All wallet requests and external RPCs are mocked.
 const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || undefined })
 try {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1080 } })
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1080 } })
+  const page = await context.newPage()
   const errors = []
   page.on('pageerror', (error) => errors.push(error.message))
   const mockBrowser = await prepareBrowserPage(page)
@@ -45,6 +47,7 @@ try {
       optionalChains: [314159],
     })
   }
+  await checkDirectoryTabs(page, errors)
   await page.getByRole('textbox', { name: 'New folder name' }).fill('reports/2026')
   await page.getByRole('button', { name: 'Create folder', exact: true }).click()
   await page.getByRole('button', { name: 'All files at root', exact: true }).click()
@@ -229,7 +232,7 @@ try {
   }
   assert.deepEqual(errors, [])
   console.log(
-    'Browser checks passed: session authorization, folders, file details, cross-browser export/import and reload, wallet/network isolation, desktop/mobile rendering'
+    'Browser checks passed: cross-tab directory writes and resume, session authorization, folders, file details, cross-browser export/import and reload, wallet/network isolation, desktop/mobile rendering'
   )
 } finally {
   for (const context of browser.contexts())

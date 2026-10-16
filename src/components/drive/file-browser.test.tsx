@@ -3,7 +3,12 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { UploadHistoryProvider } from '../../context/upload-history-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { parseDirectoryBackup } from '../../lib/local-storage/drive-directory.ts'
-import { addCachedPiece, getCachedPieces, setCachedPieces } from '../../lib/local-storage/piece-cache.ts'
+import {
+  addCachedPiece,
+  getCachedPieces,
+  mutateCachedPieces,
+  setCachedPieces,
+} from '../../lib/local-storage/piece-cache.ts'
 import { FileBrowser, fileStatus } from './file-browser.tsx'
 
 const mocks = vi.hoisted(() => ({
@@ -262,7 +267,7 @@ it('keeps removed files hidden after restore and reload, but shows a new identic
   expect(screen.getByText('No matching files.')).toBeTruthy()
   expect(getCachedPieces(scope)?.[0].deletion).toEqual(archived.deletion)
   view.unmount()
-  addCachedPiece(scope, { ...file, id: 'new-upload', fileName: 'new.txt', uploadedAt: 2 })
+  await addCachedPiece(scope, { ...file, id: 'new-upload', fileName: 'new.txt', uploadedAt: 2 })
   mount()
   expect(await screen.findByRole('button', { name: 'new.txt' })).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'first.txt' })).toBeNull()
@@ -340,4 +345,171 @@ it('preserves the archive while a new removal reverts and can be submitted again
   expect(mocks.submit).toHaveBeenCalledOnce()
   expect(getCachedPieces(scope)?.find((record) => record.id === 'first')?.deletion?.['1'].transactionHash).toBe(oldHash)
   expect(getCachedPieces(scope)?.find((record) => record.id === 'later')?.deletion?.['1'].confirmed).toBe(true)
+})
+
+it('does not hide a later identical upload when an older deletion receipt lookup is retried', async () => {
+  setCachedPieces(scope, [file])
+  mocks.context.mockResolvedValue({ deletePieces: mocks.submit, getScheduledRemovals: async () => [] })
+  mocks.receipt.mockRejectedValueOnce(new Error('Receipt lookup timed out'))
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'first.txt' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Schedule deletion' }))
+  await within(screen.getByRole('dialog')).findByText('Receipt lookup timed out')
+  fireEvent.click(screen.getByRole('button', { name: 'Close details' }))
+  await act(async () => {
+    await addCachedPiece(scope, { ...file, id: 'later', fileName: 'later.txt' })
+  })
+  fireEvent.click(await screen.findByRole('button', { name: 'later.txt' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Continue deletion' }))
+  await within(screen.getByRole('dialog')).findByText(/Deletion progress saved/)
+  expect(mocks.submit).toHaveBeenCalledOnce()
+  expect(mocks.receipt).toHaveBeenCalledTimes(2)
+  expect(getCachedPieces(scope)?.find((record) => record.id === 'later')?.deletion?.['1']).toEqual({
+    transactionHash: hash,
+    confirmed: true,
+    remaining: true,
+  })
+  expect(screen.getByRole('button', { name: 'later.txt', hidden: true })).toBeTruthy()
+})
+
+it('saves only edited form fields when another tab moves the file while its details are open', async () => {
+  setCachedPieces(scope, [file])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'first.txt' }))
+  fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'renamed.txt' } })
+  await act(async () => {
+    await mutateCachedPieces(scope, (current) =>
+      current.map((file) => ({ ...file, folderPath: 'reports', ipfsIndexed: true }))
+    )
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Save directory changes' }))
+  await waitFor(() =>
+    expect(getCachedPieces(scope)?.[0]).toMatchObject({
+      fileName: 'renamed.txt',
+      folderPath: 'reports',
+      ipfsIndexed: true,
+    })
+  )
+  expect(screen.getByRole('combobox', { name: 'File folder' })).toHaveProperty('value', 'reports')
+})
+
+it('preserves edits and later uploads made while a deletion receipt is pending', async () => {
+  setCachedPieces(scope, [file])
+  mocks.context.mockResolvedValue({ deletePieces: mocks.submit, getScheduledRemovals: async () => [] })
+  let confirm!: (receipt: { status: string }) => void
+  mocks.receipt.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        confirm = resolve
+      })
+  )
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'first.txt' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Schedule deletion' }))
+  await waitFor(() => expect(mocks.receipt).toHaveBeenCalledOnce())
+  await act(async () => {
+    await addCachedPiece(scope, { ...file, id: 'later', fileName: 'later.txt', pieceId: 2 })
+    await mutateCachedPieces(scope, (current) =>
+      current.map((record) => (record.id === file.id ? { ...record, fileName: 'edited-during-deletion.txt' } : record))
+    )
+    confirm({ status: 'success' })
+  })
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(screen.getByRole('button', { name: 'later.txt' })).toBeTruthy()
+  expect(getCachedPieces(scope)?.find((record) => record.id === file.id)).toMatchObject({
+    fileName: 'edited-during-deletion.txt',
+    deletion: { '1': { confirmed: true } },
+  })
+  expect(getCachedPieces(scope)?.find((record) => record.id === 'later')?.deletion).toBeUndefined()
+})
+
+it('refuses deletion before submitting when directory locks are unavailable', async () => {
+  setCachedPieces(scope, [file])
+  mocks.context.mockResolvedValue({ deletePieces: mocks.submit, getScheduledRemovals: async () => [] })
+  const locks = navigator.locks
+  Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined })
+  try {
+    render(
+      <UploadHistoryProvider>
+        <FileBrowser folder="" onFolderChange={vi.fn()} />
+      </UploadHistoryProvider>
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'first.txt' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule deletion' }))
+    await within(screen.getByRole('dialog')).findByText(/cannot safely update the file directory/)
+    expect(getCachedPieces(scope)?.[0].deletion).toBeUndefined()
+    expect(mocks.submit).not.toHaveBeenCalled()
+    expect(mocks.permissions).not.toHaveBeenCalled()
+  } finally {
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: locks })
+  }
+})
+
+it('blocks a second deletion tab, then resumes the latest progress after the first tab fails', async () => {
+  setCachedPieces(scope, [{ ...file, datasetIds: ['1', '2'] }])
+  const secondHash = `0x${'b'.repeat(64)}`
+  mocks.submit.mockResolvedValueOnce(hash).mockResolvedValueOnce(secondHash)
+  const provider = { deletePieces: mocks.submit, getScheduledRemovals: async () => [] }
+  mocks.context
+    .mockResolvedValueOnce(provider)
+    .mockRejectedValueOnce(new Error('Provider unavailable'))
+    .mockResolvedValue(provider)
+  let confirm!: (value: { status: string }) => void
+  mocks.receipt.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        confirm = resolve
+      })
+  )
+  const a = render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  const b = render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await within(a.container).findByRole('button', { name: 'first.txt' }))
+  const dialogA = screen.getByRole('dialog')
+  fireEvent.click(within(dialogA).getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
+  fireEvent.click(within(dialogA).getByRole('button', { name: 'Schedule deletion' }))
+  await waitFor(() => expect(mocks.receipt).toHaveBeenCalledOnce())
+
+  fireEvent.click(within(b.container).getByRole('button', { name: 'first.txt', hidden: true }))
+  const dialogB = screen.getAllByRole('dialog', { hidden: true }).find((dialog) => dialog !== dialogA)
+  if (!dialogB) throw new Error('Missing second tab dialog')
+  fireEvent.click(within(dialogB).getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
+  fireEvent.click(within(dialogB).getByRole('button', { name: 'Continue deletion' }))
+  await within(dialogB).findByText(/being deleted in another tab/)
+  expect(mocks.submit).toHaveBeenCalledOnce()
+  expect(mocks.receipt).toHaveBeenCalledOnce()
+  await act(async () => confirm({ status: 'success' }))
+  await within(dialogA).findByText('Provider unavailable')
+
+  fireEvent.click(within(dialogB).getByRole('button', { name: 'Continue deletion', hidden: true }))
+  await waitFor(() => expect(getCachedPieces(scope)?.[0].deletion?.['2']?.confirmed).toBe(true))
+  expect(mocks.submit).toHaveBeenCalledTimes(2)
+  expect(mocks.receipt).toHaveBeenCalledTimes(2)
+  expect(getCachedPieces(scope)?.[0].deletion).toEqual({
+    '1': { transactionHash: hash, confirmed: true },
+    '2': { transactionHash: secondHash, confirmed: true },
+  })
 })

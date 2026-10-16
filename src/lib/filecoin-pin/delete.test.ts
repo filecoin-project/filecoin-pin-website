@@ -6,6 +6,8 @@ const { receipt, matches } = vi.hoisted(() => ({ receipt: vi.fn(), matches: vi.f
 vi.mock('@filoz/synapse-core/pdp-verifier', () => ({ findPieceIdsByCid: matches }))
 vi.mock('./browser-wallet.ts', () => ({ publicClient: () => ({ waitForTransactionReceipt: receipt }) }))
 
+import { applyDeletionUpdate } from '../../utils/file-deletion.ts'
+import { getCachedPieces, mutateCachedPieces, setCachedPieces } from '../local-storage/piece-cache.ts'
 import { scheduleFileDeletion } from './delete.ts'
 
 const file = {
@@ -19,6 +21,57 @@ beforeEach(() => {
   matches.mockResolvedValue({ items: [1n, 2n] })
 })
 describe('deletion across storage copies', () => {
+  it('replays a failed receipt save without replacing newer transactions or other datasets', async () => {
+    const scope = 'deletion-recovery'
+    const pending = { transactionHash: hash, confirmed: false }
+    const other = { transactionHash: `0x${'b'.repeat(64)}`, confirmed: false }
+    const newer = { transactionHash: `0x${'c'.repeat(64)}`, confirmed: false }
+    const record = { ...file, id: 'file', deletion: { '1': pending, '2': other } }
+    const change = { datasetId: '1', previous: pending, next: { ...pending, confirmed: true } }
+    expect(applyDeletionUpdate(record, change).deletion?.['2']).toEqual(other)
+    setCachedPieces(scope, [record])
+    const write = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('Quota exceeded')
+    })
+    try {
+      await expect(
+        mutateCachedPieces(scope, (files) => files.map((file) => applyDeletionUpdate(file, change)))
+      ).rejects.toThrow('export a directory backup')
+    } finally {
+      write.mockRestore()
+    }
+    // A different page has advanced while this page retained its failed save.
+    localStorage.setItem(
+      `filecoin-pin-piece-cache-v1-${scope}`,
+      JSON.stringify([{ ...record, deletion: { '1': newer, '2': other } }])
+    )
+    await mutateCachedPieces(scope, (files) => files)
+    const saved = getCachedPieces(scope)?.[0]
+    if (!saved) throw new Error('Missing deletion checkpoint')
+    expect(saved.deletion).toEqual({ '1': newer, '2': other })
+    expect(applyDeletionUpdate(saved, { datasetId: '1', previous: pending }).deletion).toEqual(saved.deletion)
+  })
+
+  it('waits for a durable pending hash before querying its receipt', async () => {
+    const submit = vi.fn().mockResolvedValue(hash)
+    const context = { deletePieces: submit, getScheduledRemovals: async () => [] }
+    const synapse = { storage: { createContext: async () => context } } as unknown as Synapse
+    let saved!: () => void
+    const persist = vi.fn().mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          saved = resolve
+        })
+    )
+    receipt.mockResolvedValue({ status: 'success' })
+    const deletion = scheduleFileDeletion(synapse, { ...file, datasetIds: ['1'] }, persist)
+    await vi.waitFor(() => expect(persist).toHaveBeenCalledOnce())
+    expect(receipt).not.toHaveBeenCalled()
+    saved()
+    await deletion
+    expect(receipt).toHaveBeenCalledWith({ hash })
+  })
+
   it('persists submitted hashes and resumes a partial deletion without resubmitting confirmed copies', async () => {
     const submit = vi.fn().mockResolvedValue(hash)
     const context = vi.fn().mockImplementation(async ({ dataSetId }) => {
