@@ -1,5 +1,5 @@
 /**
- * Direct provider selection for a browser's first upload.
+ * Direct provider selection for new upload copies.
  *
  * The SDK's smart-select looks for an existing metadata-matching dataset by
  * enumerating every dataset the wallet owns (one eth_call per dataset). On the
@@ -21,15 +21,15 @@ import { selectProviders } from '@filoz/synapse-core/warm-storage'
 import { METADATA_KEYS } from '@filoz/synapse-sdk'
 import { StorageContext } from '@filoz/synapse-sdk/storage'
 import { WarmStorageService } from '@filoz/synapse-sdk/warm-storage'
+import { DEFAULT_STORAGE_COPIES } from './config.ts'
 import { APPLICATION_SOURCE, type Synapse } from './synapse.ts'
-
-const DEFAULT_COPIES = 2
 
 const withCDN = false
 
 /**
- * Select reachable providers (endorsed preferred for the primary copy) and
- * return upload-ready contexts that create a fresh dataset on commit.
+ * Select reachable providers and create fresh datasets on commit. Exclude
+ * existing providers when filling missing copies; require an endorsed primary
+ * only when there is no existing context to reuse.
  *
  * The dataset metadata matches what the smart-select path would have used, so
  * datasets created here are interchangeable with SDK-created ones.
@@ -39,7 +39,8 @@ const withCDN = false
 export async function createFreshUploadContexts(
   synapse: Synapse,
   clientId: string,
-  copies = DEFAULT_COPIES
+  copies = DEFAULT_STORAGE_COPIES,
+  existingProviderIds: bigint[] = []
 ): Promise<StorageContext[]> {
   const [providers, endorsedIds] = await Promise.all([
     getApprovedPDPProviders(synapse.client),
@@ -52,12 +53,11 @@ export async function createFreshUploadContexts(
     clientId,
   }
 
-  const excludeProviderIds: bigint[] = []
+  const excludeProviderIds = [...existingProviderIds]
   const selected: typeof providers = []
   for (let i = 0; i < copies; i++) {
-    // Restrict the primary copy to endorsed providers, mirroring the SDK's
-    // requireEndorsedPrimary behavior; secondaries draw from the full pool.
-    const endorsedSlot = i === 0
+    // Only a new primary needs the SDK's endorsed-provider requirement.
+    const endorsedSlot = i === 0 && existingProviderIds.length === 0
     let found = false
     while (!found) {
       const candidates = selectProviders({
@@ -80,7 +80,7 @@ export async function createFreshUploadContexts(
       }
     }
     if (!found) {
-      if (i === 0) {
+      if (i === 0 && existingProviderIds.length === 0) {
         throw new Error('No reachable storage providers available')
       }
       // Fewer providers than requested copies: proceed with reduced redundancy

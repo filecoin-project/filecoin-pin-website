@@ -1,6 +1,9 @@
 import { METADATA_KEYS, type Synapse } from '@filoz/synapse-sdk'
 import type { UploadExecutionOptions } from 'filecoin-pin/core/upload'
 import { formatUnits } from 'viem'
+import { getOrCreateClientId } from '../local-storage/client-id.ts'
+import { DEFAULT_STORAGE_COPIES } from './config.ts'
+import { createFreshUploadContexts } from './fresh-contexts.ts'
 import { assertCurrentStorageChain } from './storage-chain.ts'
 import { APPLICATION_SOURCE } from './synapse.ts'
 
@@ -10,7 +13,7 @@ export async function prepareUploadContexts(
   options: Pick<UploadExecutionOptions, 'contexts' | 'dataSetIds' | 'providerIds' | 'metadata'>
 ) {
   await assertCurrentStorageChain(synapse)
-  const contexts =
+  let contexts =
     options.contexts ??
     (await synapse.storage.createContexts({
       withCDN: false,
@@ -26,6 +29,17 @@ export async function prepareUploadContexts(
           }),
     }))
   if (!contexts.length) throw new Error('No storage providers available')
+  // A previous partial upload may have saved only one dataset. Reuse it, but
+  // select the missing provider before quoting this new upload's full cost.
+  if (options.dataSetIds && contexts.length < DEFAULT_STORAGE_COPIES) {
+    const additional = await createFreshUploadContexts(
+      synapse,
+      getOrCreateClientId(),
+      DEFAULT_STORAGE_COPIES - contexts.length,
+      contexts.map((context) => context.provider.id)
+    )
+    contexts = [...contexts, ...additional]
+  }
   // prepare is a read-only quote. Never execute its optional funding transaction:
   // deposits and owner approvals require the separate Wallet setup actions.
   const { costs } = await synapse.storage.prepare({ context: contexts, pieceSizes: [dataSize] })

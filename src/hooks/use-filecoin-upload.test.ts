@@ -290,3 +290,71 @@ describe('useFilecoinUpload dataset resume', () => {
     expect(getOpts()).not.toHaveProperty('dataSetIds')
   })
 })
+
+it('restores two-copy uploads after a one-copy result without changing existing file records', async () => {
+  const scope = '314159:0x1111111111111111111111111111111111111111'
+  const [primary, secondary] = fakeContexts
+  addStoredDataSetId(scope, 44585)
+  const oldFile = { id: 'old-file', datasetId: '44585', datasetIds: ['44585'], copyCount: 1 }
+  setCachedPieces(scope, [oldFile as never])
+  useFilecoinPinContextMock.mockReturnValue({ ...baseContext, storageScope: scope })
+  createContextsMock.mockImplementation(async ({ dataSetIds }) =>
+    dataSetIds.length === 1 ? [primary] : [primary, secondary]
+  )
+  createFreshUploadContextsMock.mockResolvedValueOnce([secondary])
+  executeUploadMock.mockImplementation(async (_synapse, _car, _root, options) => {
+    for (const [index, context] of options.contexts.entries()) {
+      options.onProgress({
+        type: 'piecesConfirmed',
+        data: { dataSetId: BigInt(44585 + index), providerId: context.provider.id, pieceIds: [1n] },
+      })
+    }
+    return {
+      requestedCopies: 2,
+      copies: options.contexts.map((context: (typeof fakeContexts)[number], index: number) => ({
+        role: index === 0 ? 'primary' : 'secondary',
+        providerId: context.provider.id,
+        dataSetId: BigInt(44585 + index),
+        pieceId: 1n,
+      })),
+    }
+  })
+  const { result } = renderHook(useFilecoinUpload)
+  await act(async () => {
+    await result.current.uploadFile(testFile)
+  })
+  expect(createFreshUploadContextsMock).toHaveBeenCalledWith(baseContext.synapse, expect.any(String), 1, [4n])
+  expect(prepareMock).toHaveBeenLastCalledWith({ context: [primary, secondary], pieceSizes: [3n] })
+  expect(executeUploadMock.mock.lastCall?.[3].contexts).toEqual([primary, secondary])
+  expect(getStoredDataSetIds(scope)).toEqual([44585, 44586])
+  await act(async () => {
+    await result.current.uploadFile(testFile)
+  })
+  expect(createFreshUploadContextsMock).toHaveBeenCalledOnce()
+  expect(createContextsMock).toHaveBeenLastCalledWith({ withCDN: false, dataSetIds: [44585n, 44586n] })
+  expect(result.current.uploadState.copies).toHaveLength(2)
+  expect(getCachedPieces(scope)).toEqual([oldFile])
+})
+
+it('retries the two-copy target on every upload when no additional provider is reachable', async () => {
+  const scope = '314159:0x1111111111111111111111111111111111111111'
+  addStoredDataSetId(scope, 44585)
+  useFilecoinPinContextMock.mockReturnValue({ ...baseContext, storageScope: scope })
+  createContextsMock.mockResolvedValue([fakeContexts[0]])
+  createFreshUploadContextsMock.mockResolvedValue([])
+  executeUploadMock.mockResolvedValue({ requestedCopies: 1, copies: [{ role: 'primary', providerId: 4n }] })
+  const { result } = renderHook(useFilecoinUpload)
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await act(async () => {
+      await result.current.uploadFile(testFile)
+    })
+    expect(result.current.uploadState.expectedCopies).toBe(2)
+    expect(result.current.uploadState.confirmedCopies).toBe(1)
+    expect(result.current.uploadState.stepStates.find((step) => step.step === 'replicating')).toMatchObject({
+      status: 'error',
+      error: 'Stored with 1 of 2 storage copies.',
+    })
+  }
+  expect(createFreshUploadContextsMock).toHaveBeenCalledTimes(2)
+  expect(getStoredDataSetIds(scope)).toEqual([44585])
+})

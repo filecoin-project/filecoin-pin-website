@@ -10,6 +10,7 @@ import pino from 'pino'
 import prettyBytes from 'pretty-bytes'
 import { useCallback, useState } from 'react'
 import { MAX_FILE_SIZE } from '../constants/files.ts'
+import { DEFAULT_STORAGE_COPIES } from '../lib/filecoin-pin/config.ts'
 import { createFreshUploadContexts } from '../lib/filecoin-pin/fresh-contexts.ts'
 import { ensureSessionKeyPermissions } from '../lib/filecoin-pin/synapse.ts'
 import { prepareUploadContexts } from '../lib/filecoin-pin/upload-funding.ts'
@@ -437,7 +438,11 @@ export const useFilecoinUpload = () => {
         // succeeded. Failed commits will never emit another piecesConfirmed.
         setUploadState((prev) => {
           const copies = result.copies
-          const expectedCopies = result.requestedCopies ?? Math.max(prev.expectedCopies, copies.length)
+          const expectedCopies = Math.max(
+            debugParams.providerId == null ? DEFAULT_STORAGE_COPIES : 1,
+            result.requestedCopies ?? prev.expectedCopies,
+            copies.length
+          )
           const reduced = copies.length < expectedCopies
           return {
             ...prev,
