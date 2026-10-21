@@ -81,3 +81,5 @@ Pending IPFS root CIDs receive at most five additional background indexing check
 ## Deployment
 
 Build with `npm run build` and serve `dist` over HTTPS on a stable origin. Browser directory data and session credentials are scoped to that origin. Configure the public origin in the Reown project's allowlist. Set `VITE_WALLETCONNECT_PROJECT_ID` before building to override the built-in public project ID. Never configure wallet private keys in deployment environment variables.
+
+Uploads and deletions of identical content are mutually exclusive across tabs on the same browser origin, wallet and network. Uploads acquire a Web Lock after local CAR packing reveals the IPFS root CID, before sending data, and retain it until confirmed file metadata is saved. Conflicting operations fail immediately and require an explicit retry; different content can proceed independently. Deleting an older record without a root CID conservatively excludes uploads for that wallet/network. An unfinished recorded deletion must be continued before uploading the same content again. These browser locks do not coordinate other devices, browser profiles or CLI clients.

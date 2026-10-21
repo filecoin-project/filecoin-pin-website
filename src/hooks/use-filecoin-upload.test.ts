@@ -44,6 +44,7 @@ vi.mock('../lib/filecoin-pin/fresh-contexts.ts', () => ({
 }))
 
 import { CommitError, StoreError } from '@filoz/synapse-sdk'
+import { acquireContentLock } from '../lib/filecoin-pin/content-lock.ts'
 import { addStoredDataSetId, getStoredDataSetIds } from '../lib/local-storage/data-set.ts'
 import { getCachedPieces, setCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import { useFilecoinUpload } from './use-filecoin-upload.ts'
@@ -357,4 +358,42 @@ it('retries the two-copy target on every upload when no additional provider is r
   }
   expect(createFreshUploadContextsMock).toHaveBeenCalledTimes(2)
   expect(getStoredDataSetIds(scope)).toEqual([44585])
+})
+
+it('rejects an identical upload before permissions, funding or sending data when deletion holds the lock', async () => {
+  const scope = '314159:0xabc'
+  useFilecoinPinContextMock.mockReturnValue({ ...baseContext, storageScope: scope })
+  const release = await acquireContentLock(scope, 'bafyrootcid')
+  const { result } = renderHook(useFilecoinUpload)
+  try {
+    await act(async () => {
+      await expect(result.current.uploadFile(testFile)).rejects.toThrow('Retry after')
+    })
+    expect(createCarFromFileMock).toHaveBeenCalledOnce()
+    expect(checkUploadReadinessMock).not.toHaveBeenCalled()
+    expect(executeUploadMock).not.toHaveBeenCalled()
+  } finally {
+    await release()
+  }
+  await act(async () => {
+    await result.current.uploadFile(testFile)
+  })
+  expect(executeUploadMock).toHaveBeenCalledOnce()
+})
+
+it('requires an unfinished recorded deletion to be resumed before reuploading the same content', async () => {
+  const scope = '314159:0xabc'
+  const file = { id: 'pending-delete', cid: 'bafyrootcid', datasetId: '1', deletion: {} }
+  setCachedPieces(scope, [file as never])
+  useFilecoinPinContextMock.mockReturnValue({ ...baseContext, storageScope: scope })
+  const { result } = renderHook(useFilecoinUpload)
+  await act(async () => {
+    await expect(result.current.uploadFile(testFile)).rejects.toThrow('unfinished deletion')
+  })
+  expect(executeUploadMock).not.toHaveBeenCalled()
+  setCachedPieces(scope, [{ ...file, deletion: { '1': { confirmed: true, transactionHash: '0xabc' } } } as never])
+  await act(async () => {
+    await result.current.uploadFile(testFile)
+  })
+  expect(executeUploadMock).toHaveBeenCalledOnce()
 })

@@ -8,16 +8,19 @@ import {
 } from 'filecoin-pin/core/upload'
 import pino from 'pino'
 import prettyBytes from 'pretty-bytes'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { MAX_FILE_SIZE } from '../constants/files.ts'
 import { DEFAULT_STORAGE_COPIES } from '../lib/filecoin-pin/config.ts'
+import { acquireContentLock } from '../lib/filecoin-pin/content-lock.ts'
 import { createFreshUploadContexts } from '../lib/filecoin-pin/fresh-contexts.ts'
 import { ensureSessionKeyPermissions } from '../lib/filecoin-pin/synapse.ts'
 import { prepareUploadContexts } from '../lib/filecoin-pin/upload-funding.ts'
 import { getOrCreateClientId } from '../lib/local-storage/client-id.ts'
 import { addStoredDataSetId, clearStoredDataSetIds, getStoredDataSetIds } from '../lib/local-storage/data-set.ts'
 import { requireDirectoryLocks } from '../lib/local-storage/directory-store.ts'
+import { getCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import type { StepState } from '../types/upload/step.ts'
+import { isDeletionScheduled } from '../utils/file-deletion.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 import { useWaitableRef } from './use-waitable-ref.ts'
 
@@ -85,7 +88,13 @@ const isProviderStoreError = (error: unknown): boolean => StoreError.is(error) |
  * - Executes the upload with progress callbacks
  * - Tracks IPNI availability and on-chain confirmation
  */
-export const useFilecoinUpload = () => {
+export const useFilecoinUpload = (retainLockForDirectory = false) => {
+  const contentLock = useRef<(() => void) | null>(null)
+  const releaseUploadLock = useCallback(() => {
+    contentLock.current?.()
+    contentLock.current = null
+  }, [])
+  useEffect(() => releaseUploadLock, [releaseUploadLock])
   const { synapse, wallet, addDataSetId, debugParams, storageScope, ensurePermissions } = useFilecoinPinContext()
 
   // Waitable ref so the upload callback can access synapse even if initialized after callback creation
@@ -124,6 +133,7 @@ export const useFilecoinUpload = () => {
         confirmedPieces: [],
       })
 
+      let confirmed = false
       try {
         if (network !== 'mainnet' && network !== 'calibration')
           throw new Error('Wait for wallet setup to finish before uploading.')
@@ -148,6 +158,20 @@ export const useFilecoinUpload = () => {
 
         updateStepState('creating-car', { status: 'completed', progress: 100 })
         logger.info('CAR created')
+
+        contentLock.current = await acquireContentLock(
+          storageScope ??
+            `${network === 'mainnet' ? 314 : 314159}:${wallet.status === 'ready' ? wallet.data.address.toLowerCase() : ''}`,
+          rootCid
+        )
+
+        if (
+          storageScope &&
+          getCachedPieces(storageScope)?.some(
+            (piece) => (!piece.cid || piece.cid === rootCid) && piece.deletion && !isDeletionScheduled(piece)
+          )
+        )
+          throw new Error('This content has an unfinished deletion. Continue its deletion before uploading it again.')
 
         updateStepState('checking-readiness', { status: 'in-progress', progress: 0 })
         logger.info('Waiting for synapse to be initialized')
@@ -271,6 +295,7 @@ export const useFilecoinUpload = () => {
               }
 
               case 'piecesConfirmed': {
+                confirmed = true
                 const confirmedDataSetId = event.data.dataSetId
                 if (wallet?.status === 'ready' && confirmedDataSetId != null) {
                   addStoredDataSetId(storageScope ?? wallet.data.address, Number(confirmedDataSetId))
@@ -432,6 +457,7 @@ export const useFilecoinUpload = () => {
           // First upload from this browser
           result = await uploadIntoFreshDataSets()
         }
+        confirmed ||= result.copies.length > 0
         logger.info('Upload completed')
 
         // The SDK resolves once all attempts settle, even if only some copies
@@ -477,13 +503,24 @@ export const useFilecoinUpload = () => {
         }))
         throw error
       } finally {
+        if (!retainLockForDirectory || !confirmed) releaseUploadLock()
         setUploadState((prev) => ({
           ...prev,
           isUploading: false,
         }))
       }
     },
-    [updateStepState, synapseRef, wallet, addDataSetId, debugParams, storageScope, ensurePermissions]
+    [
+      updateStepState,
+      synapseRef,
+      wallet,
+      addDataSetId,
+      debugParams,
+      storageScope,
+      ensurePermissions,
+      retainLockForDirectory,
+      releaseUploadLock,
+    ]
   )
 
   const resetUpload = useCallback(() => {
@@ -506,5 +543,6 @@ export const useFilecoinUpload = () => {
     uploadState,
     uploadFile,
     resetUpload,
+    releaseUploadLock,
   }
 }

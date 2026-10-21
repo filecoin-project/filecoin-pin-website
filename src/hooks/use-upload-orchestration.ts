@@ -29,7 +29,7 @@ interface UploadedFile {
  * - Manage expansion state (that's useUploadExpansion's job)
  */
 export function useUploadOrchestration() {
-  const { uploadState, uploadFile, resetUpload } = useFilecoinUpload()
+  const { uploadState, uploadFile, resetUpload, releaseUploadLock } = useFilecoinUpload(true)
   const { addUpload, history, hasUnsavedChanges } = useUploadHistory()
   const { uploadOutcome } = useUploadProgress({ stepStates: uploadState.stepStates, cid: uploadState.currentCid })
 
@@ -44,10 +44,11 @@ export function useUploadOrchestration() {
   // Key to force DragNDrop remount (clears its internal file state)
   const [dragDropKey, setDragDropKey] = useState(0)
   const finishUpload = useCallback(() => {
+    releaseUploadLock()
     setUploadedFile(null)
     resetUpload()
     setDragDropKey((prev) => prev + 1)
-  }, [resetUpload])
+  }, [resetUpload, releaseUploadLock])
 
   // Another directory action can persist the retained checkpoint after a quota failure.
   useEffect(() => {
@@ -59,6 +60,7 @@ export function useUploadOrchestration() {
     )
       return
     setDirectorySaveError(null)
+    if (!uploadState.isUploading) releaseUploadLock()
     if (!uploadState.isUploading && !uploadState.error && isUploadSuccessful && uploadState.copies) finishUpload()
   }, [
     directorySaveError,
@@ -71,6 +73,7 @@ export function useUploadOrchestration() {
     isUploadSuccessful,
     uploadState.copies,
     finishUpload,
+    releaseUploadLock,
   ])
 
   /**
@@ -140,6 +143,7 @@ export function useUploadOrchestration() {
         if (!current) return
         setIsSavingDirectory(false)
         setDirectorySaveError(null)
+        if (!uploadState.isUploading) releaseUploadLock()
         // Do not discard the active file until its final directory checkpoint is durable.
         if (uploadState.isUploading || uploadState.error || !isUploadSuccessful || !uploadState.copies) return
         finishUpload()
@@ -171,6 +175,7 @@ export function useUploadOrchestration() {
     addUpload,
     finishUpload,
     saveAttempt,
+    releaseUploadLock,
   ])
 
   const handleUpload = useCallback(
@@ -201,12 +206,13 @@ export function useUploadOrchestration() {
 
   const cancelUpload = useCallback(() => {
     console.debug('[UploadOrchestration] Canceling upload')
+    releaseUploadLock()
     setUploadedFile(null)
     setDirectorySaveError(null)
     setIsSavingDirectory(false)
     resetUpload()
     setDragDropKey((prev) => prev + 1)
-  }, [resetUpload])
+  }, [resetUpload, releaseUploadLock])
 
   const retryUpload = useCallback(() => {
     if (!uploadedFile) {

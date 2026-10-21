@@ -498,7 +498,7 @@ it('blocks a second deletion tab, then resumes the latest progress after the fir
   if (!dialogB) throw new Error('Missing second tab dialog')
   fireEvent.click(within(dialogB).getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
   fireEvent.click(within(dialogB).getByRole('button', { name: 'Continue deletion' }))
-  await within(dialogB).findByText(/being deleted in another tab/)
+  await within(dialogB).findByText(/being uploaded or deleted in another tab/)
   expect(mocks.submit).toHaveBeenCalledOnce()
   expect(mocks.receipt).toHaveBeenCalledOnce()
   await act(async () => confirm({ status: 'success' }))

@@ -3,24 +3,17 @@ import { from as pieceFrom } from '@filoz/synapse-core/piece'
 import type { Synapse } from '@filoz/synapse-sdk'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import type { DeletionCheckpoint, DeletionUpdate } from '../../utils/file-deletion.ts'
-import { requireDirectoryLocks } from '../local-storage/directory-store.ts'
 import { type DriveNetwork, publicClient } from './browser-wallet.ts'
+import { acquireContentLock } from './content-lock.ts'
 
-/** Coordinate the whole deletion separately from the short directory read/write lock. */
-export async function withFileDeletionLock<T>(
-  scope: string,
-  pieceCid: string,
-  operation: () => Promise<T>
-): Promise<T> {
-  return requireDirectoryLocks().request(
-    `filecoin-drive-deletion-${scope}-${pieceCid}`,
-    { ifAvailable: true },
-    (lock) => {
-      if (!lock)
-        throw new Error('This content is being deleted in another tab. Wait for it to finish before continuing.')
-      return operation()
-    }
-  )
+/** Hold through the chain operation and its durable directory checkpoints. */
+export async function withFileDeletionLock<T>(scope: string, rootCid: string, operation: () => Promise<T>): Promise<T> {
+  const release = await acquireContentLock(scope, rootCid)
+  try {
+    return await operation()
+  } finally {
+    await release()
+  }
 }
 
 // Persist the hash before waiting. A retry checks that receipt instead of submitting twice.

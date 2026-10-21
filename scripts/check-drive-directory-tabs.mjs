@@ -70,7 +70,24 @@ export async function checkDirectoryTabs(page, errors) {
         return error.message
       }
     }, scope)
-    assert.match(concurrentDeletion, /being deleted in another tab/)
+    assert.match(concurrentDeletion, /being uploaded or deleted in another tab/)
+
+    const blockedUpload = await sibling.evaluate(async (scope) => {
+      const { acquireContentLock } = await import('/src/lib/filecoin-pin/content-lock.ts')
+      try {
+        const release = await acquireContentLock(scope, 'test-piece')
+        release()
+        return 'started'
+      } catch (error) {
+        return error.message
+      }
+    }, scope)
+    assert.match(blockedUpload, /being uploaded or deleted/)
+    await sibling.evaluate(async (scope) => {
+      const { acquireContentLock } = await import('/src/lib/filecoin-pin/content-lock.ts')
+      const release = await acquireContentLock(scope, 'different-root')
+      release()
+    }, scope)
 
     // Independent folder writes must also merge instead of replacing another tab's folders.
     await Promise.all(
@@ -99,6 +116,22 @@ export async function checkDirectoryTabs(page, errors) {
       }, scope),
       'available'
     )
+
+    // Reverse direction: an upload lease also excludes deletion in another tab.
+    await page.evaluate(async (scope) => {
+      const { acquireContentLock } = await import('/src/lib/filecoin-pin/content-lock.ts')
+      window.__releaseUploadLock = await acquireContentLock(scope, 'test-piece')
+    }, scope)
+    const blockedDeletion = await sibling.evaluate(async (scope) => {
+      const { withFileDeletionLock } = await import('/src/lib/filecoin-pin/delete.ts')
+      try {
+        return await withFileDeletionLock(scope, 'test-piece', async () => 'started')
+      } catch (error) {
+        return error.message
+      }
+    }, scope)
+    assert.match(blockedDeletion, /being uploaded or deleted/)
+    await page.evaluate(async () => window.__releaseUploadLock())
 
     // Freeze a real tab and suppress storage events so resume must recover missed updates.
     await page.evaluate(() => {

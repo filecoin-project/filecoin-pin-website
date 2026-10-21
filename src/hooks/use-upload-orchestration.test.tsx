@@ -24,6 +24,7 @@ vi.mock('./use-filecoin-pin-context.ts', () => ({ useFilecoinPinContext: () => c
 import { UploadError } from '../components/upload/upload-error.tsx'
 import type { FilecoinPinContextValue } from '../context/filecoin-pin-provider.tsx'
 import { UploadHistoryProvider, useUploadHistory } from '../context/upload-history-context.tsx'
+import { withFileDeletionLock } from '../lib/filecoin-pin/delete.ts'
 import { getCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import { useUploadOrchestration } from './use-upload-orchestration.ts'
 
@@ -167,6 +168,9 @@ it.each(['retry button', 'another directory save'] as const)(
       await waitFor(() => expect(result.current.upload.directorySaveError).toContain('export a directory backup'))
       expect(result.current.upload.activeUpload.isUploading).toBe(false)
       expect(result.current.upload.uploadedFile).not.toBeNull()
+      const rootCid = result.current.upload.activeUpload.currentCid
+      if (!rootCid) throw new Error('Missing root CID')
+      await expect(withFileDeletionLock(scope, rootCid, async () => 'deleted')).rejects.toThrow('Retry after')
       const checkpoint = getCachedPieces(scope)?.[0]
       if (!checkpoint) throw new Error('Missing upload checkpoint')
       write.mockRestore()
@@ -183,6 +187,7 @@ it.each(['retry button', 'another directory save'] as const)(
       const persisted = JSON.parse(localStorage.getItem(`filecoin-pin-piece-cache-v1-${scope}`) ?? '[]')[0]
       expect(persisted).toMatchObject({ id: checkpoint.id, ipfsIndexed: true, transactionHashes: [hashA] })
       expect(mocks.execute).toHaveBeenCalledOnce()
+      await expect(withFileDeletionLock(scope, rootCid, async () => 'available')).resolves.toBe('available')
     } finally {
       write.mockRestore()
     }

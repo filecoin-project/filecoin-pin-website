@@ -36,21 +36,26 @@ for (const name of ['localStorage', 'sessionStorage'] as const) {
 }
 
 // jsdom has no Web Locks. Serialize same-name requests here; browser tests use native locks across real tabs.
-const lockTails = new Map<string, Promise<unknown>>()
+const lockTails = new Map<string, Array<{ mode: LockMode; done: Promise<unknown> }>>()
 Object.defineProperty(navigator, 'locks', {
   configurable: true,
   value: {
     request: (name: string, optionsOrOperation: LockOptions | LockGrantedCallback, callback?: LockGrantedCallback) => {
       const operation = typeof optionsOrOperation === 'function' ? optionsOrOperation : callback
       if (!operation) throw new TypeError('A lock callback is required')
-      if (typeof optionsOrOperation !== 'function' && optionsOrOperation.ifAvailable && lockTails.has(name))
-        return Promise.resolve().then(() => operation(null))
-      const run = () => operation({ name, mode: 'exclusive' } as Lock)
-      const result = (lockTails.get(name) ?? Promise.resolve()).then(run, run)
-      const tail = result.catch(() => undefined)
-      lockTails.set(name, tail)
-      void tail.then(() => {
-        if (lockTails.get(name) === tail) lockTails.delete(name)
+      const options = typeof optionsOrOperation === 'function' ? {} : optionsOrOperation
+      const mode = options.mode ?? 'exclusive'
+      const holders = lockTails.get(name) ?? []
+      const compatible = mode === 'shared' && holders.every((holder) => holder.mode === 'shared')
+      if (options.ifAvailable && holders.length && !compatible) return Promise.resolve().then(() => operation(null))
+      const run = () => operation({ name, mode } as Lock)
+      const result = (compatible ? Promise.resolve() : Promise.all(holders.map((holder) => holder.done))).then(run)
+      const holder = { mode, done: result.catch(() => undefined) }
+      lockTails.set(name, [...holders, holder])
+      void holder.done.then(() => {
+        const remaining = (lockTails.get(name) ?? []).filter((entry) => entry !== holder)
+        if (remaining.length) lockTails.set(name, remaining)
+        else lockTails.delete(name)
       })
       return result
     },

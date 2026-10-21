@@ -198,7 +198,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
   }
   const deleteFile = async () => {
     if (!selected || !synapse || !ensurePermissions || !storageScope) return
-    await withFileDeletionLock(storageScope, selected.pieceCid, async () => {
+    await withFileDeletionLock(storageScope, selected.cid, async () => {
       // Retry retained checkpoints before starting another chain operation.
       await mutateHistory((current) => current)
       await ensurePermissions()
