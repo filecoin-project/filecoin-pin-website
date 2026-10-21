@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { beforeEach, expect, it, vi } from 'vitest'
 import { UploadHistoryProvider } from '../../context/upload-history-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
-import { parseDirectoryBackup } from '../../lib/local-storage/drive-directory.ts'
+import { parseDirectoryBackup, readFolders, saveFolders } from '../../lib/local-storage/drive-directory.ts'
 import {
   addCachedPiece,
   getCachedPieces,
@@ -512,4 +512,43 @@ it('blocks a second deletion tab, then resumes the latest progress after the fir
     '1': { transactionHash: hash, confirmed: true },
     '2': { transactionHash: secondHash, confirmed: true },
   })
+})
+
+it('confirms empty-folder removal, returns to its parent and never submits a chain transaction', async () => {
+  await saveFolders(scope, ['reports/empty'])
+  const navigate = vi.fn()
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="reports/empty" onFolderChange={navigate} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Delete folder' }))
+  const dialog = screen.getByRole('dialog', { name: 'Delete folder?' })
+  expect(within(dialog).getByText(/No files will be deleted from Filecoin/)).toBeTruthy()
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Delete folder' }))
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith('reports'))
+  expect(readFolders(scope)).toEqual(['reports'])
+  expect(mocks.submit).not.toHaveBeenCalled()
+  expect(mocks.permissions).not.toHaveBeenCalled()
+})
+
+it('explains why a nonempty folder cannot be deleted and does not offer root deletion', async () => {
+  await saveFolders(scope, ['reports/child'])
+  const view = render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="reports" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Delete folder' }))
+  const dialog = screen.getByRole('dialog', { name: 'Delete folder?' })
+  expect(within(dialog).getByText(/not empty/)).toBeTruthy()
+  expect(within(dialog).getByRole('button', { name: 'Delete folder' })).toHaveProperty('disabled', true)
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+  view.rerender(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  expect(screen.queryByRole('button', { name: 'Delete folder' })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Files (root)' }).getAttribute('aria-current')).toBe('page')
 })

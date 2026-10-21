@@ -50,7 +50,22 @@ try {
   await checkDirectoryTabs(page, errors)
   await page.getByRole('textbox', { name: 'New folder name' }).fill('reports/2026')
   await page.getByRole('button', { name: 'Create folder', exact: true }).click()
-  await page.getByRole('button', { name: 'All files at root', exact: true }).click()
+  await page.getByRole('button', { name: 'Files (root)', exact: true }).click()
+  await page.getByRole('textbox', { name: 'New folder name' }).fill('temporary-review')
+  await page.getByRole('button', { name: 'Create folder', exact: true }).click()
+  await page.getByRole('button', { name: 'Delete folder', exact: true }).click()
+  const folderDialog = page.getByRole('dialog', { name: 'Delete folder?' })
+  await folderDialog.getByRole('button', { name: 'Delete folder', exact: true }).click()
+  await folderDialog.waitFor({ state: 'hidden' })
+  assert.equal(
+    await page
+      .getByRole('navigation', { name: 'File folders' })
+      .getByRole('button', { name: 'temporary-review', exact: true })
+      .count(),
+    0
+  )
+  await page.getByRole('button', { name: 'Files (root)', exact: true }).waitFor()
+
   await page.getByRole('button', { name: 'Details', exact: true }).click()
   await page.getByLabel('Display name', { exact: true }).fill('Annual report.pdf')
   await page.getByRole('combobox', { name: 'File folder', exact: true }).selectOption('reports/2026')

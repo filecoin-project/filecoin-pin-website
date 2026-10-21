@@ -1,5 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import {
+  ChevronDown,
   ChevronRight,
   Download,
   Eye,
@@ -25,6 +26,7 @@ import { scheduleFileDeletion, withFileDeletionLock } from '../../lib/filecoin-p
 import { saveBlob } from '../../lib/filecoin-pin/download.ts'
 import { addStoredDataSetId } from '../../lib/local-storage/data-set.ts'
 import {
+  deleteEmptyFolder,
   directoryFolders,
   normalizeFolder,
   parseDirectoryBackup,
@@ -80,6 +82,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
   }, [storageScope])
   const [search, setSearch] = useState('')
   const [newFolder, setNewFolder] = useState('')
+  const [folderToDelete, setFolderToDelete] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [moveTo, setMoveTo] = useState('')
   const [rename, setRename] = useState('')
@@ -95,6 +98,10 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
   const [showFolders, setShowFolders] = useState(false)
   const visibleHistory = history.filter((file) => !isDeletionScheduled(file))
   const allFolders = directoryFolders(visibleHistory, folders)
+  const folderHasContents =
+    folderToDelete !== null &&
+    (visibleHistory.some((file) => (file.folderPath ?? '') === folderToDelete) ||
+      allFolders.some((path) => path.startsWith(`${folderToDelete}/`)))
   const selected = history.find((file) => file.id === selectedId)
   const selectedAliases = selected ? history.filter((file) => file.pieceCid === selected.pieceCid) : []
   const allAliasesScheduled =
@@ -153,6 +160,15 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
       await saveFolders(storageScope ?? '', [path])
       setNewFolder('')
       onFolderChange(path)
+    })
+  const removeFolder = () =>
+    act(async () => {
+      if (!folderToDelete || !storageScope) return
+      const path = folderToDelete
+      await deleteEmptyFolder(storageScope, path)
+      setFolderToDelete(null)
+      if (folder === path) onFolderChange(path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '')
+      setNotice('Folder removed from this browser.')
     })
   const exportDirectory = () => {
     const files = getLatestHistory()
@@ -380,14 +396,16 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
           <div className={`${showFolders ? 'block' : 'hidden'} md:block`}>
             <button
               aria-current={folder === '' ? 'page' : undefined}
+              aria-label="Files (root)"
               className={`flex w-full items-center gap-2.5 rounded-lg p-2.5 text-left text-sm transition-colors ${folder === '' ? 'bg-brand-800/15 text-accent' : 'text-muted hover:bg-surface-raised hover:text-foreground'}`}
               onClick={() => onFolderChange('')}
               type="button"
             >
-              <FolderOpen size={16} />
-              All files at root
+              <ChevronDown aria-hidden="true" className="shrink-0" size={14} />
+              <FolderOpen aria-hidden="true" className="shrink-0" size={16} />
+              Files
             </button>
-            <div className="max-h-52 overflow-y-auto md:max-h-80">
+            <div className="ml-8 max-h-52 overflow-y-auto border-l border-border pl-2 md:max-h-80">
               {allFolders.map((path) => (
                 <button
                   aria-current={folder === path ? 'page' : undefined}
@@ -427,26 +445,43 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
         </nav>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
-            <nav aria-label="Current folder" className="flex flex-wrap items-center gap-2 text-sm">
-              <button className="text-muted hover:text-accent" onClick={() => onFolderChange('')} type="button">
-                Files
-              </button>
-              {folder
-                .split('/')
-                .filter(Boolean)
-                .map((part, index, parts) => (
-                  <span className="flex gap-2" key={parts.slice(0, index + 1).join('/')}>
-                    <ChevronRight aria-hidden="true" className="self-center text-muted" size={13} />
-                    <button
-                      className="hover:text-accent"
-                      onClick={() => onFolderChange(parts.slice(0, index + 1).join('/'))}
-                      type="button"
-                    >
-                      {part}
-                    </button>
-                  </span>
-                ))}
-            </nav>
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <nav aria-label="Current folder" className="flex flex-wrap items-center gap-2 text-sm">
+                <button className="text-muted hover:text-accent" onClick={() => onFolderChange('')} type="button">
+                  Files
+                </button>
+                {folder
+                  .split('/')
+                  .filter(Boolean)
+                  .map((part, index, parts) => (
+                    <span className="flex gap-2" key={parts.slice(0, index + 1).join('/')}>
+                      <ChevronRight aria-hidden="true" className="self-center text-muted" size={13} />
+                      <button
+                        className="hover:text-accent"
+                        onClick={() => onFolderChange(parts.slice(0, index + 1).join('/'))}
+                        type="button"
+                      >
+                        {part}
+                      </button>
+                    </span>
+                  ))}
+              </nav>
+              {folder && (
+                <Button
+                  className="w-auto"
+                  disabled={disabled || !storageScope}
+                  onClick={() => {
+                    setError('')
+                    setFolderToDelete(folder)
+                  }}
+                  size="sm"
+                  variant="secondary"
+                >
+                  <Trash2 aria-hidden="true" size={14} />
+                  Delete folder
+                </Button>
+              )}
+            </div>
             <div className="relative w-full sm:w-56">
               <Search
                 aria-hidden="true"
@@ -587,6 +622,58 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
           </div>
         </div>
       </div>
+      <Dialog.Root
+        onOpenChange={(open) => {
+          if (!open && !working) setFolderToDelete(null)
+        }}
+        open={folderToDelete !== null}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/70" />
+          <Dialog.Content
+            className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-surface p-6 shadow-xl"
+            onEscapeKeyDown={(event) => {
+              if (working) event.preventDefault()
+            }}
+            onPointerDownOutside={(event) => {
+              if (working) event.preventDefault()
+            }}
+          >
+            <Dialog.Title className="text-lg font-semibold">Delete folder?</Dialog.Title>
+            <p className="mt-2 break-words text-sm font-medium">{folderToDelete}</p>
+            <Dialog.Description className="mt-2 text-sm leading-relaxed text-muted">
+              {folderHasContents
+                ? 'This folder is not empty. Move its files and remove its subfolders first.'
+                : 'Remove this empty folder from this browser’s directory. No files will be deleted from Filecoin.'}
+            </Dialog.Description>
+            {error && (
+              <p className="mt-3 text-sm text-warning" role="alert">
+                {error}
+              </p>
+            )}
+            <div className="mt-5 flex justify-end gap-3">
+              <Button
+                className="w-auto"
+                disabled={working}
+                onClick={() => setFolderToDelete(null)}
+                size="sm"
+                variant="secondary"
+              >
+                Cancel
+              </Button>
+              <Button
+                className="w-auto"
+                disabled={disabled || folderHasContents || !storageScope}
+                onClick={() => void removeFolder()}
+                size="sm"
+                variant="danger"
+              >
+                Delete folder
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
       <Dialog.Root
         onOpenChange={(open) => {
           if (!open && !working) setSelectedId(null)

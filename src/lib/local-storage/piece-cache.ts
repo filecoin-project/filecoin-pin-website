@@ -17,6 +17,8 @@ const store = createDirectoryStore<DatasetPiece[]>(getPieceCacheKey, (raw) => {
   return parsed as DatasetPiece[]
 })
 
+/** Strict read for directory operations that must not treat corrupt metadata as empty. */
+export const readDirectoryPieces = store.read
 export const mutateCachedPieces = store.mutate
 export const subscribeCachedPieces = store.subscribe
 export const hasUnsavedPieces = store.hasUnsaved

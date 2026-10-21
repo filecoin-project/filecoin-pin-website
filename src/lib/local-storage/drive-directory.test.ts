@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { directoryFolders, normalizeFolder, parseDirectoryBackup, readFolders, saveFolders } from './drive-directory.ts'
+import {
+  deleteEmptyFolder,
+  directoryFolders,
+  normalizeFolder,
+  parseDirectoryBackup,
+  readFolders,
+  saveFolders,
+} from './drive-directory.ts'
+
+import { mutateCachedPieces, setCachedPieces } from './piece-cache.ts'
 
 const record = {
   id: 'file-1',
@@ -28,6 +37,7 @@ describe('browser directory boundaries', () => {
   })
   it('builds parent folders and rejects traversal paths', () => {
     expect(directoryFolders([], ['a/b/c', 'a/b'])).toEqual(['a', 'a/b', 'a/b/c'])
+    expect(directoryFolders([], ['reports-old', 'reports/2026'])).toEqual(['reports', 'reports/2026', 'reports-old'])
     expect(normalizeFolder('/a//b/')).toBe('a/b')
     expect(() => normalizeFolder('a/../b')).toThrow('dot segments')
   })
@@ -67,5 +77,52 @@ describe('browser directory boundaries', () => {
     { deletion: { '2': { transactionHash: `0x${'a'.repeat(64)}`, confirmed: true } } },
   ])('rejects malformed storage references without accepting a partial directory: %j', (invalid) => {
     expect(() => parseDirectoryBackup(backupFor({ ...record, ...invalid }), '314:alice', 'mainnet')).toThrow()
+  })
+})
+
+describe('empty folder removal', () => {
+  const scope = '314:alice'
+  it('removes only the selected empty leaf, preserving its parent and other wallets', async () => {
+    await saveFolders(scope, ['reports/2026', 'reports/2027'])
+    await saveFolders('314:bob', ['reports/2026'])
+    await deleteEmptyFolder(scope, 'reports/2026')
+    expect(readFolders(scope)).toEqual(['reports', 'reports/2027'])
+    expect(readFolders('314:bob')).toEqual(['reports', 'reports/2026'])
+    await expect(deleteEmptyFolder(scope, '')).rejects.toThrow('root')
+  })
+  it('rejects folders containing files or subfolders without altering their records', async () => {
+    await saveFolders(scope, ['reports/2026'])
+    await expect(deleteEmptyFolder(scope, 'reports')).rejects.toThrow('not empty')
+    setCachedPieces(scope, [record])
+    await expect(deleteEmptyFolder(scope, 'reports/2026')).rejects.toThrow('not empty')
+    expect(readFolders(scope)).toEqual(['reports', 'reports/2026'])
+  })
+  it('checks the latest file directory after a competing writer releases the lock', async () => {
+    await saveFolders(scope, ['reports/2026'])
+    let release!: () => void
+    let acquired!: () => void
+    const ready = new Promise<void>((resolve) => {
+      acquired = resolve
+    })
+    const holding = navigator.locks.request(`filecoin-drive-directory-${scope}`, async () => {
+      acquired()
+      await new Promise<void>((resolve) => {
+        release = resolve
+      })
+    })
+    await ready
+    const writing = mutateCachedPieces(scope, () => [record])
+    const removal = expect(deleteEmptyFolder(scope, 'reports/2026')).rejects.toThrow('not empty')
+    release()
+    await holding
+    await writing
+    await removal
+    expect(readFolders(scope)).toContain('reports/2026')
+  })
+  it('refuses to treat a corrupt file directory as an empty folder', async () => {
+    await saveFolders(scope, ['empty'])
+    localStorage.setItem(`filecoin-pin-piece-cache-v1-${scope}`, '{broken')
+    await expect(deleteEmptyFolder(scope, 'empty')).rejects.toThrow()
+    expect(readFolders(scope)).toEqual(['empty'])
   })
 })

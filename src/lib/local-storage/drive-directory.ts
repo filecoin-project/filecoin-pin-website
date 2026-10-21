@@ -3,6 +3,7 @@ import { CID } from 'multiformats/cid'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { isDeletionScheduled } from '../../utils/file-deletion.ts'
 import { createDirectoryStore } from './directory-store.ts'
+import { readDirectoryPieces } from './piece-cache.ts'
 
 const folderStore = createDirectoryStore<string[]>(
   (scope) => `filecoin-drive-folders-${scope}`,
@@ -34,7 +35,15 @@ export function directoryFolders(files: DatasetPiece[], folders: string[]): stri
     const parts = normalizeFolder(value).split('/').filter(Boolean)
     for (let i = 1; i <= parts.length; i++) result.add(parts.slice(0, i).join('/'))
   }
-  return [...result].sort()
+  // Keep descendants beside their parent, even when a sibling shares its prefix.
+  return [...result].sort((left, right) => {
+    const a = left.split('/')
+    const b = right.split('/')
+    for (let i = 0; i < Math.min(a.length, b.length); i++) {
+      if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1
+    }
+    return a.length - b.length
+  })
 }
 
 export function readFolders(scope: string): string[] {
@@ -48,6 +57,25 @@ export function readFolders(scope: string): string[] {
 export function saveFolders(scope: string, folders: string[]): Promise<string[]> {
   const normalized = directoryFolders([], folders)
   return folderStore.mutate(scope, (current) => directoryFolders([], [...current, ...normalized]))
+}
+
+/** Recheck both stores under their shared wallet/network lock before removing a folder. */
+export async function deleteEmptyFolder(scope: string, path: string): Promise<string[]> {
+  const target = normalizeFolder(path)
+  if (!scope || !target) throw new Error('The root folder cannot be deleted.')
+  return folderStore.mutate(
+    scope,
+    (current) => {
+      const files = readDirectoryPieces(scope).filter((file) => !isDeletionScheduled(file))
+      if (
+        files.some((file) => (file.folderPath ?? '') === target) ||
+        directoryFolders(files, current).some((folder) => folder.startsWith(`${target}/`))
+      )
+        throw new Error('This folder is not empty. Move its files and remove its subfolders first.')
+      return current.filter((folder) => folder !== target)
+    },
+    { retainOnFailure: false }
+  )
 }
 
 export function parseDirectoryBackup(
