@@ -56,3 +56,15 @@ describe('explicit owner payment actions', () => {
     ).rejects.toThrow('reverted')
   })
 })
+
+it.each(['deposit', 'approve'])(
+  'registers %s with the shared confirmation tracker before reporting success',
+  async (kind) => {
+    const track = vi.fn().mockRejectedValue(new Error('Still pending'))
+    await expect(
+      kind === 'deposit' ? depositStorageFunds(synapse, 1n, track) : approveStoragePayments(synapse, track)
+    ).rejects.toThrow('Still pending')
+    expect(track).toHaveBeenCalledWith(hash)
+    expect(receipt).not.toHaveBeenCalled()
+  }
+)

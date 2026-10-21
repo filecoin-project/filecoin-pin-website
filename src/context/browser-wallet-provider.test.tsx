@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   write: vi.fn(),
   receipt: vi.fn(),
+  getReceipt: vi.fn(),
+  revoked: vi.fn(),
   validate: vi.fn(),
   load: vi.fn(),
   save: vi.fn(),
@@ -15,8 +17,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../lib/filecoin-pin/browser-wallet.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/filecoin-pin/browser-wallet.ts')>()),
   ownerClient: () => ({ writeContract: mocks.write }),
-  publicClient: () => ({ waitForTransactionReceipt: mocks.receipt }),
-  browserSynapse: () => ({ validate: mocks.validate, expiresAt: () => Math.floor(Date.now() / 1000) + 7 * 86400 }),
+  publicClient: () => ({ waitForTransactionReceipt: mocks.receipt, getTransactionReceipt: mocks.getReceipt }),
+  browserSynapse: () => ({
+    isRevoked: mocks.revoked,
+    validate: mocks.validate,
+    expiresAt: () => Math.floor(Date.now() / 1000) + 7 * 86400,
+  }),
 }))
 vi.mock('../lib/local-storage/session-vault.ts', () => ({
   loadBrowserSession: mocks.load,
@@ -59,6 +65,8 @@ beforeEach(() => {
   mocks.save.mockResolvedValue(undefined)
   mocks.write.mockResolvedValue(hash)
   mocks.receipt.mockResolvedValue({ status: 'success' })
+  mocks.getReceipt.mockRejectedValue(new Error('Receipt not found'))
+  mocks.revoked.mockResolvedValue(false)
   mocks.validate.mockResolvedValue(undefined)
   mocks.remoteRestore.mockResolvedValue(null)
   mocks.remoteDisconnect.mockResolvedValue(undefined)
@@ -406,4 +414,64 @@ it('stops waiting for an unresponsive wallet and ignores accounts that arrive af
   } finally {
     vi.useRealTimers()
   }
+})
+
+it('keeps timed-out authorization pending, blocks resubmission and recovers its permissions', async () => {
+  mocks.receipt.mockRejectedValue(new Error('Timed out waiting for receipt'))
+  mocks.validate.mockRejectedValue(new SessionPermissionError())
+  const { result } = renderHook(useBrowserWallet, { wrapper })
+  await act(async () => result.current.connect())
+  await act(async () => result.current.authorize(7))
+  expect(result.current.pendingTransaction?.hash).toBe(hash)
+  expect(result.current.error).toBeNull()
+  expect(result.current.busy).toBe(false)
+  await act(async () => result.current.authorize(7))
+  expect(mocks.write).toHaveBeenCalledOnce()
+  mocks.validate.mockResolvedValue(undefined)
+  await act(async () => result.current.refreshTransaction())
+  await waitFor(() => expect(result.current.pendingTransaction).toBeNull())
+  await waitFor(() => expect(result.current.sessionStatus).toBe('active'))
+  expect(mocks.write).toHaveBeenCalledOnce()
+})
+
+it('does not mistake an existing seven-day grant for a successful thirty-day renewal', async () => {
+  const { result } = renderHook(useBrowserWallet, { wrapper })
+  await act(async () => result.current.connect())
+  await act(async () => result.current.authorize(7))
+  await waitFor(() => expect(result.current.sessionStatus).toBe('active'))
+  mocks.receipt.mockRejectedValue(new Error('Timeout'))
+  await act(async () => result.current.authorize(30))
+  await act(async () => result.current.refreshTransaction())
+  expect(result.current.pendingTransaction?.kind).toBe('authorize')
+  expect(result.current.sessionStatus).toBe('checking')
+  mocks.getReceipt.mockResolvedValue({ status: 'success' })
+  await act(async () => result.current.refreshTransaction())
+  await waitFor(() => expect(result.current.pendingTransaction).toBeNull())
+})
+
+it('recovers a timed-out revocation only when all session permissions are revoked', async () => {
+  const { result } = renderHook(useBrowserWallet, { wrapper })
+  await act(async () => result.current.connect())
+  await act(async () => result.current.authorize(7))
+  mocks.receipt.mockRejectedValue(new Error('Timeout'))
+  await act(async () => result.current.revoke())
+  expect(result.current.pendingTransaction?.kind).toBe('revoke')
+  expect(result.current.session).not.toBeNull()
+  mocks.revoked.mockResolvedValue(true)
+  await act(async () => result.current.refreshTransaction())
+  await waitFor(() => expect(result.current.pendingTransaction).toBeNull())
+  expect(result.current.session).toBeNull()
+  expect(mocks.save).toHaveBeenLastCalledWith(`314:${ALICE}`, null)
+})
+
+it('tracks the submitted authorization immediately without another vault write before confirmation', async () => {
+  mocks.save.mockResolvedValueOnce(undefined).mockRejectedValue(new Error('Vault unavailable after signing'))
+  mocks.receipt.mockRejectedValue(new Error('Timeout'))
+  mocks.validate.mockRejectedValue(new SessionPermissionError())
+  const { result } = renderHook(useBrowserWallet, { wrapper })
+  await act(async () => result.current.connect())
+  await act(async () => result.current.authorize(7))
+  expect(mocks.save).toHaveBeenCalledOnce()
+  expect(result.current.pendingTransaction?.hash).toBe(hash)
+  expect(result.current.error).toBeNull()
 })

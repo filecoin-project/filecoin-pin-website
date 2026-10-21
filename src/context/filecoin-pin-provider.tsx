@@ -142,9 +142,11 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
     return refresh
   }, [runtime])
 
+  const transactionRevision = connection.transactionRevision ?? 0
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Confirmed owner transactions change balances without changing the runtime.
   useEffect(() => {
     void refreshWallet()
-  }, [refreshWallet])
+  }, [refreshWallet, transactionRevision])
 
   useEffect(() => {
     logDebugParams()

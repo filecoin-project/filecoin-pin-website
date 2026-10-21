@@ -70,6 +70,7 @@ The main logic demonstrating `filecoin-pin` usage:
 
 - [`src/context/browser-wallet-provider.tsx`](src/context/browser-wallet-provider.tsx) — wallet discovery, account selection, network switching, session authorization and revocation.
 - [`src/lib/filecoin-pin/browser-wallet.ts`](src/lib/filecoin-pin/browser-wallet.ts) — owner and session clients with chain permission validation.
+- [`src/hooks/use-wallet-transaction.ts`](src/hooks/use-wallet-transaction.ts) — bounded confirmation recovery for owner-wallet transactions, with foreground/manual status refresh and wallet/network-scoped pending hashes.
 - [`src/lib/local-storage/session-vault.ts`](src/lib/local-storage/session-vault.ts) — encrypted browser session persistence.
 - [`src/lib/local-storage/drive-directory.ts`](src/lib/local-storage/drive-directory.ts) — virtual folders and validated directory backups.
 - [`src/lib/local-storage/directory-store.ts`](src/lib/local-storage/directory-store.ts) — short per-wallet/network Web Locks, directory notifications and recovery of unsaved local mutations. All live file and folder changes must use this shared persistence path; never save a captured React history array over the directory.

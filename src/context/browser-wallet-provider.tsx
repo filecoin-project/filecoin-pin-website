@@ -2,14 +2,14 @@ import { asClient } from '@filoz/synapse-core/client'
 import { loginCall, revokeCall } from '@filoz/synapse-core/session-key'
 import { Synapse } from '@filoz/synapse-sdk'
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { type Address, getAddress } from 'viem'
+import { type Address, getAddress, type Hash } from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
+import { PendingWalletTransactionError, useWalletTransaction } from '../hooks/use-wallet-transaction.ts'
 import {
   browserSynapse,
   chains,
   type DriveNetwork,
   ownerClient,
-  publicClient,
   SessionPermissionError,
   scopeFor,
   UPLOAD_PERMISSIONS,
@@ -25,6 +25,7 @@ import { readWalletConnectAccount } from '../lib/filecoin-pin/wallet-connect-acc
 import { readNetworkPreference, saveNetworkPreference } from '../lib/local-storage/network.ts'
 import { type BrowserSession, loadBrowserSession, saveBrowserSession } from '../lib/local-storage/session-vault.ts'
 import { readWalletPreference, saveWalletPreference } from '../lib/local-storage/wallet-connection.ts'
+import type { WalletTransaction } from '../lib/local-storage/wallet-transaction.ts'
 
 type InjectedProvider = BrowserProvider
 type WalletOption = { id: string; name: string; rdns?: string; provider: InjectedProvider }
@@ -45,7 +46,14 @@ interface WalletConnection {
   switchNetwork: (network: DriveNetwork) => Promise<void>
   authorize: (days: number) => Promise<void>
   revoke: () => Promise<void>
-  paymentAction: (action: (synapse: Synapse) => Promise<unknown>) => Promise<void>
+  paymentAction: (
+    action: (synapse: Synapse, confirm: (hash: Hash) => Promise<void>) => Promise<unknown>,
+    kind?: 'deposit' | 'approve'
+  ) => Promise<void>
+  pendingTransaction: WalletTransaction | null
+  checkingTransaction: boolean
+  transactionRevision: number
+  refreshTransaction: () => void
   setUploading: (uploading: boolean) => void
 }
 const Context = createContext<WalletConnection | null>(null)
@@ -68,6 +76,37 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
   const locked = useRef(false)
   locked.current = busy || uploading
   const deferredAccount = useRef<Address | null | undefined>(undefined)
+
+  const reconcileTransaction = useCallback(
+    async (transaction: WalletTransaction) => {
+      if (!address || !session || (transaction.kind !== 'authorize' && transaction.kind !== 'revoke')) return false
+      const runtime = browserSynapse(address, network, session)
+      if (transaction.kind === 'revoke') return runtime.isRevoked()
+      try {
+        await runtime.validate()
+        return runtime.expiresAt() >= (transaction.expiresAt ?? Infinity)
+      } catch (cause) {
+        if (cause instanceof SessionPermissionError) return false
+        throw cause
+      }
+    },
+    [address, network, session]
+  )
+  const transactionConfirmed = useCallback(
+    async (transaction: WalletTransaction) => {
+      if (!address) return
+      const scope = scopeFor(address, network)
+      if (transaction.kind === 'revoke') {
+        await saveBrowserSession(scope, null)
+        if (identity.current === scope) setSession(null)
+      } else if (transaction.kind === 'authorize') {
+        const restored = await loadBrowserSession(scope)
+        if (identity.current === scope && restored) setSession(restored)
+      }
+    },
+    [address, network]
+  )
+  const transaction = useWalletTransaction(address, network, busy, reconcileTransaction, transactionConfirmed)
 
   useEffect(() => {
     const announce = (event: Event) => {
@@ -164,7 +203,7 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
     setSessionStatus('checking')
     // Owner transactions can change these expirations. Validate only after the
     // transaction settles so an old chain read cannot overwrite the new grant.
-    if (busy) return
+    if (busy || transaction.pending?.kind === 'authorize' || transaction.pending?.kind === 'revoke') return
     const runtime = browserSynapse(address, network, session)
     let retryTimer: ReturnType<typeof setTimeout> | undefined
     let retryDelay = 5000
@@ -206,7 +245,7 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
       cancelled = true
       clearTimeout(retryTimer)
     }
-  }, [address, network, session, busy])
+  }, [address, network, session, busy, transaction.pending])
 
   useEffect(() => {
     if (!session) return
@@ -299,7 +338,8 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
     try {
       await action()
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Wallet operation failed')
+      if (!(cause instanceof PendingWalletTransactionError))
+        setError(cause instanceof Error ? cause.message : 'Wallet operation failed')
     } finally {
       setBusy(false)
       locked.current = uploading
@@ -326,7 +366,11 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
         busy,
         restoring,
         uploading,
-        error,
+        error: error ?? transaction.error,
+        pendingTransaction: transaction.pending,
+        checkingTransaction: transaction.checking,
+        transactionRevision: transaction.revision,
+        refreshTransaction: transaction.refresh,
         options,
         walletConnectAvailable,
         setUploading: (value) => {
@@ -378,6 +422,7 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
           }),
         authorize: (days) =>
           run(async () => {
+            if (transaction.pending) return
             if (!address || ![1, 7, 30].includes(days)) throw new Error('Choose a session duration')
             const scope = scopeFor(address, network)
             const client = await requireOwner()
@@ -398,15 +443,13 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
               })
             )
             next.transactionHash = hash
-            await saveBrowserSession(scope, next)
-            const receipt = await publicClient(network).waitForTransactionReceipt({ hash })
-            if (receipt.status !== 'success') throw new Error('Session authorization reverted')
+            // Track the submitted hash immediately; the key was saved before signing.
+            await transaction.confirm(hash, 'authorize', next.expiresAt)
             if (identity.current === scope) setSession({ ...next })
           }),
         revoke: () =>
           run(async () => {
-            if (!address || !session) return
-            const scope = scopeFor(address, network)
+            if (transaction.pending || !address || !session) return
             const client = await requireOwner()
             const hash = await client.writeContract(
               revokeCall({
@@ -416,15 +459,15 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
                 origin: 'Filecoin Drive',
               })
             )
-            const receipt = await publicClient(network).waitForTransactionReceipt({ hash })
-            if (receipt.status !== 'success') throw new Error('Session revocation reverted')
-            await saveBrowserSession(scope, null)
-            if (identity.current === scope) setSession(null)
+            await transaction.confirm(hash, 'revoke')
           }),
-        paymentAction: (action) =>
+        paymentAction: (action, kind = 'deposit') =>
           run(async () => {
+            if (transaction.pending) return
             const client = await requireOwner()
-            await action(new Synapse({ client: asClient(client), source: 'filecoin-pin' }))
+            await action(new Synapse({ client: asClient(client), source: 'filecoin-pin' }), (hash) =>
+              transaction.confirm(hash, kind)
+            )
           }),
       }}
     >

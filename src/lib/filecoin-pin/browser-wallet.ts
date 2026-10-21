@@ -56,6 +56,13 @@ export function browserSynapse(
   return {
     synapse,
     validate,
+    isRevoked: async () => {
+      if (!key) return false
+      await key.syncExpirations(UPLOAD_PERMISSIONS)
+      return UPLOAD_PERMISSIONS.every(
+        (permission) => key.expirations[permission] <= BigInt(Math.floor(Date.now() / 1000))
+      )
+    },
     expiresAt: () =>
       key
         ? Number(

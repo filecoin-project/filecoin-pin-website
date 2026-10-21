@@ -1,11 +1,23 @@
 import { formatUSDFC } from 'filecoin-pin/core/utils'
-import { ArrowUpRight, Check, ChevronDown, KeyRound, Moon, QrCode, ShieldCheck, Sun, Wallet } from 'lucide-react'
+import {
+  ArrowUpRight,
+  Check,
+  ChevronDown,
+  Clock3,
+  KeyRound,
+  Moon,
+  QrCode,
+  ShieldCheck,
+  Sun,
+  Wallet,
+} from 'lucide-react'
 import { useState } from 'react'
 import { parseUnits } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useTheme } from '../../context/theme-provider.tsx'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
+import { chains } from '../../lib/filecoin-pin/browser-wallet.ts'
 import { approveStoragePayments, depositStorageFunds } from '../../lib/filecoin-pin/payments.ts'
 import { shortenAddress } from '../../lib/filecoin-pin/wallet.ts'
 import { ButtonBase } from '../ui/button/button-base.tsx'
@@ -114,6 +126,50 @@ export function WalletControls() {
             </>
           )}
         </div>
+        {wallet.pendingTransaction && (
+          <div className="w-full">
+            <div
+              className="flex w-full flex-col gap-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 sm:p-5 md:flex-row md:items-center md:gap-6"
+              role="status"
+            >
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-warning">
+                  <Clock3 aria-hidden="true" size={18} />
+                </span>
+                <div className="min-w-0 max-w-3xl space-y-1">
+                  <p className="text-sm font-semibold text-foreground">
+                    {wallet.busy
+                      ? 'Waiting for transaction confirmation…'
+                      : 'Confirmation is taking longer than expected'}
+                  </p>
+                  <p className="text-sm leading-relaxed text-muted">
+                    Your transaction may still confirm. Wait, or use “Speed up” in your wallet if available. Avoid
+                    submitting again.
+                  </p>
+                </div>
+              </div>
+              <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 pl-12 md:pl-0">
+                <a
+                  className="inline-flex items-center gap-1 text-sm font-medium text-foreground underline decoration-border underline-offset-4 transition-colors hover:text-accent"
+                  href={`${chains[wallet.network].blockExplorers?.default.url}/tx/${wallet.pendingTransaction.hash}`}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  View transaction <ArrowUpRight aria-hidden="true" size={14} />
+                </a>
+                <ButtonBase
+                  className="w-auto"
+                  disabled={wallet.busy || wallet.checkingTransaction}
+                  onClick={wallet.refreshTransaction}
+                  size="sm"
+                  variant="secondary"
+                >
+                  {wallet.checkingTransaction ? 'Checking…' : 'Refresh status'}
+                </ButtonBase>
+              </div>
+            </div>
+          </div>
+        )}
         {wallet.error && (
           <p
             className="w-full rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-warning break-words"
@@ -136,19 +192,19 @@ export function WalletSetup({ inDrawer = false }: { inDrawer?: boolean }) {
   const [approvalConsent, setApprovalConsent] = useState(false)
   const [message, setMessage] = useState('')
   const active = connection.sessionStatus === 'active'
-  const disabled = connection.busy || connection.uploading
+  const disabled = connection.busy || connection.uploading || Boolean(connection.pendingTransaction)
   const pay = async (kind: 'deposit' | 'approve') => {
     setMessage('')
-    await connection.paymentAction(async (synapse) => {
+    await connection.paymentAction(async (synapse, confirm) => {
       if (kind === 'deposit') {
         const units = parseUnits(amount, 18)
         if (units <= 0n) throw new Error('Enter a positive USDFC amount')
-        await depositStorageFunds(synapse, units)
+        await depositStorageFunds(synapse, units, confirm)
       } else {
-        await approveStoragePayments(synapse)
+        await approveStoragePayments(synapse, confirm)
       }
       setMessage(kind === 'deposit' ? 'Deposit confirmed.' : 'Storage payment approval confirmed.')
-    })
+    }, kind)
     await refreshWallet()
   }
   const Container = inDrawer ? 'section' : 'details'
