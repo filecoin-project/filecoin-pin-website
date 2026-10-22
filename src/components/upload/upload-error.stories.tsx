@@ -40,7 +40,6 @@ const createMockOrchestration = (
       transactionHash: undefined,
       error: errorMessage,
     },
-    pendingAutoExpandPieceCids: new Set(),
     dragDropKey: 0,
     directorySaveError: null,
     isSavingDirectory: false,

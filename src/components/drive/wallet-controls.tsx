@@ -269,9 +269,8 @@ export function WalletSetup({ inDrawer = false }: { inDrawer?: boolean }) {
             Browser session
           </h2>
           <p className="text-sm leading-6 text-muted">
-            Authorize this browser to create datasets, upload files, schedule piece removals and terminate storage
-            services billed to your wallet. Uploads and file deletions then use this key without repeated wallet
-            prompts.
+            Authorize this browser to create datasets, upload files and schedule piece removals billed to your wallet.
+            Uploads and file deletions then use this key without repeated wallet prompts.
           </p>
           {connection.session && (
             <p className="rounded-lg border border-border bg-canvas/40 p-3 text-xs leading-5 text-muted break-all">
@@ -293,7 +292,7 @@ export function WalletSetup({ inDrawer = false }: { inDrawer?: boolean }) {
               onChange={(event) => setConsent(event.target.checked)}
               type="checkbox"
             />
-            I authorize all four storage permissions, including deletion, for this browser.
+            I authorize storage uploads and file deletions for this browser.
           </label>
           <div className="flex flex-wrap gap-3">
             <Select

@@ -1,3 +1,9 @@
+import {
+  AddPiecesPermission,
+  CreateDataSetPermission,
+  SchedulePieceRemovalsPermission,
+  TerminateServicePermission,
+} from '@filoz/synapse-core/session-key'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -148,7 +154,7 @@ describe('BYOW browser sessions', () => {
     expect(result.current.address).toBe(ALICE)
   })
 
-  it('defaults to mainnet and grants all storage permissions with an explicit expiry', async () => {
+  it('defaults to mainnet and grants only upload and piece-removal permissions with an explicit expiry', async () => {
     const { result } = renderHook(useBrowserWallet, { wrapper })
     expect(result.current.network).toBe('mainnet')
     await act(async () => result.current.connect())
@@ -156,7 +162,8 @@ describe('BYOW browser sessions', () => {
     await waitFor(() => expect(result.current.sessionStatus).toBe('active'))
     const call = mocks.write.mock.calls[0][0]
     expect(call.functionName).toBe('login')
-    expect(call.args[2]).toHaveLength(4)
+    expect(call.args[2]).toEqual([CreateDataSetPermission, AddPiecesPermission, SchedulePieceRemovalsPermission])
+    expect(call.args[2]).not.toContain(TerminateServicePermission)
     expect(Number(call.args[1])).toBeGreaterThan(Date.now() / 1000 + 6 * 86400)
     expect(mocks.save.mock.calls[0][0]).toBe(`314:${ALICE}`)
     expect(result.current.session?.transactionHash).toBe(hash)
@@ -456,6 +463,14 @@ it('recovers a timed-out revocation only when all session permissions are revoke
   mocks.receipt.mockRejectedValue(new Error('Timeout'))
   await act(async () => result.current.revoke())
   expect(result.current.pendingTransaction?.kind).toBe('revoke')
+  const revoke = mocks.write.mock.calls.at(-1)?.[0]
+  expect(revoke.functionName).toBe('revoke')
+  expect(revoke.args[1]).toEqual([
+    CreateDataSetPermission,
+    AddPiecesPermission,
+    SchedulePieceRemovalsPermission,
+    TerminateServicePermission,
+  ])
   expect(result.current.session).not.toBeNull()
   mocks.revoked.mockResolvedValue(true)
   await act(async () => result.current.refreshTransaction())

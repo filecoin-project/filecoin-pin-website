@@ -10,6 +10,7 @@ import {
   chains,
   type DriveNetwork,
   ownerClient,
+  SESSION_REVOCATION_PERMISSIONS,
   SessionPermissionError,
   scopeFor,
   UPLOAD_PERMISSIONS,
@@ -455,7 +456,7 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
               revokeCall({
                 chain: chains[network],
                 address: privateKeyToAccount(session.privateKey).address,
-                permissions: UPLOAD_PERMISSIONS,
+                permissions: SESSION_REVOCATION_PERMISSIONS,
                 origin: 'Filecoin Drive',
               })
             )

@@ -76,9 +76,7 @@ try {
   await page.getByRole('button', { name: 'Annual report.pdf', exact: true }).waitFor()
   assert((await page.locator('table').boundingBox()).y < 500, 'File table should occupy the first desktop viewport')
   await page.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
-  await page
-    .getByRole('checkbox', { name: 'I authorize all four storage permissions, including deletion, for this browser.' })
-    .check()
+  await page.getByRole('checkbox', { name: 'I authorize storage uploads and file deletions for this browser.' }).check()
   await page.getByRole('button', { name: 'Authorize session', exact: true }).click()
   await page
     .getByText('Wallet setup · Session authorized', { exact: true })
@@ -233,7 +231,7 @@ try {
     await blockedPage.getByRole('dialog', { name: 'Wallet and storage', exact: true }).waitFor()
     await blockedPage
       .getByRole('checkbox', {
-        name: 'I authorize all four storage permissions, including deletion, for this browser.',
+        name: 'I authorize storage uploads and file deletions for this browser.',
       })
       .check()
     await blockedPage.getByRole('button', { name: 'Authorize session', exact: true }).click()

@@ -104,9 +104,7 @@ try {
   const page = await newWalletPage()
   primaryPage = page
   await page.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
-  await page
-    .getByRole('checkbox', { name: 'I authorize all four storage permissions, including deletion, for this browser.' })
-    .check()
+  await page.getByRole('checkbox', { name: 'I authorize storage uploads and file deletions for this browser.' }).check()
   await page.getByRole('button', { name: 'Authorize session', exact: true }).click()
   await page.getByText('Wallet setup · Session authorized', { exact: true }).waitFor()
   if (authorizationOnly) {

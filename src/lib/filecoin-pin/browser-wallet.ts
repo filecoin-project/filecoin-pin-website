@@ -1,6 +1,12 @@
 import type { FilecoinChain } from '@filoz/synapse-core/chains'
 import { asClient } from '@filoz/synapse-core/client'
-import { DefaultFwssPermissions, fromSecp256k1 } from '@filoz/synapse-core/session-key'
+import {
+  AddPiecesPermission,
+  CreateDataSetPermission,
+  fromSecp256k1,
+  SchedulePieceRemovalsPermission,
+  TerminateServicePermission,
+} from '@filoz/synapse-core/session-key'
 import { calibration, mainnet, Synapse } from '@filoz/synapse-sdk'
 import {
   type Address,
@@ -15,7 +21,9 @@ import type { BrowserSession } from '../local-storage/session-vault.ts'
 
 export type DriveNetwork = 'mainnet' | 'calibration'
 export const chains = { mainnet, calibration }
-export const UPLOAD_PERMISSIONS = DefaultFwssPermissions
+export const UPLOAD_PERMISSIONS = [CreateDataSetPermission, AddPiecesPermission, SchedulePieceRemovalsPermission]
+// Earlier versions granted termination too. Revoke it before discarding the key.
+export const SESSION_REVOCATION_PERMISSIONS = [...UPLOAD_PERMISSIONS, TerminateServicePermission]
 export class SessionPermissionError extends Error {
   constructor() {
     super('Upload session expired or was revoked. Authorize it again.')
@@ -58,8 +66,8 @@ export function browserSynapse(
     validate,
     isRevoked: async () => {
       if (!key) return false
-      await key.syncExpirations(UPLOAD_PERMISSIONS)
-      return UPLOAD_PERMISSIONS.every(
+      await key.syncExpirations(SESSION_REVOCATION_PERMISSIONS)
+      return SESSION_REVOCATION_PERMISSIONS.every(
         (permission) => key.expirations[permission] <= BigInt(Math.floor(Date.now() / 1000))
       )
     },

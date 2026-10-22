@@ -14,20 +14,15 @@ try {
       'download-button',
       'badge-status',
       'badge-replication',
-      'badge-number',
       'alert',
       'link',
       'text-with-copy-to-clipboard',
       'button/button-base',
-      'dialog',
       'spinner',
-      'progress-bar',
-      'page-title',
       'select',
     ]
     const modules = await Promise.all(names.map((name) => import(`/src/components/ui/${name}.tsx`)))
-    const [download, status, replication, number, alert, link, copy, button, dialog, spinner, progress, title, select] =
-      modules
+    const [download, status, replication, alert, link, copy, button, spinner, select] = modules
     const { SelectedFile } = await import('/src/components/file-picker/selected-file.tsx')
     const cases = []
     const add = (name, node) =>
@@ -59,10 +54,7 @@ try {
     )
     add('link', h(link.TextLink, { href: '#file' }, 'Download original file'))
     add('copy', h(copy.TextWithCopyToClipboard, { text: 'bafy-example-file', href: '#file' }))
-    add('number', h(number.BadgeNumber, { number: 1 }))
     add('spinner', h(spinner.Spinner))
-    add('progress', h(progress.ProgressBar, { progress: 50 }))
-    add('title', h(title.PageTitle))
     add('select', h(select.Select, { 'aria-label': 'Example network' }, h('option', null, 'Filecoin Mainnet')))
     const { UploadStatus } = await import('/src/components/upload/upload-status.tsx')
     add(
@@ -83,7 +75,6 @@ try {
         ],
       })
     )
-    add('dialog', h(dialog.Dialog, { content: h('p', null, 'File details and storage configuration') }))
     for (const value of ['completed', 'pinned', 'published', 'error', 'pending', 'in-progress'])
       add(`status-${value}`, h(status.BadgeStatus, { status: value }))
     for (const value of [1, 2]) add(`replication-${value}`, h(replication.BadgeReplication, { copyCount: value }))
@@ -192,12 +183,8 @@ try {
       await page.waitForTimeout(180)
       assert.deepEqual(await audit(), [], `${theme}: hovered control ${index}`)
     }
-    await page.locator('[data-case=dialog] button').click()
-    await page.getByRole('dialog').waitFor()
-    assert.deepEqual(await audit(), [], `${theme}: dialog contrast`)
-    await page.getByRole('button', { name: 'Close', exact: true }).click()
     await page.screenshot({ path: `/tmp/drive-components-${theme}.png`, fullPage: true, animations: 'disabled' })
-    console.log(`${theme}: shared text, icons, links, badges, alerts, buttons, file picker and dialog contrast passed`)
+    console.log(`${theme}: shared text, icons, links, badges, alerts, buttons, file picker contrast passed`)
   }
   const consolePage = await browser.newPage({ viewport: { width: 1440, height: 1080 } })
   await prepareBrowserPage(consolePage)

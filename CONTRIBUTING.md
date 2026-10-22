@@ -14,7 +14,7 @@ npm install
 
 The app uses the connected browser wallet and defaults to Filecoin Mainnet on first visit. Successful manual network selections are saved in the browser and restored on reload. Calibration is available in the network selector. It does not use deployment private keys or a shared session key.
 
-Connect an Ethereum-compatible browser wallet. Reloads silently restore the selected wallet's existing permission or WalletConnect session; they never initiate a new account-access prompt, network switch or QR pairing. Explicit Disconnect disables automatic reconnection. In Wallet setup, authorize a browser session with an explicit lifetime. The session is granted all four Warm Storage permissions: create data sets, add pieces, schedule piece removals, and terminate services. Deposit USDFC and approve storage payments separately with the owner wallet.
+Connect an Ethereum-compatible browser wallet. Reloads silently restore the selected wallet's existing permission or WalletConnect session; they never initiate a new account-access prompt, network switch or QR pairing. Explicit Disconnect disables automatic reconnection. In Wallet setup, authorize a browser session with an explicit lifetime. New sessions request only three Warm Storage permissions: create data sets, add pieces, and schedule piece removals. Revocation also clears the termination permission granted by older versions. Renewing a session does not remove previously granted termination permission; it must be revoked or allowed to expire. Deposit USDFC and approve storage payments separately with the owner wallet.
 
 WalletConnect defaults to Beck’s registered public project ID. To override it, copy [`.env.example`](.env.example) to `.env.local`, set `VITE_WALLETCONNECT_PROJECT_ID`, then restart Vite. The remote provider and QR modal are loaded for explicit pairing or restoration of a previously selected WalletConnect session by [`wallet-connect.ts`](src/lib/filecoin-pin/wallet-connect.ts). Injected and remote wallets share the same session authorization and wallet/network isolation.
 
@@ -88,13 +88,12 @@ Theme colors for foreground, surface, accent, links and status tones live in [`s
 ### Supporting Hooks
 
 - [`src/hooks/use-data-set-manager.ts`](src/hooks/use-data-set-manager.ts) - Manages data set lifecycle (creation, localStorage persistence, storage context).
-- [`src/hooks/use-wallet.ts`](src/hooks/use-wallet.ts) - Selector hook for wallet data (address, balances) used in the header.
 - [`src/hooks/use-dataset-pieces.ts`](src/hooks/use-dataset-pieces.ts) - Fetches and displays uploaded pieces from a data set.
 
 ### UI Components
 
 - [`src/components/upload/`](src/components/upload/) - Drag-and-drop zone and progress display UI.
-- [`src/components/layout/`](src/components/layout/) - Header, sidebar, and content layout scaffolding.
+- [`src/components/layout/`](src/components/layout/) - Drive content layout and upload orchestration.
 - [`src/components/file-picker/`](src/components/file-picker/) - File selection UI with drag-and-drop support.
 - [`src/components/ui/`](src/components/ui/) - Reusable UI components (buttons, cards, badges, etc.).
 - [`src/app.tsx`](src/app.tsx) - Top-level shell.

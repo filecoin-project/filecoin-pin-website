@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useCallback, useContext, useMemo } from 'react'
+import { createContext, type ReactNode, useContext, useMemo } from 'react'
 import type { DatasetPiece, DirectoryPiecePatch, PieceMutation } from '../hooks/use-dataset-pieces.ts'
 import { useDatasetPieces } from '../hooks/use-dataset-pieces.ts'
 
@@ -11,21 +11,6 @@ export interface UploadHistoryContextValue {
   mutateHistory: (update: PieceMutation) => Promise<void>
   getLatestHistory: () => DatasetPiece[]
   hasUnsavedChanges: boolean
-
-  /**
-   * Get a specific upload by its CID
-   */
-  getUploadByCid: (cid: string) => DatasetPiece | undefined
-
-  /**
-   * Get a specific upload by its piece CID
-   */
-  getUploadByPieceCid: (pieceCid: string) => DatasetPiece | undefined
-
-  /**
-   * Get a specific upload by its unique ID
-   */
-  getUploadById: (id: string) => DatasetPiece | undefined
 
   /**
    * Refresh the upload history from the backend
@@ -102,27 +87,6 @@ export function UploadHistoryProvider({ children }: { children: ReactNode }) {
     hasLoaded,
   } = useDatasetPieces()
 
-  const getUploadByCid = useCallback(
-    (cid: string) => {
-      return pieces.find((p) => p.cid === cid)
-    },
-    [pieces]
-  )
-
-  const getUploadByPieceCid = useCallback(
-    (pieceCid: string) => {
-      return pieces.find((p) => p.pieceCid === pieceCid)
-    },
-    [pieces]
-  )
-
-  const getUploadById = useCallback(
-    (id: string) => {
-      return pieces.find((p) => p.id === id)
-    },
-    [pieces]
-  )
-
   const value = useMemo<UploadHistoryContextValue>(
     () => ({
       history: pieces,
@@ -130,9 +94,6 @@ export function UploadHistoryProvider({ children }: { children: ReactNode }) {
       mutateHistory: mutatePieces,
       getLatestHistory: getLatestPieces,
       hasUnsavedChanges,
-      getUploadByCid,
-      getUploadByPieceCid,
-      getUploadById,
       refreshHistory: refreshPieces,
       addUpload: addPiece,
       isLoading,
@@ -145,9 +106,6 @@ export function UploadHistoryProvider({ children }: { children: ReactNode }) {
       mutatePieces,
       getLatestPieces,
       hasUnsavedChanges,
-      getUploadByCid,
-      getUploadByPieceCid,
-      getUploadById,
       refreshPieces,
       addPiece,
       isLoading,

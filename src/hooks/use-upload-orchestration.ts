@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useUploadHistory } from '../context/upload-history-context.tsx'
 import { DIRECTORY_SAVE_ERROR } from '../lib/local-storage/directory-store.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
@@ -20,13 +20,11 @@ interface UploadedFile {
  * - Starting uploads and tracking uploaded file metadata
  * - Detecting upload completion and adding to history
  * - Resetting active upload state
- * - Tracking CIDs that should be auto-expanded in history
  *
  * Does NOT:
  * - Render UI (that's components' job)
  * - Store history (that's UploadHistoryContext's job)
  * - Perform uploads (that's useFilecoinUpload's job)
- * - Manage expansion state (that's useUploadExpansion's job)
  */
 export function useUploadOrchestration() {
   const { uploadState, uploadFile, resetUpload, releaseUploadLock } = useFilecoinUpload(true)
@@ -39,8 +37,6 @@ export function useUploadOrchestration() {
   const [directorySaveError, setDirectorySaveError] = useState<string | null>(null)
   const [isSavingDirectory, setIsSavingDirectory] = useState(false)
   const [saveAttempt, setSaveAttempt] = useState(0)
-  // Piece CIDs that should be auto-expanded when they appear in history (consumed by useUploadExpansion)
-  const pendingAutoExpandPieceCidsRef = useRef<Set<string>>(new Set())
   // Key to force DragNDrop remount (clears its internal file state)
   const [dragDropKey, setDragDropKey] = useState(0)
   const finishUpload = useCallback(() => {
@@ -99,8 +95,6 @@ export function useUploadOrchestration() {
     const primary = copies.find((c) => c.role === 'primary') ?? copies[0]
 
     console.debug('[UploadOrchestration] Saving upload checkpoint, retry:', saveAttempt)
-
-    pendingAutoExpandPieceCidsRef.current = new Set(pendingAutoExpandPieceCidsRef.current).add(uploadState.pieceCid)
 
     const providersById = uploadState.providersById
     const orderedCopies = [primary, ...copies.filter((c) => c !== primary)]
@@ -182,8 +176,6 @@ export function useUploadOrchestration() {
     (file: File, folderPath = '') => {
       console.debug('[UploadOrchestration] Starting upload for file:', file.name)
 
-      pendingAutoExpandPieceCidsRef.current = new Set()
-
       const id = crypto.randomUUID()
       setDirectorySaveError(null)
       setIsSavingDirectory(false)
@@ -228,7 +220,6 @@ export function useUploadOrchestration() {
   return {
     uploadedFile,
     activeUpload: uploadState,
-    pendingAutoExpandPieceCids: pendingAutoExpandPieceCidsRef.current,
     dragDropKey,
     startUpload: handleUpload,
     retryUpload,
