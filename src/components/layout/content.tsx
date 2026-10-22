@@ -89,9 +89,7 @@ export default function Content() {
           </button>
         </div>
       )}
-      {wallet.status === 'error' && (
-        <Alert message={`Unable to load wallet balances: ${wallet.error}`} variant="error" />
-      )}
+      {wallet.status === 'error' && <Alert message={wallet.error} variant="error" />}
       <span className="sr-only" role="status">
         {setupChecking ? 'Checking wallet setup…' : canUpload ? 'Session ready' : 'Setup required'}
       </span>

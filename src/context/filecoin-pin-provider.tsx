@@ -131,7 +131,7 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
         console.error('Failed to load wallet balances', error)
         setWallet((prev) => ({
           status: 'error',
-          error: error instanceof Error ? error.message : 'Unable to load wallet balances. See console for details.',
+          error: `Unable to load wallet balances: ${error instanceof Error ? error.message : 'Check your connection and try again.'}`,
           data: prev.data,
         }))
       } finally {

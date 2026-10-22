@@ -13,13 +13,17 @@ export async function resolveStorageChain(
     functionName: 'viewContractAddress',
   })
   if (isAddressEqual(address, zeroAddress)) throw new Error('Storage configuration is unavailable on this network.')
-  const service = await readContract(client, {
-    address,
-    abi: chain.contracts.fwssView.abi,
-    functionName: 'service',
-  })
-  if (!isAddressEqual(service, chain.contracts.fwss.address))
-    throw new Error('The storage read contract does not match this network. File operations are paused.')
+  // v1.5 serves reads through the FWSS proxy itself. Older deployments use
+  // a separate view contract whose service association must still be checked.
+  if (!isAddressEqual(address, chain.contracts.fwss.address)) {
+    const service = await readContract(client, {
+      address,
+      abi: chain.contracts.fwssView.abi,
+      functionName: 'service',
+    })
+    if (!isAddressEqual(service, chain.contracts.fwss.address))
+      throw new Error('The storage read contract does not match this network. File operations are paused.')
+  }
   return {
     ...chain,
     contracts: { ...chain.contracts, fwssView: { ...chain.contracts.fwssView, address } },

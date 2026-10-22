@@ -1,5 +1,5 @@
 import type { Synapse } from '@filoz/synapse-sdk'
-import { calibration } from '@filoz/synapse-sdk'
+import { calibration, mainnet } from '@filoz/synapse-sdk'
 import { zeroAddress } from 'viem'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { assertCurrentStorageChain, resolveStorageChain } from './storage-chain.ts'
@@ -45,4 +45,23 @@ it('allows the current storage configuration to proceed', async () => {
   read.mockResolvedValueOnce(calibration.contracts.fwssView.address)
   const synapse = { chain: calibration, readClient: {} } as unknown as Synapse
   await expect(assertCurrentStorageChain(synapse)).resolves.toBeUndefined()
+})
+
+it.each([mainnet, calibration])(
+  'uses proxy-based reads on $name without calling the legacy service getter',
+  async (network) => {
+    const originalAddress = network.contracts.fwssView.address
+    read.mockResolvedValueOnce(network.contracts.fwss.address)
+    const chain = await resolveStorageChain(network)
+    expect(chain.contracts.fwssView.address).toBe(network.contracts.fwss.address)
+    expect(read).toHaveBeenCalledOnce()
+    expect(network.contracts.fwssView.address).toBe(originalAddress)
+  }
+)
+
+it('keeps checking configuration after the console resolves a proxy-based view', async () => {
+  read.mockResolvedValueOnce(calibration.contracts.fwss.address)
+  const chain = await resolveStorageChain(calibration)
+  read.mockResolvedValueOnce(calibration.contracts.fwss.address)
+  await expect(assertCurrentStorageChain({ chain, readClient: {} } as unknown as Synapse)).resolves.toBeUndefined()
 })
