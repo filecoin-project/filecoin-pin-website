@@ -40,12 +40,16 @@ const createMockOrchestration = (
       transactionHash: undefined,
       error: errorMessage,
     },
-    pendingAutoExpandPieceCids: new Set(),
     dragDropKey: 0,
-    startUpload: () => {
+    directorySaveError: null,
+    isSavingDirectory: false,
+    retryDirectorySave: () => {
+      console.log('Retry directory save clicked')
+    },
+    startUpload: async () => {
       console.log('Start upload clicked')
     },
-    retryUpload: () => {
+    retryUpload: async () => {
       console.log('Retry upload clicked')
     },
     cancelUpload: () => {

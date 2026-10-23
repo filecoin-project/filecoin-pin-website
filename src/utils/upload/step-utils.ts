@@ -3,8 +3,9 @@ import type { StepState } from '../../types/upload/step.ts'
 export function getStepLabel(step: StepState['step']) {
   switch (step) {
     case 'creating-car':
-    case 'checking-readiness':
       return 'Packing for IPFS'
+    case 'checking-readiness':
+      return 'Checking storage setup'
     case 'uploading-car':
       return 'Uploading to Filecoin storage provider'
     case 'replicating':
@@ -12,7 +13,7 @@ export function getStepLabel(step: StepState['step']) {
     case 'announcing-cids':
       return 'Announcing IPFS CIDs to IPNI'
     case 'finalizing-transaction':
-      return 'Finalizing storage transaction on Calibration testnet'
+      return 'Storage provider confirmation'
   }
 }
 
@@ -22,8 +23,6 @@ export function getStepEstimatedTime(step: StepState['step']) {
       return 'Estimated time: ~10-60 seconds'
     case 'announcing-cids':
       return 'Estimated time: ~30 seconds'
-    case 'finalizing-transaction':
-      return 'Estimated time: ~30-60 seconds'
   }
 }
 

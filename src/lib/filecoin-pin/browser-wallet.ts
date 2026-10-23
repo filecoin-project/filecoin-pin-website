@@ -1,0 +1,72 @@
+import type { FilecoinChain } from '@filoz/synapse-core/chains'
+import { asClient } from '@filoz/synapse-core/client'
+import {
+  AddPiecesPermission,
+  CreateDataSetPermission,
+  fromSecp256k1,
+  SchedulePieceRemovalsPermission,
+  TerminateServicePermission,
+} from '@filoz/synapse-core/session-key'
+import { calibration, mainnet, Synapse } from '@filoz/synapse-sdk'
+import { type Address, createClient, createPublicClient, http } from 'viem'
+import type { BrowserSession } from '../local-storage/session-vault.ts'
+
+export type DriveNetwork = 'mainnet' | 'calibration'
+export const chains = { mainnet, calibration }
+export const UPLOAD_PERMISSIONS = [CreateDataSetPermission, AddPiecesPermission, SchedulePieceRemovalsPermission]
+// Earlier versions granted termination too. Revoke it before discarding the key.
+export const SESSION_REVOCATION_PERMISSIONS = [...UPLOAD_PERMISSIONS, TerminateServicePermission]
+export class SessionPermissionError extends Error {
+  constructor() {
+    super('Upload session expired or was revoked. Authorize it again.')
+    this.name = 'SessionPermissionError'
+  }
+}
+export const scopeFor = (address: string, network: DriveNetwork) => `${chains[network].id}:${address.toLowerCase()}`
+
+export function publicClient(network: DriveNetwork) {
+  return createPublicClient({ chain: chains[network], transport: http(), pollingInterval: 15_000 })
+}
+
+export function browserSynapse(
+  address: Address,
+  network: DriveNetwork,
+  session: BrowserSession | null,
+  chain: FilecoinChain = chains[network]
+) {
+  const client = asClient(createClient({ account: address, chain, transport: http(), pollingInterval: 15_000 }))
+  const key = session
+    ? fromSecp256k1({ root: address, privateKey: session.privateKey, chain, transport: http() })
+    : null
+  const synapse = new Synapse({
+    client,
+    ...(key ? { sessionClient: key.client } : {}),
+    source: 'filecoin-pin',
+    withCDN: false,
+  })
+  const validate = async () => {
+    if (!key) throw new Error('Authorize an upload session first.')
+    await key.syncExpirations(UPLOAD_PERMISSIONS)
+    if (!key.hasPermissions(UPLOAD_PERMISSIONS)) throw new SessionPermissionError()
+  }
+  return {
+    synapse,
+    validate,
+    isRevoked: async () => {
+      if (!key) return false
+      await key.syncExpirations(SESSION_REVOCATION_PERMISSIONS)
+      return SESSION_REVOCATION_PERMISSIONS.every(
+        (permission) => key.expirations[permission] <= BigInt(Math.floor(Date.now() / 1000))
+      )
+    },
+    expiresAt: () =>
+      key
+        ? Number(
+            UPLOAD_PERMISSIONS.reduce(
+              (minimum, permission) => (key.expirations[permission] < minimum ? key.expirations[permission] : minimum),
+              key.expirations[UPLOAD_PERMISSIONS[0]]
+            )
+          )
+        : 0,
+  }
+}

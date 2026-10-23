@@ -1,6 +1,5 @@
 import * as Sentry from '@sentry/react'
 import { configureTelemetry } from 'filecoin-pin/core/telemetry'
-import packageLock from '../../package-lock.json' with { type: 'json' }
 
 configureTelemetry({ affordance: 'pin.filecoin.cloud' })
 
@@ -13,10 +12,6 @@ Sentry.init({
   tracesSampleRate: 1.0, // Capture 100% of transactions for development (adjust in production)
 })
 
-const packages = packageLock.packages as Record<string, { version?: string }>
-const synapseSdkVersion = packages['node_modules/@filoz/synapse-sdk']?.version
-if (synapseSdkVersion) {
-  Sentry.setTags({
-    synapseSdkVersion: `@filoz/synapse-sdk@v${synapseSdkVersion}`,
-  })
-}
+Sentry.setTags({
+  synapseSdkVersion: `@filoz/synapse-sdk@v${__SYNAPSE_SDK_VERSION__}`,
+})
