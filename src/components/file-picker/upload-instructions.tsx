@@ -27,6 +27,10 @@ export function UploadInstructions({ maxSize, ...rest }: UploadInstructionsProps
             <span className="font-medium text-accent">Click to upload</span> or drag and drop a file
           </p>
           <p className="text-xs text-muted">Up to {prettyBytes(maxSize)} per file</p>
+          <p className="text-xs text-muted">
+            Uploaded content is not encrypted. Original file names and content identifiers may be publicly visible
+            on-chain.
+          </p>
         </div>
       </div>
     </DashedContainer>

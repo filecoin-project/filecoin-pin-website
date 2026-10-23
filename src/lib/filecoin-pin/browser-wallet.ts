@@ -8,15 +8,7 @@ import {
   TerminateServicePermission,
 } from '@filoz/synapse-core/session-key'
 import { calibration, mainnet, Synapse } from '@filoz/synapse-sdk'
-import {
-  type Address,
-  createClient,
-  createPublicClient,
-  createWalletClient,
-  custom,
-  type EIP1193Provider,
-  http,
-} from 'viem'
+import { type Address, createClient, createPublicClient, http } from 'viem'
 import type { BrowserSession } from '../local-storage/session-vault.ts'
 
 export type DriveNetwork = 'mainnet' | 'calibration'
@@ -31,10 +23,6 @@ export class SessionPermissionError extends Error {
   }
 }
 export const scopeFor = (address: string, network: DriveNetwork) => `${chains[network].id}:${address.toLowerCase()}`
-
-export function ownerClient(provider: EIP1193Provider, address: Address, network: DriveNetwork) {
-  return createWalletClient({ account: address, chain: chains[network], transport: custom(provider) })
-}
 
 export function publicClient(network: DriveNetwork) {
   return createPublicClient({ chain: chains[network], transport: http(), pollingInterval: 15_000 })

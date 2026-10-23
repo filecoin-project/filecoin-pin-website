@@ -1,6 +1,7 @@
 import type { FilecoinChain } from '@filoz/synapse-core/chains'
+import { useQuery } from '@tanstack/react-query'
 import { checkAllowances, validateGasRequirement } from 'filecoin-pin/core/payments'
-import { createContext, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { type DataSetState, useDataSetManager } from '../hooks/use-data-set-manager.ts'
 import { browserSynapse, chains, scopeFor } from '../lib/filecoin-pin/browser-wallet.ts'
 import { resolveStorageChain } from '../lib/filecoin-pin/storage-chain.ts'
@@ -48,30 +49,14 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
     gasReady: false,
   })
   const connection = useBrowserWallet()
-  const [storageChain, setStorageChain] = useState<FilecoinChain | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    let timer: ReturnType<typeof setTimeout> | undefined
-    let delay = 5000
-    const resolve = async () => {
-      try {
-        const chain = await resolveStorageChain(chains[connection.network])
-        if (!cancelled) setStorageChain(chain)
-      } catch {
-        if (cancelled) return
-        setStorageSetup((previous) => ({ ...previous, status: 'error' }))
-        setWallet({ status: 'error', error: 'Unable to load current storage configuration. Retrying chain reads…' })
-        timer = setTimeout(() => void resolve(), delay)
-        delay = Math.min(delay * 2, 30000)
-      }
-    }
-    setStorageChain(null)
-    void resolve()
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [connection.network])
+  const chainQuery = useQuery({
+    queryKey: ['drive-storage-chain', connection.network],
+    queryFn: () => resolveStorageChain(chains[connection.network]),
+    staleTime: 0,
+    retry: true,
+    retryDelay: (attempt) => Math.min(5000 * 2 ** attempt, 30000),
+  })
+  const storageChain: FilecoinChain | null = chainQuery.data ?? null
   const runtime = useMemo(
     () =>
       connection.address && storageChain?.id === chains[connection.network].id
@@ -89,64 +74,76 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
     debugParams,
   })
 
-  const runtimeRef = useRef(runtime)
-  runtimeRef.current = runtime
-  const refreshInFlightRef = useRef<{ runtime: typeof runtime; promise: Promise<void> } | null>(null)
-
-  const refreshWallet = useCallback(async () => {
-    if (!runtime) return
-    // Dedupe concurrent calls (StrictMode double-invokes the mount effect in
-    // dev) so the snapshot is fetched once.
-    if (refreshInFlightRef.current?.runtime === runtime) return refreshInFlightRef.current.promise
-
-    setWallet((prev) => ({
-      status: 'loading',
-      data: prev.status === 'ready' ? prev.data : undefined,
-    }))
-    setStorageSetup((previous) => ({ ...previous, status: 'checking' }))
-
-    const refresh = (async () => {
-      try {
-        const synapse = runtime.synapse
-
-        const [snapshot, approval] = await Promise.all([fetchWalletSnapshot(synapse), checkAllowances(synapse)])
-        if (runtimeRef.current !== runtime) return
-        const depositReady = snapshot.raw.filecoinPayBalance > 0n
-        const approvalReady = !approval.needsUpdate
-        const gas = validateGasRequirement(snapshot.filBalance, snapshot.network === 'calibration')
-        setStorageSetup({
-          status: depositReady && approvalReady && gas.isValid ? 'ready' : 'blocked',
-          depositReady,
-          approvalReady,
-          gasReady: gas.isValid,
-          gasIssue: gas.errorMessage,
-        })
-        setWallet({
-          status: 'ready',
-          data: snapshot,
-        })
-      } catch (error) {
-        if (runtimeRef.current !== runtime) return
-        setStorageSetup((previous) => ({ ...previous, status: 'error' }))
-        console.error('Failed to load wallet balances', error)
-        setWallet((prev) => ({
-          status: 'error',
-          error: `Unable to load wallet balances: ${error instanceof Error ? error.message : 'Check your connection and try again.'}`,
-          data: prev.data,
-        }))
-      } finally {
-        if (refreshInFlightRef.current?.runtime === runtime) refreshInFlightRef.current = null
-      }
-    })()
-    refreshInFlightRef.current = { runtime, promise: refresh }
-    return refresh
-  }, [runtime])
-
   const transactionRevision = connection.transactionRevision ?? 0
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Confirmed owner transactions change balances without changing the runtime.
+  const snapshotQuery = useQuery({
+    queryKey: ['drive-wallet-snapshot', storageScope, storageChain?.contracts.fwssView.address, transactionRevision],
+    enabled: !!runtime,
+    queryFn: async () => {
+      if (!runtime) throw new Error('Connect a wallet first.')
+      const [snapshot, approval] = await Promise.all([
+        fetchWalletSnapshot(runtime.synapse),
+        checkAllowances(runtime.synapse),
+      ])
+      return { snapshot, approval }
+    },
+  })
+  const refreshWallet = useCallback(async () => {
+    await snapshotQuery.refetch()
+  }, [snapshotQuery.refetch])
   useEffect(() => {
-    void refreshWallet()
-  }, [refreshWallet, transactionRevision])
+    if (!storageChain) {
+      setWallet(
+        chainQuery.failureCount
+          ? { status: 'error', error: 'Unable to load current storage configuration. Retrying chain reads…' }
+          : initialWalletState
+      )
+      setStorageSetup({
+        status: chainQuery.failureCount ? 'error' : 'checking',
+        depositReady: false,
+        approvalReady: false,
+        gasReady: false,
+      })
+      return
+    }
+    if (snapshotQuery.isError) {
+      setWallet({
+        status: 'error',
+        error: `Unable to load wallet balances: ${snapshotQuery.error.message}`,
+        data: snapshotQuery.data?.snapshot,
+      })
+      setStorageSetup((previous) => ({ ...previous, status: 'error' }))
+      return
+    }
+    const result = snapshotQuery.data
+    if (!result) {
+      setWallet({ status: 'loading' })
+      setStorageSetup((previous) => ({ ...previous, status: 'checking' }))
+      return
+    }
+    const { snapshot, approval } = result
+    const depositReady = snapshot.raw.filecoinPayBalance > 0n
+    const approvalReady = !approval.needsUpdate
+    const gas = validateGasRequirement(snapshot.filBalance, snapshot.network === 'calibration')
+    setWallet({ status: snapshotQuery.isFetching ? 'loading' : 'ready', data: snapshot })
+    setStorageSetup({
+      status: snapshotQuery.isFetching
+        ? 'checking'
+        : depositReady && approvalReady && gas.isValid
+          ? 'ready'
+          : 'blocked',
+      depositReady,
+      approvalReady,
+      gasReady: gas.isValid,
+      gasIssue: gas.errorMessage,
+    })
+  }, [
+    storageChain,
+    chainQuery.failureCount,
+    snapshotQuery.data,
+    snapshotQuery.isError,
+    snapshotQuery.error,
+    snapshotQuery.isFetching,
+  ])
 
   useEffect(() => {
     logDebugParams()

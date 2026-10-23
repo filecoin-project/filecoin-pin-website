@@ -1,5 +1,6 @@
 import { getDetailedDataSet } from 'filecoin-pin/core/data-set'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { recoverPieceMetadata } from '../lib/filecoin-pin/piece-metadata.ts'
 import { DIRECTORY_SAVE_ERROR } from '../lib/local-storage/directory-store.ts'
 import {
   addCachedPiece,
@@ -61,9 +62,8 @@ export type PieceMutation = (current: DatasetPiece[]) => DatasetPiece[]
  * Renders from the localStorage piece cache when available (zero RPC calls);
  * only falls back to chain enumeration (getDetailedDataSet) when no cache
  * exists or the caller explicitly refreshes. Chain enumeration is expensive
- * (several eth_calls per dataset) and, since filecoin-pin no longer exposes
- * per-piece metadata on chain, can't recover the original filename or IPFS
- * CID — those render as placeholders for pieces found this way.
+ * (several eth_calls per dataset). A bounded event lookup recovers original
+ * names and IPFS CIDs where available; otherwise placeholders remain.
  */
 export const useDatasetPieces = () => {
   const [pieces, setPieces] = useState<DatasetPiece[]>([])
@@ -78,11 +78,13 @@ export const useDatasetPieces = () => {
   const currentScope = useRef(walletAddress)
   const autoLoadedRef = useRef(false)
   currentScope.current = walletAddress
+  const recovery = useRef<AbortController | null>(null)
   const mounted = useRef(true)
   useEffect(() => {
     mounted.current = true
     return () => {
       mounted.current = false
+      recovery.current?.abort()
     }
   }, [])
 
@@ -119,6 +121,7 @@ export const useDatasetPieces = () => {
   )
 
   useEffect(() => {
+    recovery.current?.abort()
     autoLoadedRef.current = false
     setHasLoaded(false)
     setError(null)
@@ -149,6 +152,9 @@ export const useDatasetPieces = () => {
       return
     }
 
+    recovery.current?.abort()
+    const controller = new AbortController()
+    recovery.current = controller
     setHasLoaded(false)
     setIsLoading(true)
     setError(null)
@@ -160,13 +166,25 @@ export const useDatasetPieces = () => {
         dataSetIds.map(async (id) => {
           try {
             const data = await getDetailedDataSet(synapse, id)
-            return { id, data }
+            const known = getLatestPieces()
+            const missing = (data.pieces ?? [])
+              .filter(
+                (piece) =>
+                  !known.some(
+                    (file) => file.pieceCid === piece.pieceCid.toString() && file.cid && file.fileName !== 'unknown'
+                  )
+              )
+              .map((piece) => piece.pieceId)
+            const metadata = await recoverPieceMetadata(synapse, id, missing, controller.signal)
+            return { id, data, metadata }
           } catch (err) {
             console.warn('[DatasetPieces] Failed to load dataset', String(id), err)
             return null
           }
         })
       )
+
+      controller.signal.throwIfAborted()
 
       // Group by pieceCid so the same piece replicated across N datasets renders as one entry
       const piecesByCid = new Map<string, DatasetPiece>()
@@ -184,11 +202,10 @@ export const useDatasetPieces = () => {
 
         for (const piece of pieces) {
           const pieceCid = piece.pieceCid.toString()
-          // filecoin-pin no longer exposes per-piece metadata (label/ipfsRootCID), so
-          // this chain-enumeration fallback can't recover the original filename or IPFS
-          // CID for pieces missing from the local cache. Size is still available directly.
-          const ipfsRootCid = ''
-          const fileName = 'unknown'
+          // Events recover original upload metadata; names and folders edited locally stay local.
+          const metadata = entry.metadata.get(String(piece.pieceId))
+          const ipfsRootCid = metadata?.cid ?? ''
+          const fileName = metadata?.fileName ?? 'unknown'
           const fileSize = piece.size == null ? 'Unknown' : formatFileSize(piece.size)
           const transactionHash = ''
           const uploadedAt = Date.now()
@@ -196,6 +213,8 @@ export const useDatasetPieces = () => {
 
           const existing = piecesByCid.get(pieceCid)
           if (existing) {
+            if (!existing.cid && ipfsRootCid) existing.cid = ipfsRootCid
+            if (existing.fileName === 'unknown' && fileName !== 'unknown') existing.fileName = fileName
             if (existing.datasetIds?.includes(dsIdStr)) continue
             // Append this dataset/copy info; keep the primary (first seen) as the primary fields
             existing.datasetIds = [...(existing.datasetIds ?? []), dsIdStr]
@@ -237,7 +256,14 @@ export const useDatasetPieces = () => {
           if (isDeletionScheduled(file)) return file
           const live = piecesByCid.get(file.pieceCid)
           if (!live) return file
-          return mergeStorageCopies(file, live)
+          return mergeStorageCopies(
+            {
+              ...file,
+              fileName: file.fileName === 'unknown' ? live.fileName : file.fileName,
+              cid: file.cid || live.cid,
+            },
+            live
+          )
         })
         const known = new Set(cached.map((file) => file.pieceCid))
         merged.push(...[...piecesByCid.values()].filter((file) => !known.has(file.pieceCid)))
@@ -249,11 +275,12 @@ export const useDatasetPieces = () => {
       if (walletAddress && !hadFailures) await mutatePieces(merge)
       else if (mounted.current && currentScope.current === walletAddress) setPieces(merge(getLatestPieces()))
     } catch (err) {
+      if (controller.signal.aborted) return
       console.error('[DatasetPieces] Failed to load pieces:', err)
       if (mounted.current && currentScope.current === walletAddress)
         setError(err instanceof Error ? err.message : 'Failed to load pieces')
     } finally {
-      if (mounted.current && currentScope.current === walletAddress) {
+      if (!controller.signal.aborted && mounted.current && currentScope.current === walletAddress) {
         setIsLoading(false)
         setHasLoaded(true)
       }

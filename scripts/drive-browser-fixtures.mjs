@@ -201,13 +201,34 @@ export async function prepareBrowserPage(page, { seedDirectory = true, funded = 
           }
           throw new Error(`Unexpected wallet method: ${method}`)
         },
-        on: (name, callback) => handlers.set(name, callback),
-        removeListener: (name) => handlers.delete(name),
+        on: (name, callback) => {
+          const callbacks = handlers.get(name) ?? new Set()
+          callbacks.add(callback)
+          handlers.set(name, callbacks)
+        },
+        removeListener: (name, callback) => handlers.get(name)?.delete(callback),
         switchAccount: (next) => {
           accounts = [next]
-          handlers.get('accountsChanged')?.(accounts)
+          handlers.get('accountsChanged')?.forEach((callback) => {
+            callback(accounts)
+          })
         },
       }
+      window.addEventListener('eip6963:requestProvider', () => {
+        window.dispatchEvent(
+          new CustomEvent('eip6963:announceProvider', {
+            detail: {
+              info: {
+                uuid: '350670db-19fa-4704-a166-e52e178b59d9',
+                name: 'Test browser wallet',
+                rdns: 'test.browser.wallet',
+                icon: 'data:image/png;base64,a',
+              },
+              provider: window.ethereum,
+            },
+          })
+        )
+      })
       const scope = `314:${address}`
       localStorage.setItem('filecoin-pin-client-id', 'test-browser')
       if (seedDirectory && !localStorage.getItem(`filecoin-pin-piece-cache-v1-${scope}`)) {

@@ -22,11 +22,11 @@ import { approveStoragePayments, depositStorageFunds } from '../../lib/filecoin-
 import { shortenAddress } from '../../lib/filecoin-pin/wallet.ts'
 import { ButtonBase } from '../ui/button/button-base.tsx'
 import { Select } from '../ui/select.tsx'
+import { ConnectWalletButton } from './connect-wallet-button.tsx'
 
 export function WalletControls() {
   const wallet = useBrowserWallet()
   const { theme, toggleTheme } = useTheme()
-  const [choice, setChoice] = useState('')
   return (
     <header className="border-b border-border bg-canvas">
       <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-x-6 gap-y-4 px-5 py-5 sm:px-8 lg:px-12">
@@ -84,30 +84,7 @@ export function WalletControls() {
             </>
           ) : (
             <>
-              {wallet.options.length > 1 && (
-                <Select
-                  aria-label="Wallet"
-                  disabled={wallet.busy || wallet.restoring}
-                  onChange={(event) => setChoice(event.target.value)}
-                  value={choice}
-                >
-                  <option value="">Choose wallet</option>
-                  {wallet.options.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.name}
-                    </option>
-                  ))}
-                </Select>
-              )}
-              <ButtonBase
-                className="w-auto"
-                loading={wallet.busy || wallet.restoring}
-                onClick={() => void wallet.connect(choice)}
-                size="sm"
-              >
-                <Wallet aria-hidden="true" size={15} />
-                {wallet.restoring ? 'Reconnecting…' : 'Connect wallet'}
-              </ButtonBase>
+              <ConnectWalletButton size="sm" />
               <ButtonBase
                 className="w-auto"
                 disabled={wallet.busy || wallet.restoring || !wallet.walletConnectAvailable}

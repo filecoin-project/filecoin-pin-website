@@ -68,7 +68,9 @@ The main logic demonstrating `filecoin-pin` usage:
 
 ### Browser Drive
 
-- [`src/context/browser-wallet-provider.tsx`](src/context/browser-wallet-provider.tsx) — wallet discovery, account selection, network switching, session authorization and revocation.
+- [`src/context/chain-provider.tsx`](src/context/chain-provider.tsx) — wagmi connector registry and TanStack Query cache.
+- [`src/context/browser-wallet-provider.tsx`](src/context/browser-wallet-provider.tsx) — wagmi connection adapter, session authorization and revocation. Synapse React resolves owner signing clients; the lazy WalletConnect transport retains namespace account normalization.
+- [`src/lib/filecoin-pin/piece-metadata.ts`](src/lib/filecoin-pin/piece-metadata.ts) — bounded best-effort recovery of original upload metadata from FWSS events. Directory backups still preserve local folders and later renames.
 - [`src/lib/filecoin-pin/browser-wallet.ts`](src/lib/filecoin-pin/browser-wallet.ts) — owner and session clients with chain permission validation.
 - [`src/hooks/use-wallet-transaction.ts`](src/hooks/use-wallet-transaction.ts) — bounded confirmation recovery for owner-wallet transactions, with foreground/manual status refresh and wallet/network-scoped pending hashes.
 - [`src/lib/local-storage/session-vault.ts`](src/lib/local-storage/session-vault.ts) — encrypted browser session persistence.

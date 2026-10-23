@@ -1,4 +1,6 @@
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { act, type RenderHookOptions, renderHook as renderBaseHook, waitFor } from '@testing-library/react'
+import { createElement, type ReactNode } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ wait: vi.fn(), receipt: vi.fn() }))
@@ -9,6 +11,14 @@ vi.mock('../lib/filecoin-pin/browser-wallet.ts', async (original) => ({
 
 import { readWalletTransaction } from '../lib/local-storage/wallet-transaction.ts'
 import { PendingWalletTransactionError, useWalletTransaction } from './use-wallet-transaction.ts'
+
+function renderHook<Result, Props>(callback: (props: Props) => Result, options?: RenderHookOptions<Props>) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return renderBaseHook(callback, {
+    ...options,
+    wrapper: ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client }, children),
+  })
+}
 
 const address = '0x1111111111111111111111111111111111111111'
 const hash = `0x${'a'.repeat(64)}` as const

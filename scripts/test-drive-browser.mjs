@@ -2,11 +2,13 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { chromium } from 'playwright'
 import { checkDirectoryTabs } from './check-drive-directory-tabs.mjs'
+import { checkWalletSelection } from './check-drive-wallet-selection.mjs'
 import { prepareBrowserPage } from './drive-browser-fixtures.mjs'
 
 // Run against npm run dev. All wallet requests and external RPCs are mocked.
 const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || undefined })
 try {
+  if (!process.env.DRIVE_TEST_WALLETCONNECT) await checkWalletSelection(browser)
   const context = await browser.newContext({ viewport: { width: 1440, height: 1080 } })
   const page = await context.newPage()
   const errors = []
@@ -166,7 +168,12 @@ try {
   await restored.getByRole('button', { name: 'Close details', exact: true }).click()
   await restored.reload()
   await restored.getByRole('button', { name: 'Disconnect', exact: true }).waitFor()
-  assert.deepEqual(await restored.evaluate(() => window.__driveWalletRequests), ['eth_accounts'])
+  const silentMethods = await restored.evaluate(() => window.__driveWalletRequests)
+  assert(silentMethods.includes('eth_accounts'))
+  assert(
+    silentMethods.every((method) => ['eth_accounts', 'eth_chainId'].includes(method)),
+    'Reload must not prompt or switch networks'
+  )
   await restored.getByRole('button', { name: '2026', exact: true }).click()
   await restored.getByRole('button', { name: 'Annual report.pdf', exact: true }).waitFor()
   await restored.evaluate(() => window.ethereum.switchAccount('0x2222222222222222222222222222222222222222'))

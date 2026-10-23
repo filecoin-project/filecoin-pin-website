@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Address, Hash, TransactionReceipt } from 'viem'
 import { type DriveNetwork, publicClient, scopeFor } from '../lib/filecoin-pin/browser-wallet.ts'
@@ -20,6 +21,7 @@ export function useWalletTransaction(
   reconcile: (transaction: WalletTransaction) => Promise<boolean>,
   onConfirmed: (transaction: WalletTransaction) => Promise<void>
 ) {
+  const queryClient = useQueryClient()
   const scope = address ? scopeFor(address, network) : ''
   const [record, setRecord] = useState<{ scope: string; transaction: WalletTransaction } | null>(null)
   const pending = record?.scope === scope ? record.transaction : null
@@ -59,7 +61,12 @@ export function useWalletTransaction(
       try {
         let success: boolean | undefined
         try {
-          const receipt = await publicClient(network).getTransactionReceipt({ hash: pending.hash })
+          const receipt = await queryClient.fetchQuery({
+            queryKey: ['drive-wallet-receipt', scope, pending.hash],
+            queryFn: () => publicClient(network).getTransactionReceipt({ hash: pending.hash }),
+            retry: false,
+            staleTime: 0,
+          })
           success = receipt.status === 'success'
         } catch {
           // Not found, connection failures and replaced hashes are not proof of failure.
@@ -92,7 +99,7 @@ export function useWalletTransaction(
       document.removeEventListener('visibilitychange', resume)
       document.removeEventListener('resume', resume)
     }
-  }, [pending, busy, network, scope, reconcile, finish])
+  }, [pending, busy, network, scope, reconcile, finish, queryClient])
 
   const confirm = async (hash: Hash, kind: WalletTransactionKind, expiresAt?: number) => {
     if (!scope) throw new Error('Connect a wallet first.')

@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { useContext } from 'react'
 import { beforeEach, expect, it, vi } from 'vitest'
@@ -46,7 +47,14 @@ it.each(['resolve', 'reject'])('ignores a stale wallet read that later %ss after
         })
       : Promise.resolve(snapshot(network))
   )
-  const { result, rerender } = renderHook(() => useContext(FilecoinPinContext), { wrapper: FilecoinPinProvider })
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const { result, rerender } = renderHook(() => useContext(FilecoinPinContext), {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>
+        <FilecoinPinProvider>{children}</FilecoinPinProvider>
+      </QueryClientProvider>
+    ),
+  })
   await waitFor(() => expect(mocks.snapshot).toHaveBeenCalledTimes(1))
   mocks.connection.network = 'calibration'
   rerender()

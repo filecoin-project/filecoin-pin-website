@@ -1,15 +1,20 @@
 import { asClient } from '@filoz/synapse-core/client'
 import { loginCall, revokeCall } from '@filoz/synapse-core/session-key'
+import { getSignerClient } from '@filoz/synapse-react'
 import { Synapse } from '@filoz/synapse-sdk'
+import { useQueryClient } from '@tanstack/react-query'
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { type Address, getAddress, type Hash } from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
+import { writeContract } from 'viem/actions'
+import { type Connector, useConfig, useConnections, useConnectors } from 'wagmi'
+import { connect, disconnect, getConnectorClient, reconnect, switchChain } from 'wagmi/actions'
+import { injected } from 'wagmi/connectors'
 import { PendingWalletTransactionError, useWalletTransaction } from '../hooks/use-wallet-transaction.ts'
 import {
   browserSynapse,
   chains,
   type DriveNetwork,
-  ownerClient,
   SESSION_REVOCATION_PERMISSIONS,
   SessionPermissionError,
   scopeFor,
@@ -23,13 +28,15 @@ import {
   walletConnectAvailable,
 } from '../lib/filecoin-pin/wallet-connect.ts'
 import { readWalletConnectAccount } from '../lib/filecoin-pin/wallet-connect-accounts.ts'
+import { WalletConnectionError } from '../lib/filecoin-pin/wallet-error.ts'
+import { installedWalletOptions, type WalletOption } from '../lib/filecoin-pin/wallet-options.ts'
 import { readNetworkPreference, saveNetworkPreference } from '../lib/local-storage/network.ts'
 import { type BrowserSession, loadBrowserSession, saveBrowserSession } from '../lib/local-storage/session-vault.ts'
 import { readWalletPreference, saveWalletPreference } from '../lib/local-storage/wallet-connection.ts'
 import type { WalletTransaction } from '../lib/local-storage/wallet-transaction.ts'
+import { ChainProvider } from './chain-provider.tsx'
 
 type InjectedProvider = BrowserProvider
-type WalletOption = { id: string; name: string; rdns?: string; provider: InjectedProvider }
 interface WalletConnection {
   address: Address | null
   network: DriveNetwork
@@ -60,6 +67,20 @@ interface WalletConnection {
 const Context = createContext<WalletConnection | null>(null)
 
 export function BrowserWalletProvider({ children }: { children: ReactNode }) {
+  return (
+    <ChainProvider>
+      <BrowserWalletSession>{children}</BrowserWalletSession>
+    </ChainProvider>
+  )
+}
+
+function BrowserWalletSession({ children }: { children: ReactNode }) {
+  const config = useConfig()
+  const queryClient = useQueryClient()
+  const connectors = useConnectors()
+  const connections = useConnections()
+  const [selectedConnector, setSelectedConnector] = useState<Connector | null>(null)
+  const selectedConnection = connections.find((entry) => entry.connector.uid === selectedConnector?.uid)
   const [previousWallet] = useState(readWalletPreference)
   const [restoring, setRestoring] = useState(Boolean(previousWallet))
   const restoreEpoch = useRef(0)
@@ -70,12 +91,19 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [options, setOptions] = useState<WalletOption[]>([])
+  const options: WalletOption[] = installedWalletOptions(connectors)
   const [provider, setProvider] = useState<InjectedProvider | null>(null)
   const identity = useRef('')
   identity.current = address ? scopeFor(address, network) : ''
   const locked = useRef(false)
   locked.current = busy || uploading
+  const connectionAttempts = useRef(new Map<string, AbortController>())
+  useEffect(
+    () => () => {
+      for (const controller of connectionAttempts.current.values()) controller.abort()
+    },
+    []
+  )
   const deferredAccount = useRef<Address | null | undefined>(undefined)
 
   const reconcileTransaction = useCallback(
@@ -107,77 +135,86 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
     },
     [address, network]
   )
+  const selectedNetwork = useRef(network)
+  selectedNetwork.current = network
+  const remoteAdapter = useCallback((remote: WalletConnectProvider) => {
+    return injected({
+      shimDisconnect: false,
+      target: {
+        id: 'drive-walletconnect',
+        name: 'WalletConnect',
+        provider: {
+          request: (async (request: { method: string; params?: unknown }) =>
+            request.method === 'eth_accounts' || request.method === 'eth_requestAccounts'
+              ? [await readWalletConnectAccount(remote, selectedNetwork.current)]
+              : remote.request(request as Parameters<InjectedProvider['request']>[0])) as InjectedProvider['request'],
+          on: remote.on?.bind(remote) ?? (() => undefined),
+          removeListener: remote.removeListener?.bind(remote) ?? (() => undefined),
+        } as InjectedProvider,
+      },
+    })
+  }, [])
+
   const transaction = useWalletTransaction(address, network, busy, reconcileTransaction, transactionConfirmed)
 
   useEffect(() => {
-    const announce = (event: Event) => {
-      const detail = (
-        event as CustomEvent<{ info: { uuid: string; name: string; rdns?: string }; provider: InjectedProvider }>
-      ).detail
-      setOptions((current) =>
-        current.some((item) => item.id === detail.info.uuid)
-          ? current
-          : [
-              ...current,
-              { id: detail.info.uuid, name: detail.info.name, rdns: detail.info.rdns, provider: detail.provider },
-            ]
-      )
-    }
-    window.addEventListener('eip6963:announceProvider', announce)
-    window.dispatchEvent(new Event('eip6963:requestProvider'))
-    const injected = (window as Window & { ethereum?: InjectedProvider }).ethereum
-    if (injected)
-      setOptions((current) =>
-        current.length ? current : [{ id: 'injected', name: 'Browser wallet', provider: injected }]
-      )
-    return () => window.removeEventListener('eip6963:announceProvider', announce)
-  }, [])
-
-  useEffect(() => {
     if (!restoring || !previousWallet) return
-    const epoch = restoreEpoch.current
     let cancelled = false
-    const injected = (window as Window & { ethereum?: InjectedProvider }).ethereum
-    const option =
+    const epoch = restoreEpoch.current
+    const rememberedConnector =
       previousWallet.type === 'injected'
-        ? options.find((entry) =>
-            previousWallet.rdns ? entry.rdns === previousWallet.rdns : entry.provider === injected
-          )
+        ? connectors.find((entry) => (previousWallet.rdns ? entry.id === previousWallet.rdns : entry.id === 'injected'))
         : undefined
-    // Give extensions time to announce; an unavailable wallet must not block the page.
+    const restore = async () => {
+      const restored = previousWallet.type === 'walletconnect' ? await restoreWalletConnect(network) : null
+      const connector =
+        previousWallet.type === 'walletconnect'
+          ? restored
+            ? remoteAdapter(restored.provider)
+            : undefined
+          : rememberedConnector
+      if (!connector) {
+        if (previousWallet.type === 'walletconnect') setRestoring(false)
+        return
+      }
+      try {
+        const result = await queryClient.fetchQuery({
+          queryKey: [
+            'drive-wallet-reconnect',
+            previousWallet.type,
+            previousWallet.type === 'injected' ? (previousWallet.rdns ?? 'injected') : 'walletconnect',
+            epoch,
+          ],
+          queryFn: () => reconnect(config, { connectors: [connector] }),
+          retry: false,
+          gcTime: 0,
+          structuralSharing: false,
+        })
+        if (cancelled || epoch !== restoreEpoch.current) return
+        if (result[0]) {
+          setSelectedConnector(result[0].connector)
+          setAddress(getAddress(result[0].accounts[0]))
+          setProvider(restored?.provider ?? ((await result[0].connector.getProvider()) as InjectedProvider))
+        }
+      } finally {
+        if (!cancelled && epoch === restoreEpoch.current) setRestoring(false)
+      }
+    }
+    void restore().catch(() => {
+      if (!cancelled) setRestoring(false)
+    })
     const timeout = window.setTimeout(
       () => {
         cancelled = true
         setRestoring(false)
       },
-      previousWallet.type === 'injected' && !option ? 2000 : 8000
+      previousWallet.type === 'injected' && !rememberedConnector ? 2000 : 8000
     )
-    const restore = async () => {
-      try {
-        const restored =
-          previousWallet.type === 'walletconnect'
-            ? await restoreWalletConnect(network)
-            : option
-              ? { provider: option.provider, address: (await option.provider.request({ method: 'eth_accounts' }))[0] }
-              : null
-        if (cancelled || epoch !== restoreEpoch.current) return
-        if (restored?.address) {
-          const account = getAddress(restored.address)
-          setProvider(restored.provider)
-          setAddress(account)
-        }
-      } catch {
-        // A locked, expired or unavailable wallet returns to explicit Connect.
-      } finally {
-        if (!cancelled && epoch === restoreEpoch.current) setRestoring(false)
-      }
-    }
-    if (previousWallet.type === 'walletconnect' || option) void restore()
     return () => {
       cancelled = true
-      window.clearTimeout(timeout)
+      clearTimeout(timeout)
     }
-  }, [previousWallet, restoring, options, network])
+  }, [config, connectors, previousWallet, restoring, network, remoteAdapter, queryClient])
 
   useEffect(() => {
     setSession(null)
@@ -257,35 +294,25 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
   }, [session])
 
   useEffect(() => {
-    if (!provider) return
-    const accountsChanged = (value: unknown) => {
-      const next = Array.isArray(value) && typeof value[0] === 'string' ? getAddress(value[0]) : null
-      if (locked.current) {
-        deferredAccount.current = next
-        setError(
-          'Your wallet changed accounts. The current operation remains attached to its original wallet; the view switches when it finishes.'
-        )
-      } else {
-        setSession(null)
-        setAddress(next)
-      }
+    const next = selectedConnection?.accounts[0] ?? null
+    if (!provider || next === address) return
+    if (locked.current) {
+      deferredAccount.current = next
+      setError(
+        'Your wallet changed accounts. The current operation remains attached to its original wallet; the view switches when it finishes.'
+      )
+    } else {
+      setSession(null)
+      setAddress(next)
+      if (!next) setProvider(null)
     }
-    provider.on?.('accountsChanged', accountsChanged)
-    const disconnected = () => {
-      accountsChanged([])
-      setProvider(null)
-    }
-    provider.on?.('disconnect', disconnected)
-    return () => {
-      provider.removeListener?.('accountsChanged', accountsChanged)
-      provider.removeListener?.('disconnect', disconnected)
-    }
-  }, [provider])
+  }, [selectedConnection?.accounts, address, provider])
 
   useEffect(() => {
     if (!busy && !uploading && deferredAccount.current !== undefined) {
       setSession(null)
       setAddress(deferredAccount.current)
+      if (!deferredAccount.current) setProvider(null)
       deferredAccount.current = undefined
     }
   }, [busy, uploading])
@@ -301,33 +328,12 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('beforeunload', beforeUnload)
   }, [])
 
-  const selectChain = useCallback(async (wallet: InjectedProvider, target: DriveNetwork) => {
-    const chain = chains[target]
-    try {
-      await wallet.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: `0x${chain.id.toString(16)}` }],
-      })
-    } catch (cause) {
-      if ((cause as { code?: number }).code !== 4902) throw cause
-      await wallet.request({
-        method: 'wallet_addEthereumChain',
-        params: [
-          {
-            chainId: `0x${chain.id.toString(16)}`,
-            chainName: chain.name,
-            nativeCurrency: chain.nativeCurrency,
-            rpcUrls: [...chain.rpcUrls.default.http],
-            blockExplorerUrls: [chain.blockExplorers?.default.url ?? 'https://filecoin.blockscout.com'],
-          },
-        ],
-      })
-      await wallet.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: `0x${chain.id.toString(16)}` }],
-      })
-    }
-  }, [])
+  const selectChain = useCallback(
+    async (_wallet: InjectedProvider, target: DriveNetwork) => {
+      await switchChain(config, { connector: selectedConnector ?? undefined, chainId: chains[target].id })
+    },
+    [config, selectedConnector]
+  )
 
   const run = async (action: () => Promise<void>) => {
     if (locked.current) return
@@ -339,13 +345,47 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
     try {
       await action()
     } catch (cause) {
-      if (!(cause instanceof PendingWalletTransactionError))
+      if (!(cause instanceof PendingWalletTransactionError)) {
+        if (cause instanceof WalletConnectionError) console.warn('[Drive wallet connection]', cause, cause.cause)
         setError(cause instanceof Error ? cause.message : 'Wallet operation failed')
+      }
     } finally {
       setBusy(false)
       locked.current = uploading
     }
   }
+  const runConnection = (walletId: string, action: (signal: AbortSignal) => Promise<void>) =>
+    run(async () => {
+      if (connectionAttempts.current.has(walletId))
+        throw new Error(
+          'A connection request for this wallet is still pending. You can choose another wallet. Open your wallet to finish or reject it. If the extension is unresponsive, restart it and reload this page before reconnecting.'
+        )
+      const controller = new AbortController()
+      const promise = Promise.resolve().then(() => action(controller.signal))
+      connectionAttempts.current.set(walletId, controller)
+      const settled = () => {
+        if (connectionAttempts.current.get(walletId) === controller) connectionAttempts.current.delete(walletId)
+      }
+      void promise.then(settled, settled)
+      let timer: ReturnType<typeof setTimeout> | undefined
+      try {
+        await Promise.race([
+          promise,
+          new Promise<never>((_resolve, reject) => {
+            timer = setTimeout(() => {
+              controller.abort()
+              reject(
+                new Error(
+                  'The wallet did not respond within 45 seconds. Open your wallet to finish or reject the connection request. If the extension is unresponsive, restart it and reload this page. No new connection request has been sent.'
+                )
+              )
+            }, 45_000)
+          }),
+        ])
+      } finally {
+        clearTimeout(timer)
+      }
+    })
   const requireOwner = async () => {
     if (!provider || !address) throw new Error('Connect a wallet first.')
     await selectChain(provider, network)
@@ -354,7 +394,10 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
       : (await provider.request({ method: 'eth_accounts' }))[0]
     if (account?.toLowerCase() !== address.toLowerCase())
       throw new Error('Wallet account changed. Reconnect before signing.')
-    return ownerClient(provider, address, network)
+    // A late response from another wallet can change wagmi's current connection.
+    if (selectedConnector && config.state.current !== selectedConnector.uid)
+      return getConnectorClient(config, { connector: selectedConnector, account: address, chainId: chains[network].id })
+    return getSignerClient(config, { account: address, chainId: chains[network].id })
   }
 
   return (
@@ -379,22 +422,46 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
           setUploading(value)
         },
         connect: (id) =>
-          run(async () => {
+          runConnection(id ?? options[0]?.id ?? 'unavailable', async (signal) => {
             const option = options.find((item) => item.id === id) ?? options[0]
             if (!option) throw new Error('Install an Ethereum-compatible browser wallet to connect.')
-            const accounts = await option.provider.request({ method: 'eth_requestAccounts' })
-            if (!accounts[0]) throw new Error('No wallet account selected')
-            await selectChain(option.provider, network)
-            setProvider(option.provider)
-            setAddress(getAddress(accounts[0]))
+            const connector = connectors.find((entry) => entry.uid === option.id)
+            if (!connector) throw new Error('Wallet is unavailable')
+            let result: { accounts: readonly Address[]; chainId: number }
+            try {
+              result = config.state.connections.get(connector.uid) ?? (await connect(config, { connector }))
+            } catch (cause) {
+              throw new WalletConnectionError(option.name, chains[network].name, 'connect', cause)
+            }
+            signal.throwIfAborted()
+            if (result.chainId !== chains[network].id) {
+              try {
+                await switchChain(config, { connector, chainId: chains[network].id })
+              } catch (cause) {
+                throw new WalletConnectionError(option.name, chains[network].name, 'switch network', cause)
+              }
+            }
+            signal.throwIfAborted()
+            const selectedProvider = (await connector.getProvider()) as InjectedProvider
+            signal.throwIfAborted()
+            setSelectedConnector(connector)
+            setProvider(selectedProvider)
+            setAddress(getAddress(result.accounts[0]))
             saveWalletPreference({ type: 'injected', ...(option.rdns ? { rdns: option.rdns } : {}) })
           }),
         connectWalletConnect: () =>
           run(async () => {
             const remote = await connectWalletConnect(network)
             try {
-              await selectChain(remote, network)
+              const result = await connect(config, { connector: remoteAdapter(remote), chainId: chains[network].id })
+              const connector = [...config.state.connections.values()]
+                .reverse()
+                .find((entry) => entry.connector.id === 'drive-walletconnect')?.connector
+              if (!connector) throw new Error('WalletConnect connection is unavailable.')
+              if (result.chainId !== chains[network].id)
+                await switchChain(config, { connector, chainId: chains[network].id })
               const account = await readWalletConnectAccount(remote, network)
+              setSelectedConnector(connector)
               setProvider(remote)
               setAddress(account)
               saveWalletPreference({ type: 'walletconnect' })
@@ -408,6 +475,7 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
         disconnect: () =>
           run(async () => {
             saveWalletPreference(null)
+            await disconnect(config, { connector: selectedConnector ?? undefined })
             await provider?.disconnect?.()
             setAddress(null)
             setSession(null)
@@ -434,7 +502,8 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
             // Save before requesting a transaction so a reload cannot lose an authorized key.
             await saveBrowserSession(scope, next)
             if (identity.current === scope) setSession({ ...next })
-            const hash = await client.writeContract(
+            const hash = await writeContract(
+              client,
               loginCall({
                 chain: chains[network],
                 address: privateKeyToAccount(next.privateKey).address,
@@ -452,7 +521,8 @@ export function BrowserWalletProvider({ children }: { children: ReactNode }) {
           run(async () => {
             if (transaction.pending || !address || !session) return
             const client = await requireOwner()
-            const hash = await client.writeContract(
+            const hash = await writeContract(
+              client,
               revokeCall({
                 chain: chains[network],
                 address: privateKeyToAccount(session.privateKey).address,

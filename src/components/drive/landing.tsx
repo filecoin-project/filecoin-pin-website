@@ -1,6 +1,6 @@
-import { ArrowRight, Check, FileText, Folder, HardDrive, KeyRound, Layers, ShieldCheck, Wallet } from 'lucide-react'
+import { Check, FileText, Folder, HardDrive, KeyRound, Layers, ShieldCheck, Wallet } from 'lucide-react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
-import { ButtonBase } from '../ui/button/button-base.tsx'
+import { ConnectWalletButton } from './connect-wallet-button.tsx'
 
 function WorkspacePreview() {
   return (
@@ -93,13 +93,7 @@ export function Landing() {
             and make it yours.
           </p>
           <div className="flex flex-wrap items-center gap-4 pt-2">
-            <ButtonBase
-              className="w-auto"
-              disabled={connection.busy || connection.options.length === 0}
-              onClick={() => void connection.connect()}
-            >
-              Connect a wallet <ArrowRight size={16} />
-            </ButtonBase>
+            <ConnectWalletButton label="Connect a wallet" />
             {connection.walletConnectAvailable && (
               <button
                 className="text-sm text-muted hover:text-foreground disabled:opacity-50"
@@ -158,8 +152,11 @@ export function Landing() {
         ))}
       </section>
       <footer className="flex flex-col justify-between gap-4 py-7 text-xs leading-5 text-muted sm:flex-row">
-        <p>Files live on Filecoin. Names and folders stay in this browser.</p>
-        <p>Files are publicly retrievable by CID and are not encrypted.</p>
+        <p>Files live on Filecoin. Folder structure and later name changes stay in this browser.</p>
+        <p>
+          Uploaded content is not encrypted. Original file names and content identifiers may be publicly visible
+          on-chain.
+        </p>
       </footer>
     </main>
   )

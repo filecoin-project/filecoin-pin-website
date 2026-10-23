@@ -1,10 +1,13 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { getDetailedDataSetMock, useFilecoinPinContextMock } = vi.hoisted(() => ({
+const { getDetailedDataSetMock, useFilecoinPinContextMock, metadataMock } = vi.hoisted(() => ({
   getDetailedDataSetMock: vi.fn(),
+  metadataMock: vi.fn(),
   useFilecoinPinContextMock: vi.fn(),
 }))
+
+vi.mock('../lib/filecoin-pin/piece-metadata.ts', () => ({ recoverPieceMetadata: metadataMock }))
 
 vi.mock('filecoin-pin/core/data-set', () => ({
   getDetailedDataSet: getDetailedDataSetMock,
@@ -47,6 +50,7 @@ const cachedPiece = (pieceCid: string): DatasetPiece =>
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
+  metadataMock.mockResolvedValue(new Map())
   getDetailedDataSetMock.mockResolvedValue({ pieces: [], provider: null })
 })
 
@@ -345,4 +349,19 @@ it('does not replay failed file edits over another tab on a later upload checkpo
   // An explicit user retry can still save the edit after storage recovers.
   await act(async () => result.current.updatePiece(original.id, { fileName: 'explicit-retry.txt' }))
   expect(getCachedPieces(WALLET)?.[1]).toMatchObject({ fileName: 'explicit-retry.txt', folderPath: 'newer-folder' })
+})
+
+it('uses event metadata on a missing directory, then preserves locally edited names on refresh', async () => {
+  useFilecoinPinContextMock.mockReturnValue(makeContext({ status: 'ready', dataSetIds: [1n] }))
+  getDetailedDataSetMock.mockResolvedValue({ pieces: [{ pieceCid: 'piece', pieceId: 1n, size: 5 }], provider: null })
+  metadataMock.mockResolvedValue(new Map([['1', { fileName: 'original.txt', cid: 'root' }]]))
+  const { result } = renderHook(() => useDatasetPieces())
+  await waitFor(() => expect(result.current.hasLoaded).toBe(true))
+  expect(result.current.pieces[0]).toMatchObject({ fileName: 'original.txt', cid: 'root' })
+  await act(async () =>
+    result.current.updatePiece(result.current.pieces[0].id, { fileName: 'renamed.txt', folderPath: 'local' })
+  )
+  await act(async () => result.current.refreshPieces())
+  expect(result.current.pieces[0]).toMatchObject({ fileName: 'renamed.txt', cid: 'root', folderPath: 'local' })
+  expect(metadataMock.mock.calls[metadataMock.mock.calls.length - 1][2]).toEqual([])
 })

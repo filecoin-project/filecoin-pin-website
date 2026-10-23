@@ -315,7 +315,8 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
         </div>
       </div>
       <p className="border-b border-border bg-canvas/30 px-5 py-3 text-xs leading-5 text-muted sm:px-6">
-        Files and folders are saved in this browser. Export a backup to transfer your directory.
+        Folder structure and later name changes are saved only in this browser. Export a backup to transfer your
+        directory.
       </p>
       {notice && (
         <p className="px-5 py-3 text-sm text-success" role="status">
