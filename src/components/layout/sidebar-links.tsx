@@ -1,4 +1,4 @@
-import { GitBranchIcon, Github, Terminal } from 'lucide-react'
+import { GitBranchIcon, Terminal, Workflow } from 'lucide-react'
 import { SIDEBAR_CONFIG } from '../../constants/sidebar.tsx'
 import { LinkIcon } from '../ui/link-icon.tsx'
 import { LinkIconContainer } from '../ui/link-icon-container.tsx'
@@ -8,7 +8,7 @@ export default function SidebarLinks() {
 
   return (
     <LinkIconContainer>
-      <LinkIcon href={githubAction} icon={Github} text="GitHub Action" />
+      <LinkIcon href={githubAction} icon={Workflow} text="GitHub Action" />
       <LinkIcon href={cli} icon={Terminal} text="CLI" />
       <LinkIcon href={cloneDemo} icon={GitBranchIcon} text="Clone this demo" />
     </LinkIconContainer>
