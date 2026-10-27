@@ -9,6 +9,7 @@ import { UploadProgress } from './upload-progress.tsx'
 export interface UploadStatusProps {
   fileName: DatasetPiece['fileName']
   fileSize: DatasetPiece['fileSize']
+  importedCar?: boolean
   stepStates: Array<StepState>
   isExpanded?: boolean
   onToggleExpanded?: () => void
@@ -31,6 +32,7 @@ export interface UploadStatusProps {
 function UploadStatus({
   fileName,
   fileSize,
+  importedCar,
   stepStates,
   isExpanded = true,
   onToggleExpanded,
@@ -88,6 +90,7 @@ function UploadStatus({
               datasetIds={datasetIds}
               fileName={fileName}
               hasIpniAnnounceFailure={hasIpniAnnounceFailure}
+              importedCar={importedCar}
               pieceCid={pieceCid}
               providerIds={providerIds}
               providerNames={providerNames}

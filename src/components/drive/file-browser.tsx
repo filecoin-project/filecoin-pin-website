@@ -20,9 +20,9 @@ import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useUploadHistory } from '../../context/upload-history-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { useDownloadQueue } from '../../hooks/use-download-queue.ts'
+import { useFileDeletion } from '../../hooks/use-file-deletion.ts'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { IPFS_CHECK_LIMIT, resetIndexingChecks } from '../../hooks/use-ipfs-indexing.ts'
-import { scheduleFileDeletion, withFileDeletionLock } from '../../lib/filecoin-pin/delete.ts'
 import { saveBlob } from '../../lib/filecoin-pin/download.ts'
 import { addStoredDataSetId } from '../../lib/local-storage/data-set.ts'
 import {
@@ -34,7 +34,7 @@ import {
   saveFolders,
   subscribeFolders,
 } from '../../lib/local-storage/drive-directory.ts'
-import { applyDeletionUpdate, isDeletionScheduled } from '../../utils/file-deletion.ts'
+import { isDeletionScheduled } from '../../utils/file-deletion.ts'
 import {
   getDatasetExplorerLink,
   getIpfsGatewayDownloadLink,
@@ -70,7 +70,7 @@ interface Props {
 }
 export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled = false }: Props) {
   const { history, updateUpload, mutateHistory, getLatestHistory, error: directoryError } = useUploadHistory()
-  const { synapse, storageScope, ensurePermissions, addDataSetId } = useFilecoinPinContext()
+  const { synapse, storageScope, addDataSetId } = useFilecoinPinContext()
   const connection = useBrowserWallet()
   const [folders, setFolders] = useState(() => readFolders(storageScope ?? ''))
   useEffect(() => {
@@ -89,7 +89,9 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
   const originalDirectory = useRef({ fileName: '', folderPath: '' })
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [working, setWorking] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const { deleteFile, isDeleting, deletionError, clearDeletionError } = useFileDeletion()
+  const working = isEditing || isDeleting
   const { download, queuedDownloads, downloadError, enqueueDownload, cancelQueuedDownload } = useDownloadQueue(
     synapse,
     storageScope
@@ -126,21 +128,21 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
     setRename(file.fileName)
     originalDirectory.current = { fileName: file.fileName, folderPath: file.folderPath ?? '' }
     setDeleteConsent(false)
+    clearDeletionError()
     setError('')
   }
-  const act = async (action: () => Promise<void>, chainOperation = false) => {
+  const act = async (action: () => Promise<void>) => {
     if (disabled) return
-    setWorking(true)
+    setIsEditing(true)
     setError('')
+    clearDeletionError()
     setNotice('')
-    if (chainOperation) connection.setUploading(true)
     try {
       await action()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'File operation failed')
     } finally {
-      setWorking(false)
-      if (chainOperation) connection.setUploading(false)
+      setIsEditing(false)
     }
   }
   const downloadOriginal = (file: DatasetPiece) => {
@@ -150,6 +152,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
       return
     }
     setError('')
+    clearDeletionError()
     setNotice('')
     enqueueDownload(file)
   }
@@ -212,48 +215,12 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
     })
     await saveFolders(storageScope ?? '', parsed.folders)
   }
-  const deleteFile = async () => {
-    if (!selected || !synapse || !ensurePermissions || !storageScope) return
-    await withFileDeletionLock(storageScope, selected.cid, async () => {
-      // Retry retained checkpoints before starting another chain operation.
-      await mutateHistory((current) => current)
-      await ensurePermissions()
-      // Identical uploads can share the same on-chain piece. Explain and track all affected records.
-      // Archived receipts belong to earlier uploads and cannot settle a new removal.
-      const aliases = getLatestHistory().filter(
-        (file) => file.pieceCid === selected.pieceCid && !isDeletionScheduled(file)
-      )
-      const aliasIds = new Set(aliases.map((file) => file.id))
-      const datasetIds = [...new Set(aliases.flatMap((file) => file.datasetIds ?? [file.datasetId]))]
-      const deletion: NonNullable<DatasetPiece['deletion']> = {}
-      for (const alias of aliases)
-        for (const [id, checkpoint] of Object.entries(alias.deletion ?? {})) {
-          const previous = deletion[id]
-          // Always resolve an outstanding transaction before trusting another record's
-          // completed batch. A confirmed batch may also leave more instances to remove.
-          if (!previous || (previous.confirmed && (!checkpoint.confirmed || checkpoint.remaining)))
-            deletion[id] = checkpoint
-        }
-      for (const id of datasetIds) {
-        const checkpoint = deletion[id]
-        // A later upload of identical content can add another piece instance.
-        // An older alias's pending or confirmed receipt does not cover that new instance.
-        if (
-          checkpoint &&
-          aliases.some((alias) => (alias.datasetIds ?? [alias.datasetId]).includes(id) && !alias.deletion?.[id])
-        )
-          deletion[id] = { ...checkpoint, remaining: true }
-      }
-      // Keep all targeted aliases resumable even if a provider fails before its first transaction.
-      await mutateHistory((current) =>
-        current.map((file) => (aliasIds.has(file.id) && !file.deletion ? { ...file, deletion: {} } : file))
-      )
-      await scheduleFileDeletion(synapse, { ...selected, datasetIds, deletion }, async (_changed, change) => {
-        await mutateHistory((current) =>
-          current.map((file) => (aliasIds.has(file.id) ? applyDeletionUpdate(file, change) : file))
-        )
-      })
-    })
+  const deleteSelectedFile = async () => {
+    if (!selected || disabled) return
+    setError('')
+    clearDeletionError()
+    setNotice('')
+    if (!(await deleteFile(selected))) return
     setDeleteConsent(false)
     setSelectedId(null)
     setNotice('Removed from the file list. Storage providers will process removal in a subsequent proving period.')
@@ -367,9 +334,9 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
           {downloadError}
         </p>
       )}
-      {error && (
+      {(error || deletionError) && (
         <p className="text-sm text-warning break-words" role="alert">
-          {error}
+          {error || deletionError}
         </p>
       )}
       <div className="grid md:grid-cols-[220px_minmax(0,1fr)]">
@@ -473,6 +440,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                   disabled={disabled || !storageScope}
                   onClick={() => {
                     setError('')
+                    clearDeletionError()
                     setFolderToDelete(folder)
                   }}
                   size="sm"
@@ -647,9 +615,9 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                 ? 'This folder is not empty. Move its files and remove its subfolders first.'
                 : 'Remove this empty folder from this browser’s directory. No files will be deleted from Filecoin.'}
             </Dialog.Description>
-            {error && (
+            {(error || deletionError) && (
               <p className="mt-3 text-sm text-warning" role="alert">
-                {error}
+                {error || deletionError}
               </p>
             )}
             <div className="mt-5 flex justify-end gap-3">
@@ -767,7 +735,10 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                           ? 'Queued · Cancel'
                           : 'Download'}
                     </Button>
-                    {selected.cid && canPreview(selected.fileName) && fileStatus(selected) !== 'Deletion scheduled' ? (
+                    {selected.cid &&
+                    !selected.importedCar &&
+                    canPreview(selected.fileName) &&
+                    fileStatus(selected) !== 'Deletion scheduled' ? (
                       <a
                         className={buttonVariants({ variant: 'secondary', size: 'sm' })}
                         href={getIpfsGatewayPreviewLink(selected.cid, selected.fileName)}
@@ -836,6 +807,11 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                 </section>
                 <section className="space-y-3">
                   <h3 className="font-medium">Content identifiers</h3>
+                  {selected.importedCar && (
+                    <p className="text-xs text-muted">
+                      Imported CAR archive. Download preserves the original archive; the first root is shown below.
+                    </p>
+                  )}
                   {[
                     ['IPFS root CID', selected.cid],
                     ['Piece CID', selected.pieceCid],
@@ -853,7 +829,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                       {value && <CopyButton className="mt-1" label={`Copy ${label}`} value={value} />}
                     </div>
                   ))}
-                  {selected.cid && (
+                  {selected.cid && !selected.importedCar && (
                     <a
                       className="block text-sm underline"
                       href={getIpfsGatewayDownloadLink(selected.cid, selected.fileName)}
@@ -959,7 +935,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                   </label>
                   <Button
                     disabled={disabled || !deleteConsent || !connection.session || allAliasesScheduled}
-                    onClick={() => void act(deleteFile, true)}
+                    onClick={() => void deleteSelectedFile()}
                     size="sm"
                     variant="danger"
                   >
@@ -974,9 +950,9 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                     <p className="text-sm text-muted">Authorize a browser session in Wallet setup first.</p>
                   )}
                 </section>
-                {error && (
+                {(error || deletionError) && (
                   <p className="text-sm text-warning break-words" role="alert">
-                    {error}
+                    {error || deletionError}
                   </p>
                 )}
               </>

@@ -104,6 +104,8 @@ export function parseDirectoryBackup(
     ] as const) {
       if (typeof file[field] !== 'string') throw new Error(`Invalid ${field}`)
     }
+    if (file.importedCar !== undefined && typeof file.importedCar !== 'boolean')
+      throw new Error('Invalid CAR import flag')
     if (file.cid) CID.parse(file.cid)
     pieceFrom(file.pieceCid)
     if (
@@ -154,6 +156,7 @@ export function parseDirectoryBackup(
       id: file.id,
       fileName: file.fileName,
       fileSize: file.fileSize,
+      ...(file.importedCar ? { importedCar: true } : {}),
       cid: file.cid,
       pieceCid: file.pieceCid,
       providerName: file.providerName,

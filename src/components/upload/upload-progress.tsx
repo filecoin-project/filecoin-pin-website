@@ -16,7 +16,7 @@ interface UploadProgressProps {
 }
 
 const stepLabels: Record<StepName, string> = {
-  'creating-car': 'Packing for IPFS',
+  'creating-car': 'Preparing IPFS data',
   'checking-readiness': 'Checking storage setup',
   'uploading-car': 'Uploading to Filecoin',
   replicating: 'Replicating storage copies',

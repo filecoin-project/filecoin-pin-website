@@ -22,6 +22,8 @@ First-time visitors default to **Filecoin Mainnet**. **Calibration** is availabl
 3. Deposit USDFC into Filecoin Pay and approve Warm Storage payments if needed. Payment approval uses unlimited rate and lockup allowances and requires explicit consent. These setup actions require owner-wallet confirmations.
 4. Upload files with the session key. Before sending file bytes, the app checks chain permissions and obtains a read-only funding quote for the actual selected storage copies, including dataset creation, operation fees and lockups. If more funds are needed, it displays the additional USDFC amount; deposits and payment approvals remain separate owner-wallet actions. Reauthorize expired or revoked sessions in Wallet setup.
 
+The Wallet and storage panel shows **Runway**, the estimated time before a top-up is needed at the account’s current recurring payment rate. It uses filecoin-pin’s SDK-based account summary, excludes locked reserves, and covers the wallet’s USDFC Filecoin Pay account, including other services billed there. Display labels follow Filecoin Pay Console. Accounts with no recurring spend show **No recurring charges**. This is an estimate, not a file retention guarantee. The panel fetches runway separately when mounted; a failed runway read does not block funding or uploads. **Refresh balances** also refreshes the visible estimate.
+
 You can revoke this browser's key from Wallet setup, or manage authorizations in Filecoin Pay Console. Disconnecting the wallet does not revoke its key. Session credentials are stored in IndexedDB, encrypted using a non-exportable AES-GCM wrapping key. The application origin can still use those credentials; this does not provide protection against malicious scripts on the origin.
 
 After a successful connection, the app remembers the chosen wallet type (and the injected wallet's stable discovery ID when available). On reload it silently restores an already authorized injected account, or reuses a valid WalletConnect session approved for the selected network. It does not automatically request account access, switch wallet networks, or start QR pairing. Locked wallets, expired sessions, or unavailable providers return to explicit Connect. Disconnect clears this reconnect preference; it does not clear the directory or revoke the storage session key.
@@ -65,6 +67,12 @@ When the local directory is absent but saved dataset IDs are still available, th
 
 Uploads require the page to remain open; a session key does not make them background server jobs. The current upload/download path buffers data in browser memory, and uploads are limited to 200 MB. Each confirmed storage copy is saved immediately, even if subsequent replication or IPFS indexing fails. The upload network is fixed when the operation starts and does not change during balance refreshes or retries of balance reads. Reloading before a confirmation is received can still leave content without a directory record. Files are not encrypted and can be retrieved by their content identifiers. Original file names, when submitted as upload metadata, and IPFS root CIDs are publicly visible in on-chain events. Folder paths and later display-name changes remain local.
 
+
+### Existing CAR archives
+
+Uploads inspect file contents to detect CAR archives regardless of the filename extension. Ordinary files retain the existing UnixFS packing. A detected CAR is stored byte-for-byte without wrapping it in a new file DAG, preserving its root CIDs. Drive uses the first root as the primary CID when an archive has multiple roots. Rootless archives and archives missing a declared root block are rejected before storage requests; the browser directory and content locks require a real primary root.
+
+Imported archives appear as one file record and download as the original CAR bytes from a storage provider. Drive does not expand their internal folders into the browser directory. Single-file previews and IPFS gateway file downloads are omitted for these records: traversing one root cannot reproduce an archive’s other roots or extra blocks. Directory backups preserve the CAR import flag, including after a display-name change. Best-effort chain metadata recovery cannot restore that local download-mode flag; retain a directory backup for imported archives.
 
 ## Development
 

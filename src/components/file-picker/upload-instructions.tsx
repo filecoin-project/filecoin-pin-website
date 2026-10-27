@@ -28,6 +28,9 @@ export function UploadInstructions({ maxSize, ...rest }: UploadInstructionsProps
           </p>
           <p className="text-xs text-muted">Up to {prettyBytes(maxSize)} per file</p>
           <p className="text-xs text-muted">
+            Existing CAR archives are imported unchanged; the first root is used as the primary CID.
+          </p>
+          <p className="text-xs text-muted">
             Uploaded content is not encrypted. Original file names and content identifiers may be publicly visible
             on-chain.
           </p>

@@ -126,3 +126,12 @@ describe('empty folder removal', () => {
     expect(readFolders(scope)).toEqual(['empty'])
   })
 })
+
+it('preserves the CAR download mode in directory transfers and rejects malformed flags', () => {
+  expect(
+    parseDirectoryBackup(backupFor({ ...record, importedCar: true }), '314:alice', 'mainnet').files[0].importedCar
+  ).toBe(true)
+  expect(() => parseDirectoryBackup(backupFor({ ...record, importedCar: 'yes' }), '314:alice', 'mainnet')).toThrow(
+    'CAR import flag'
+  )
+})

@@ -48,13 +48,23 @@ export async function downloadFile(
       onStage?.('downloading')
       const bytes = await context.download({ pieceCid: file.pieceCid, withCDN: false })
       onStage?.('preparing')
-      saveBlob(await unpackFile(bytes, file.cid), file.fileName)
+      if (file.importedCar) {
+        const reader = await CarReader.fromBytes(bytes)
+        if (!(await reader.getRoots()).some((cid) => cid.toString() === file.cid))
+          throw new Error('Downloaded CAR does not contain the expected root CID')
+        saveBlob(new Blob([new Uint8Array(bytes).buffer], { type: 'application/vnd.ipld.car' }), file.fileName)
+      } else saveBlob(await unpackFile(bytes, file.cid), file.fileName)
       return
     } catch (cause) {
       failure = cause
     }
   }
-  throw new Error('Unable to download the file from its storage providers. Try the IPFS gateway link in Details.', {
-    cause: failure,
-  })
+  throw new Error(
+    file.importedCar
+      ? 'Unable to download the CAR archive from its storage providers. Try again later.'
+      : 'Unable to download the file from its storage providers. Try the IPFS gateway link in Details.',
+    {
+      cause: failure,
+    }
+  )
 }

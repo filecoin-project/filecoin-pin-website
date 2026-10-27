@@ -34,6 +34,8 @@ export interface DatasetPiece {
   network: string
   uploadedAt: number // timestamp
   pieceId: number
+  /** Original CAR bytes are downloaded directly instead of unpacking a UnixFS file. */
+  importedCar?: boolean
   folderPath?: string
   ipfsIndexed?: boolean
   ipfsCheckAttempts?: number

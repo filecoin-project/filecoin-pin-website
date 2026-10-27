@@ -23,6 +23,7 @@ import { shortenAddress } from '../../lib/filecoin-pin/wallet.ts'
 import { ButtonBase } from '../ui/button/button-base.tsx'
 import { Select } from '../ui/select.tsx'
 import { ConnectWalletButton } from './connect-wallet-button.tsx'
+import { StorageRunway } from './storage-runway.tsx'
 
 export function WalletControls() {
   const wallet = useBrowserWallet()
@@ -331,6 +332,7 @@ export function WalletSetup({ inDrawer = false }: { inDrawer?: boolean }) {
               ))}
             </dl>
           )}
+          {wallet.data && <StorageRunway />}
           <p className="text-sm leading-6 text-muted">
             FIL pays wallet transaction gas; deposited USDFC pays ongoing storage. Deposit and payment approvals require
             your main wallet.

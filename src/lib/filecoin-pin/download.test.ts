@@ -2,7 +2,7 @@
 import { CarWriter } from '@ipld/car'
 import { CID } from 'multiformats/cid'
 import { sha256 } from 'multiformats/hashes/sha2'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 // Node selects the filesystem export; exercise the same browser builder Vite uses.
 import { createCarFromFile } from '../../../node_modules/filecoin-pin/dist/core/unixfs/browser.js'
 import { unpackFile } from './download.ts'
@@ -44,4 +44,39 @@ describe('original file retrieval', () => {
     const otherRoot = CID.createV1(0x55, await sha256.digest(new Uint8Array([9])))
     await expect(unpackFile(car, otherRoot.toString())).rejects.toThrow('expected root CID')
   })
+})
+
+it('downloads an imported archive as the original CAR bytes rather than its inner file', async () => {
+  const { downloadFile } = await import('./download.ts')
+  const car = await createCarFromFile(new File(['inside the archive'], 'inside.txt'))
+  const blobs: Blob[] = []
+  const anchor = { href: '', download: '', click: vi.fn(), remove: vi.fn() }
+  vi.stubGlobal('document', { createElement: () => anchor, body: { append: vi.fn() } })
+  const createUrl = vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+    if (blob instanceof Blob) blobs.push(blob)
+    return 'blob:archive'
+  })
+  vi.useFakeTimers()
+  try {
+    const synapse = { storage: { createContext: async () => ({ download: async () => car.carBytes }) } }
+    await downloadFile(
+      synapse as unknown as import('@filoz/synapse-sdk').Synapse,
+      {
+        cid: car.rootCid.toString(),
+        pieceCid: 'piece',
+        datasetId: '1',
+        fileName: 'original.car',
+        importedCar: true,
+      } as import('../../hooks/use-dataset-pieces.ts').DatasetPiece
+    )
+    expect(anchor.download).toBe('original.car')
+    expect(blobs).toHaveLength(1)
+    expect(new Uint8Array(await blobs[0].arrayBuffer())).toEqual(car.carBytes)
+    expect(blobs[0].type).toBe('application/vnd.ipld.car')
+  } finally {
+    vi.clearAllTimers()
+    vi.useRealTimers()
+    createUrl.mockRestore()
+    vi.unstubAllGlobals()
+  }
 })

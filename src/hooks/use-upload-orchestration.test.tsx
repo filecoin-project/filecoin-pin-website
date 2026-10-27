@@ -8,8 +8,8 @@ vi.mock('filecoin-pin/core/upload', () => ({
   executeUpload: mocks.execute,
   checkUploadReadiness: vi.fn().mockResolvedValue({ status: 'ready' }),
 }))
-vi.mock('filecoin-pin/core/unixfs', () => ({
-  createCarFromFile: vi.fn().mockResolvedValue({
+vi.mock('../lib/filecoin-pin/upload-input.ts', () => ({
+  prepareUploadInput: vi.fn().mockResolvedValue({
     rootCid: { toString: () => 'bafkreigh2akiscaildcgck5x5wqlooqkztdxqv5t5uwmybnv5brkw4zj3m' },
     carBytes: new Uint8Array([1]),
   }),

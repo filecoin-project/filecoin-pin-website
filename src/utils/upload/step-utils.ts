@@ -3,7 +3,7 @@ import type { StepState } from '../../types/upload/step.ts'
 export function getStepLabel(step: StepState['step']) {
   switch (step) {
     case 'creating-car':
-      return 'Packing for IPFS'
+      return 'Preparing IPFS data'
     case 'checking-readiness':
       return 'Checking storage setup'
     case 'uploading-car':

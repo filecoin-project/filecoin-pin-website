@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const {
   executeUploadMock,
   checkUploadReadinessMock,
-  createCarFromFileMock,
+  prepareUploadInputMock,
   useFilecoinPinContextMock,
   createFreshUploadContextsMock,
   createContextsMock,
@@ -12,7 +12,7 @@ const {
 } = vi.hoisted(() => ({
   executeUploadMock: vi.fn(),
   checkUploadReadinessMock: vi.fn(),
-  createCarFromFileMock: vi.fn(),
+  prepareUploadInputMock: vi.fn(),
   useFilecoinPinContextMock: vi.fn(),
   createFreshUploadContextsMock: vi.fn(),
   createContextsMock: vi.fn(),
@@ -26,8 +26,8 @@ vi.mock('filecoin-pin/core/upload', () => ({
   checkUploadReadiness: checkUploadReadinessMock,
 }))
 
-vi.mock('filecoin-pin/core/unixfs', () => ({
-  createCarFromFile: createCarFromFileMock,
+vi.mock('../lib/filecoin-pin/upload-input.ts', () => ({
+  prepareUploadInput: prepareUploadInputMock,
 }))
 
 vi.mock('./use-filecoin-pin-context.ts', () => ({
@@ -63,7 +63,7 @@ const fakeContexts = [{ provider: { id: 4n, name: 'provider-a' } }, { provider: 
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
-  createCarFromFileMock.mockResolvedValue({
+  prepareUploadInputMock.mockResolvedValue({
     rootCid: { toString: () => 'bafyrootcid' },
     carBytes: new Uint8Array([1, 2, 3]),
   })
@@ -83,7 +83,7 @@ it('refuses uploads before packing when safe directory writes are unavailable', 
     await act(async () => {
       await expect(result.current.uploadFile(testFile)).rejects.toThrow('cannot safely update the file directory')
     })
-    expect(createCarFromFileMock).not.toHaveBeenCalled()
+    expect(prepareUploadInputMock).not.toHaveBeenCalled()
     expect(checkUploadReadinessMock).not.toHaveBeenCalled()
     expect(executeUploadMock).not.toHaveBeenCalled()
     expect(result.current.uploadState.isUploading).toBe(false)
@@ -369,7 +369,7 @@ it('rejects an identical upload before permissions, funding or sending data when
     await act(async () => {
       await expect(result.current.uploadFile(testFile)).rejects.toThrow('Retry after')
     })
-    expect(createCarFromFileMock).toHaveBeenCalledOnce()
+    expect(prepareUploadInputMock).toHaveBeenCalledOnce()
     expect(checkUploadReadinessMock).not.toHaveBeenCalled()
     expect(executeUploadMock).not.toHaveBeenCalled()
   } finally {

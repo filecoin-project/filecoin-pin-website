@@ -15,10 +15,10 @@ import {
   browserSynapse,
   chains,
   type DriveNetwork,
+  SESSION_PERMISSIONS,
   SESSION_REVOCATION_PERMISSIONS,
   SessionPermissionError,
   scopeFor,
-  UPLOAD_PERMISSIONS,
 } from '../lib/filecoin-pin/browser-wallet.ts'
 import {
   type BrowserProvider,
@@ -507,7 +507,7 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
               loginCall({
                 chain: chains[network],
                 address: privateKeyToAccount(next.privateKey).address,
-                permissions: UPLOAD_PERMISSIONS,
+                permissions: SESSION_PERMISSIONS,
                 expiresAt: BigInt(next.expiresAt),
                 origin: 'Filecoin Drive',
               })

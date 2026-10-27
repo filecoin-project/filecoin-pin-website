@@ -19,6 +19,7 @@ import type { UploadStatusProps } from './upload-status.tsx'
 
 interface UploadCompletedProps {
   cid: string
+  importedCar?: boolean
   fileName: UploadStatusProps['fileName']
   pieceCid?: UploadStatusProps['pieceCid']
   datasetId?: UploadStatusProps['datasetId']
@@ -39,6 +40,7 @@ function resolveDatasetIds(datasetIds: string[] | undefined, fallback: string): 
 function UploadCompleted({
   cid,
   fileName,
+  importedCar,
   pieceCid,
   datasetId,
   datasetIds,
@@ -77,7 +79,9 @@ function UploadCompleted({
           }
           title="IPFS Root CID"
         >
-          {!hasIpniAnnounceFailure && <DownloadButton href={getIpfsGatewayDownloadLink(cid, fileName)} />}
+          {!hasIpniAnnounceFailure && !importedCar && (
+            <DownloadButton href={getIpfsGatewayDownloadLink(cid, fileName)} />
+          )}
         </Card.InfoRow>
       </Card.Wrapper>
 

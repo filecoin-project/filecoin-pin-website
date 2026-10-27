@@ -13,9 +13,9 @@ import type { BrowserSession } from '../local-storage/session-vault.ts'
 
 export type DriveNetwork = 'mainnet' | 'calibration'
 export const chains = { mainnet, calibration }
-export const UPLOAD_PERMISSIONS = [CreateDataSetPermission, AddPiecesPermission, SchedulePieceRemovalsPermission]
+export const SESSION_PERMISSIONS = [CreateDataSetPermission, AddPiecesPermission, SchedulePieceRemovalsPermission]
 // Earlier versions granted termination too. Revoke it before discarding the key.
-export const SESSION_REVOCATION_PERMISSIONS = [...UPLOAD_PERMISSIONS, TerminateServicePermission]
+export const SESSION_REVOCATION_PERMISSIONS = [...SESSION_PERMISSIONS, TerminateServicePermission]
 export class SessionPermissionError extends Error {
   constructor() {
     super('Upload session expired or was revoked. Authorize it again.')
@@ -46,8 +46,8 @@ export function browserSynapse(
   })
   const validate = async () => {
     if (!key) throw new Error('Authorize an upload session first.')
-    await key.syncExpirations(UPLOAD_PERMISSIONS)
-    if (!key.hasPermissions(UPLOAD_PERMISSIONS)) throw new SessionPermissionError()
+    await key.syncExpirations(SESSION_PERMISSIONS)
+    if (!key.hasPermissions(SESSION_PERMISSIONS)) throw new SessionPermissionError()
   }
   return {
     synapse,
@@ -62,9 +62,9 @@ export function browserSynapse(
     expiresAt: () =>
       key
         ? Number(
-            UPLOAD_PERMISSIONS.reduce(
+            SESSION_PERMISSIONS.reduce(
               (minimum, permission) => (key.expirations[permission] < minimum ? key.expirations[permission] : minimum),
-              key.expirations[UPLOAD_PERMISSIONS[0]]
+              key.expirations[SESSION_PERMISSIONS[0]]
             )
           )
         : 0,

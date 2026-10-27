@@ -24,7 +24,7 @@ vi.mock('../../hooks/use-filecoin-pin-context.ts', () => ({
 vi.mock('../../context/upload-history-context.tsx', () => ({
   useUploadHistory: () => ({ addUpload: vi.fn() }),
 }))
-vi.mock('filecoin-pin/core/unixfs', () => ({ createCarFromFile: mocks.createCar }))
+vi.mock('../../lib/filecoin-pin/upload-input.ts', () => ({ prepareUploadInput: mocks.createCar }))
 vi.mock('../drive/file-browser.tsx', () => ({
   FileBrowser: ({ onUpload }: { onUpload: () => void }) => (
     <button onClick={onUpload} type="button">

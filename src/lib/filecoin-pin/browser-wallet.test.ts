@@ -17,7 +17,7 @@ vi.mock('@filoz/synapse-sdk', async (original) => ({
 }))
 
 import { TerminateServicePermission } from '@filoz/synapse-core/session-key'
-import { browserSynapse, SESSION_REVOCATION_PERMISSIONS, UPLOAD_PERMISSIONS } from './browser-wallet.ts'
+import { browserSynapse, SESSION_PERMISSIONS, SESSION_REVOCATION_PERMISSIONS } from './browser-wallet.ts'
 
 const session = { privateKey: `0x${'1'.repeat(64)}` as const, expiresAt: 1 }
 const runtime = () => browserSynapse('0x1111111111111111111111111111111111111111', 'mainnet', session)
@@ -29,12 +29,12 @@ beforeEach(() => {
 
 it('accepts a three-permission session and derives its expiry without requiring termination', async () => {
   const expiry = BigInt(Math.floor(Date.now() / 1000) + 3600)
-  for (const permission of UPLOAD_PERMISSIONS) mocks.expirations[permission] = expiry
+  for (const permission of SESSION_PERMISSIONS) mocks.expirations[permission] = expiry
   const client = runtime()
   await client.validate()
   expect(client.expiresAt()).toBe(Number(expiry))
-  expect(mocks.sync).toHaveBeenCalledWith(UPLOAD_PERMISSIONS)
-  expect(UPLOAD_PERMISSIONS).not.toContain(TerminateServicePermission)
+  expect(mocks.sync).toHaveBeenCalledWith(SESSION_PERMISSIONS)
+  expect(SESSION_PERMISSIONS).not.toContain(TerminateServicePermission)
 })
 
 it('does not discard a legacy key until its termination permission is revoked too', async () => {

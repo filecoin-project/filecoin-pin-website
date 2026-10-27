@@ -242,6 +242,7 @@ export default function Content() {
               expectedCopies={activeUpload.expectedCopies}
               fileName={uploadedFile.file.name}
               fileSize={formatFileSize(uploadedFile.file.size)}
+              importedCar={activeUpload.importedCar}
               isExpanded={progressExpanded}
               onToggleExpanded={() => setProgressExpanded((expanded) => !expanded)}
               pieceCid={activeUpload.pieceCid}

@@ -195,3 +195,46 @@ describe('deletion across storage copies', () => {
     expect(checkpoint.deletion?.['2']?.confirmed).toBe(true)
   })
 })
+
+it('plans active aliases without borrowing archived receipts or mutating the directory', async () => {
+  const { planDeletion } = await import('./delete.ts')
+  const archivedHash = `0x${'d'.repeat(64)}`
+  const selected = { ...file, id: 'new', datasetIds: ['1', '2'] }
+  const archived = {
+    ...file,
+    id: 'old',
+    deletion: {
+      '1': { transactionHash: archivedHash, confirmed: true },
+      '2': { transactionHash: archivedHash, confirmed: true },
+    },
+  }
+  const pending = { ...file, id: 'pending', deletion: { '1': { transactionHash: hash, confirmed: false } } }
+  const history = [selected, archived, pending, { ...file, id: 'other', pieceCid: 'different' }]
+  const before = structuredClone(history)
+  const plan = planDeletion(history, selected)
+  expect([...plan.aliasIds]).toEqual(['new', 'pending'])
+  expect(plan.file.datasetIds).toEqual(['1', '2'])
+  expect(plan.file.deletion).toEqual({ '1': { transactionHash: hash, confirmed: false, remaining: true } })
+  expect(history).toEqual(before)
+})
+
+it('plans outstanding batches ahead of an alias with a completed receipt', async () => {
+  const { planDeletion } = await import('./delete.ts')
+  const finished = {
+    ...file,
+    id: 'finished',
+    datasetIds: ['1', '2'],
+    deletion: {
+      '1': { transactionHash: hash, confirmed: true },
+    },
+  }
+  const ongoing = {
+    ...file,
+    id: 'ongoing',
+    datasetIds: ['1', '2'],
+    deletion: {
+      '1': { transactionHash: hash, confirmed: true, remaining: true },
+    },
+  }
+  expect(planDeletion([finished, ongoing], ongoing).file.deletion?.['1'].remaining).toBe(true)
+})

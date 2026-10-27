@@ -67,3 +67,87 @@ it.each(['resolve', 'reject'])('ignores a stale wallet read that later %ss after
   expect(result.current?.wallet.data?.network).toBe('calibration')
   expect(result.current?.storageSetup?.status).toBe('ready')
 })
+
+it('does not render the previous wallet balance or readiness while another wallet loads', async () => {
+  const alice = mocks.connection.address
+  const bob = '0x2222222222222222222222222222222222222222'
+  mocks.snapshot.mockImplementation(({ address }) =>
+    address === alice
+      ? Promise.resolve({ address, network: 'mainnet', filBalance: 1n, raw: { filecoinPayBalance: 1n } })
+      : new Promise(() => {
+          /* Keep the second wallet pending while checking rendered isolation. */
+        })
+  )
+  const renders: { scope?: string; address?: string; funded?: boolean }[] = []
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const { result, rerender } = renderHook(
+    () => {
+      const value = useContext(FilecoinPinContext)
+      renders.push({
+        scope: value?.storageScope,
+        address: value?.wallet.data?.address,
+        funded: value?.storageSetup?.depositReady,
+      })
+      return value
+    },
+    {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={queryClient}>
+          <FilecoinPinProvider>{children}</FilecoinPinProvider>
+        </QueryClientProvider>
+      ),
+    }
+  )
+  try {
+    await waitFor(() => expect(result.current?.wallet.status).toBe('ready'))
+    mocks.connection.address = bob
+    rerender()
+    expect(result.current?.wallet.data).toBeUndefined()
+    expect(result.current?.storageSetup?.depositReady).toBe(false)
+    expect(
+      renders.filter((value) => value.scope?.endsWith(bob)).every((value) => !value.address && !value.funded)
+    ).toBe(true)
+  } finally {
+    mocks.connection.address = alice
+  }
+})
+
+it('keeps the current balance visible during a refresh and reports a failed refresh', async () => {
+  const snapshot = {
+    address: mocks.connection.address,
+    network: 'mainnet',
+    filBalance: 1n,
+    raw: { filecoinPayBalance: 1n },
+  }
+  mocks.snapshot.mockResolvedValue(snapshot)
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const { result } = renderHook(() => useContext(FilecoinPinContext), {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>
+        <FilecoinPinProvider>{children}</FilecoinPinProvider>
+      </QueryClientProvider>
+    ),
+  })
+  await waitFor(() => expect(result.current?.wallet.status).toBe('ready'))
+  let fail!: (cause: Error) => void
+  mocks.snapshot.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, reject) => {
+        fail = reject
+      })
+  )
+  let refresh!: Promise<void>
+  await act(async () => {
+    if (!result.current) throw new Error('Missing wallet context')
+    refresh = result.current.refreshWallet()
+  })
+  await waitFor(() => expect(result.current?.wallet.status).toBe('loading'))
+  expect(result.current?.wallet.data).toEqual(snapshot)
+  await act(async () => {
+    fail(new Error('RPC unavailable'))
+    await refresh
+  })
+  await waitFor(() => expect(result.current?.wallet.status).toBe('error'))
+  expect(result.current?.wallet.data).toEqual(snapshot)
+  expect(result.current?.storageSetup?.status).toBe('error')
+})

@@ -3,6 +3,7 @@ import { from as pieceFrom } from '@filoz/synapse-core/piece'
 import type { Synapse } from '@filoz/synapse-sdk'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import type { DeletionCheckpoint, DeletionUpdate } from '../../utils/file-deletion.ts'
+import { isDeletionScheduled } from '../../utils/file-deletion.ts'
 import { type DriveNetwork, publicClient } from './browser-wallet.ts'
 import { acquireContentLock } from './content-lock.ts'
 
@@ -89,4 +90,33 @@ export async function scheduleFileDeletion(
     throw new Error(
       `Deletion progress saved. Dataset(s) ${deferred.join(', ')} need another batch. Retry after the provider’s next proving period releases its removal queue.`
     )
+}
+
+/** Plan all active aliases and resumable checkpoints from the latest directory snapshot. */
+export function planDeletion(history: DatasetPiece[], selected: DatasetPiece) {
+  // Identical uploads can share the same on-chain piece. Explain and track all affected records.
+  // Archived receipts belong to earlier uploads and cannot settle a new removal.
+  const aliases = history.filter((file) => file.pieceCid === selected.pieceCid && !isDeletionScheduled(file))
+  const aliasIds = new Set(aliases.map((file) => file.id))
+  const datasetIds = [...new Set(aliases.flatMap((file) => file.datasetIds ?? [file.datasetId]))]
+  const deletion: NonNullable<DatasetPiece['deletion']> = {}
+  for (const alias of aliases)
+    for (const [id, checkpoint] of Object.entries(alias.deletion ?? {})) {
+      const previous = deletion[id]
+      // Always resolve an outstanding transaction before trusting another record's
+      // completed batch. A confirmed batch may also leave more instances to remove.
+      if (!previous || (previous.confirmed && (!checkpoint.confirmed || checkpoint.remaining)))
+        deletion[id] = checkpoint
+    }
+  for (const id of datasetIds) {
+    const checkpoint = deletion[id]
+    // A later upload of identical content can add another piece instance.
+    // An older alias's pending or confirmed receipt does not cover that new instance.
+    if (
+      checkpoint &&
+      aliases.some((alias) => (alias.datasetIds ?? [alias.datasetId]).includes(id) && !alias.deletion?.[id])
+    )
+      deletion[id] = { ...checkpoint, remaining: true }
+  }
+  return { aliasIds, file: { ...selected, datasetIds, deletion } }
 }

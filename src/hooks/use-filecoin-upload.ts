@@ -1,5 +1,4 @@
 import { CommitError, type PDPProvider, StoreError } from '@filoz/synapse-sdk'
-import { createCarFromFile } from 'filecoin-pin/core/unixfs'
 import {
   checkUploadReadiness,
   executeUpload,
@@ -15,6 +14,7 @@ import { acquireContentLock } from '../lib/filecoin-pin/content-lock.ts'
 import { createFreshUploadContexts } from '../lib/filecoin-pin/fresh-contexts.ts'
 import { ensureSessionKeyPermissions } from '../lib/filecoin-pin/synapse.ts'
 import { prepareUploadContexts } from '../lib/filecoin-pin/upload-funding.ts'
+import { prepareUploadInput } from '../lib/filecoin-pin/upload-input.ts'
 import { getOrCreateClientId } from '../lib/local-storage/client-id.ts'
 import { addStoredDataSetId, clearStoredDataSetIds, getStoredDataSetIds } from '../lib/local-storage/data-set.ts'
 import { requireDirectoryLocks } from '../lib/local-storage/directory-store.ts'
@@ -25,6 +25,7 @@ import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 import { useWaitableRef } from './use-waitable-ref.ts'
 
 interface UploadState {
+  importedCar?: boolean
   confirmedPieces?: { dataSetId: bigint; providerId: bigint; pieceId: bigint; transactionHash: string }[]
   isUploading: boolean
   stepStates: StepState[]
@@ -83,7 +84,7 @@ const isProviderStoreError = (error: unknown): boolean => StoreError.is(error) |
 
 /**
  * Handles the end-to-end upload workflow with filecoin-pin:
- * - Builds a CAR file in-browser
+ * - Packs files or imports existing CAR archives in-browser
  * - Checks upload readiness (allowances, balances)
  * - Executes the upload with progress callbacks
  * - Tracks IPNI availability and on-chain confirmation
@@ -141,9 +142,9 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           throw new Error(`Files must be ${prettyBytes(MAX_FILE_SIZE)} or smaller for browser uploads.`)
         requireDirectoryLocks()
         updateStepState('creating-car', { status: 'in-progress', progress: 0 })
-        logger.info('Creating CAR from file')
+        logger.info('Preparing IPFS input')
 
-        const carResult = await createCarFromFile(file, {
+        const carResult = await prepareUploadInput(file, {
           onProgress: (bytesProcessed: number, totalBytes: number) => {
             const progressPercent = Math.round((bytesProcessed / totalBytes) * 100)
             updateStepState('creating-car', { progress: progressPercent })
@@ -154,10 +155,11 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
         setUploadState((prev) => ({
           ...prev,
           currentCid: rootCid,
+          importedCar: carResult.importedCar,
         }))
 
         updateStepState('creating-car', { status: 'completed', progress: 100 })
-        logger.info('CAR created')
+        logger.info('IPFS data prepared')
 
         contentLock.current = await acquireContentLock(
           storageScope ??

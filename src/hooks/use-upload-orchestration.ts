@@ -110,6 +110,7 @@ export function useUploadOrchestration() {
       ipfsIndexed: uploadState.stepStates.find((step) => step.step === 'announcing-cids')?.status === 'completed',
       pieceIds: orderedCopies.map((c) => String(c.pieceId)),
       fileName: uploadedFile.file.name,
+      importedCar: uploadState.importedCar || undefined,
       fileSize: formatFileSize(uploadedFile.file.size),
       cid: uploadState.currentCid || '',
       pieceCid: uploadState.pieceCid,
@@ -155,6 +156,7 @@ export function useUploadOrchestration() {
   }, [
     isUploadSuccessful,
     uploadState.pieceCid,
+    uploadState.importedCar,
     uploadState.currentCid,
     uploadState.transactionHash,
     uploadState.copies,
