@@ -1,31 +1,23 @@
-import type { StepState } from '../../types/upload/step.ts'
+import type { StepName } from '../../types/upload/step.ts'
 
-export function getStepLabel(step: StepState['step']) {
-  switch (step) {
-    case 'creating-car':
-      return 'Preparing IPFS data'
-    case 'checking-readiness':
-      return 'Checking storage setup'
-    case 'uploading-car':
-      return 'Uploading to Filecoin storage provider'
-    case 'replicating':
-      return 'Replicating across storage providers'
-    case 'announcing-cids':
-      return 'Announcing IPFS CIDs to IPNI'
-    case 'finalizing-transaction':
-      return 'Storage provider confirmation'
-  }
+const STEP_LABELS: Record<StepName, { short: string; detail: string }> = {
+  'creating-car': { short: 'Preparing IPFS data', detail: 'Preparing IPFS data' },
+  'checking-readiness': { short: 'Checking storage setup', detail: 'Checking storage setup' },
+  'uploading-car': { short: 'Uploading to Filecoin', detail: 'Uploading to Filecoin storage provider' },
+  replicating: { short: 'Replicating storage copies', detail: 'Replicating across storage providers' },
+  'announcing-cids': { short: 'IPFS indexing', detail: 'Announcing IPFS CIDs to IPNI' },
+  'finalizing-transaction': { short: 'Storage provider confirmation', detail: 'Storage provider confirmation' },
 }
 
-export function getStepEstimatedTime(step: StepState['step']) {
+export function getStepLabel(step: StepName, variant: 'short' | 'detail' = 'detail') {
+  return STEP_LABELS[step][variant]
+}
+
+export function getStepEstimatedTime(step: StepName) {
   switch (step) {
     case 'replicating':
       return 'Estimated time: ~10-60 seconds'
     case 'announcing-cids':
       return 'Estimated time: ~30 seconds'
   }
-}
-
-export function stepHasActiveStatus(status?: StepState['status']) {
-  return status === 'completed' || status === 'in-progress'
 }

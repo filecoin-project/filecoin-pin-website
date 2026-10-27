@@ -34,9 +34,17 @@ vi.mock('viem/actions', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   writeContract: (_client: unknown, args: unknown) => mocks.write(args),
 }))
-vi.mock('../lib/local-storage/session-vault.ts', () => ({
+vi.mock('../lib/local-storage/session-vault.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/local-storage/session-vault.ts')>()),
   loadBrowserSession: mocks.load,
   saveBrowserSession: mocks.save,
+  updateBrowserSession: (scope: string, update: (current: unknown) => unknown) =>
+    navigator.locks.request(`test-session-${scope}`, async () => {
+      const current = await mocks.load(scope)
+      const next = update(current)
+      if (next !== current) await mocks.save(scope, next)
+      return next
+    }),
 }))
 vi.mock('../lib/filecoin-pin/wallet-connect.ts', () => ({
   walletConnectAvailable: true,
@@ -98,8 +106,13 @@ beforeEach(() => {
       )
   }
   window.addEventListener('eip6963:requestProvider', announce)
-  mocks.load.mockResolvedValue(null)
-  mocks.save.mockResolvedValue(undefined)
+  const vault = new Map()
+  mocks.load.mockImplementation(async (scope) => vault.get(scope) ?? null)
+  mocks.save.mockImplementation(async (scope, session) => {
+    if (session) vault.set(scope, session)
+    else vault.delete(scope)
+    window.dispatchEvent(new CustomEvent('filecoin-drive-session-change', { detail: scope }))
+  })
   mocks.write.mockResolvedValue(hash)
   mocks.receipt.mockResolvedValue({ status: 'success' })
   mocks.getReceipt.mockRejectedValue(new Error('Receipt not found'))
@@ -120,6 +133,68 @@ afterEach(() => {
 })
 
 describe('BYOW browser sessions', () => {
+  it('reuses and synchronizes the latest key across two already-open wallet views', async () => {
+    const first = renderHook(useBrowserWallet, { wrapper })
+    const second = renderHook(useBrowserWallet, { wrapper })
+    await act(async () => first.result.current.connect())
+    await act(async () => second.result.current.connect())
+    await act(async () => first.result.current.authorize(7))
+    const key = first.result.current.session?.privateKey
+    await waitFor(() => expect(second.result.current.session?.privateKey).toBe(key))
+    await act(async () => second.result.current.authorize(7))
+    expect(second.result.current.session?.privateKey).toBe(key)
+    expect(mocks.write.mock.calls[0][0].args[0]).toBe(mocks.write.mock.calls[1][0].args[0])
+    await waitFor(() => expect(first.result.current.session).toEqual(second.result.current.session))
+  })
+
+  it.each([false, true])(
+    'does not erase a newer session when an older revocation confirms (same key: %s)',
+    async (sameKey) => {
+      const { result } = renderHook(useBrowserWallet, { wrapper })
+      await act(async () => result.current.connect())
+      await act(async () => result.current.authorize(7))
+      const original = result.current.session
+      expect(original).not.toBeNull()
+      mocks.receipt.mockClear()
+      let settle!: (receipt: { status: string }) => void
+      mocks.receipt.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            settle = resolve
+          })
+      )
+      let revocation!: Promise<void>
+      act(() => {
+        revocation = result.current.revoke()
+      })
+      await waitFor(() => expect(mocks.receipt).toHaveBeenCalledOnce())
+      const updated = {
+        ...original,
+        privateKey: sameKey ? original?.privateKey : `0x${'2'.repeat(64)}`,
+        revision: 'another-tab-authorization',
+      }
+      await act(async () => mocks.save(`314:${ALICE}`, updated))
+      await act(async () => {
+        settle({ status: 'success' })
+        await revocation
+      })
+      expect(await mocks.load(`314:${ALICE}`)).toEqual(updated)
+      expect(result.current.session?.revision).toBe(updated.revision)
+      expect(mocks.save.mock.calls.some(([, value]) => value === null)).toBe(false)
+    }
+  )
+
+  it('rereads a missed session change when the page returns to the foreground', async () => {
+    const { result } = renderHook(useBrowserWallet, { wrapper })
+    await act(async () => result.current.connect())
+    await act(async () => result.current.authorize(7))
+    // No notification, as can happen while a page is frozen.
+    mocks.load.mockResolvedValue(null)
+    await act(async () => window.dispatchEvent(new Event('focus')))
+    await waitFor(() => expect(result.current.session).toBeNull())
+    expect(result.current.sessionStatus).toBe('none')
+  })
+
   it('connects a remote wallet and authorizes the same scoped browser session', async () => {
     Reflect.deleteProperty(window, 'ethereum')
     const { result } = renderHook(useBrowserWallet, { wrapper })

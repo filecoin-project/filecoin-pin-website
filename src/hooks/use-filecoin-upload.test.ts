@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
@@ -358,6 +358,31 @@ it('retries the two-copy target on every upload when no additional provider is r
   }
   expect(createFreshUploadContextsMock).toHaveBeenCalledTimes(2)
   expect(getStoredDataSetIds(scope)).toEqual([44585])
+})
+
+it('keeps the selected copy count while only the first provider has submitted', async () => {
+  useFilecoinPinContextMock.mockReturnValue(baseContext)
+  let complete!: () => void
+  executeUploadMock.mockImplementation(async (_synapse, _car, _root, options) => {
+    options.onProgress({ type: 'piecesAdded', data: { providerId: 4n, txHash: '0xfirst' } })
+    await new Promise<void>((resolve) => {
+      complete = resolve
+    })
+    options.onProgress({ type: 'piecesAdded', data: { providerId: 2n, txHash: '0xsecond' } })
+    return { requestedCopies: 2, copies: [{ providerId: 4n }, { providerId: 2n }] }
+  })
+  const { result } = renderHook(useFilecoinUpload)
+  let upload!: Promise<unknown>
+  act(() => {
+    upload = result.current.uploadFile(testFile)
+  })
+  await waitFor(() => expect(result.current.uploadState.transactionHashes).toEqual(['0xfirst']))
+  expect(result.current.uploadState.expectedCopies).toBe(2)
+  await act(async () => {
+    complete()
+    await upload
+  })
+  expect(result.current.uploadState.expectedCopies).toBe(2)
 })
 
 it('rejects an identical upload before permissions, funding or sending data when deletion holds the lock', async () => {

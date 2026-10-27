@@ -18,6 +18,7 @@ import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useTheme } from '../../context/theme-provider.tsx'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { chains } from '../../lib/filecoin-pin/browser-wallet.ts'
+import { DEFAULT_SESSION_DAYS } from '../../lib/filecoin-pin/config.ts'
 import { approveStoragePayments, depositStorageFunds } from '../../lib/filecoin-pin/payments.ts'
 import { shortenAddress } from '../../lib/filecoin-pin/wallet.ts'
 import { ButtonBase } from '../ui/button/button-base.tsx'
@@ -164,7 +165,7 @@ export function WalletControls() {
 export function WalletSetup({ inDrawer = false }: { inDrawer?: boolean }) {
   const connection = useBrowserWallet()
   const { wallet, refreshWallet, storageSetup } = useFilecoinPinContext()
-  const [days, setDays] = useState(7)
+  const [days, setDays] = useState(DEFAULT_SESSION_DAYS)
   const [amount, setAmount] = useState('1')
   const [consent, setConsent] = useState(false)
   const [approvalConsent, setApprovalConsent] = useState(false)

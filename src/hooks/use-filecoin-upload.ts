@@ -277,7 +277,6 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
                 console.debug('[FilecoinUpload] Piece add transaction:', { txHash })
                 setUploadState((prev) => {
                   const newHashes = txHash ? [...prev.transactionHashes, txHash] : prev.transactionHashes
-                  const newExpected = prev.expectedCopies + 1
                   // Fallback: complete replicating if still in-progress
                   const stepStates = prev.stepStates.map((s) =>
                     s.step === 'replicating' && s.status === 'in-progress'
@@ -288,7 +287,6 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
                     ...prev,
                     transactionHash: txHash || prev.transactionHash,
                     transactionHashes: newHashes,
-                    expectedCopies: newExpected,
                     stepStates,
                   }
                 })
@@ -383,6 +381,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           debugParams.providerId == null && walletAddress ? getStoredDataSetIds(walletAddress) : []
         const executeFundedUpload = async (options: UploadExecutionOptions) => {
           const contexts = await prepareUploadContexts(synapse, BigInt(carResult.carBytes.length), options)
+          setUploadState((prev) => ({ ...prev, expectedCopies: contexts.length }))
           updateStepState('checking-readiness', { status: 'completed', progress: 100 })
           updateStepState('uploading-car', { status: 'in-progress', progress: 0 })
           const executionOptions = { ...options, contexts }

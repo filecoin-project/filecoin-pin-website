@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Address, Hash, TransactionReceipt } from 'viem'
 import { type DriveNetwork, publicClient, scopeFor } from '../lib/filecoin-pin/browser-wallet.ts'
+import { getTransactionMessageCid, resolveTransactionReceipt } from '../lib/filecoin-pin/transaction-receipt.ts'
 import {
   readWalletTransaction,
   saveWalletTransaction,
@@ -38,13 +39,27 @@ export function useWalletTransaction(
   }, [scope])
 
   const finish = useCallback(
-    async (targetScope: string, transaction: WalletTransaction, success: boolean) => {
+    async (
+      targetScope: string,
+      transaction: WalletTransaction,
+      success: boolean,
+      replaced = false,
+      trackedHash = transaction.hash
+    ) => {
       if (identity.current !== targetScope) return
-      if (success) await onConfirmed(transaction)
-      saveWalletTransaction(targetScope, null)
+      if (success && !replaced) await onConfirmed(transaction)
+      // Another tab may have submitted a newer operation while this receipt was pending.
+      if (readWalletTransaction(targetScope)?.hash === trackedHash) saveWalletTransaction(targetScope, null)
       if (identity.current !== targetScope) return
       setRecord(null)
-      setError(success ? null : 'Transaction reverted. You can try the operation again.')
+      setChecking(false)
+      setError(
+        replaced
+          ? 'Transaction was cancelled or replaced in your wallet. Check its result before trying again.'
+          : success
+            ? null
+            : 'Transaction reverted. You can try the operation again.'
+      )
       setRevision((value) => value + 1)
     },
     [onConfirmed]
@@ -60,19 +75,33 @@ export function useWalletTransaction(
       setChecking(true)
       try {
         let success: boolean | undefined
+        let replaced = false
+        const client = publicClient(network)
+        const transaction: WalletTransaction = { ...pending }
         try {
-          const receipt = await queryClient.fetchQuery({
+          const result = await queryClient.fetchQuery({
             queryKey: ['drive-wallet-receipt', scope, pending.hash],
-            queryFn: () => publicClient(network).getTransactionReceipt({ hash: pending.hash }),
+            queryFn: () => resolveTransactionReceipt(client, transaction),
             retry: false,
             staleTime: 0,
           })
-          success = receipt.status === 'success'
+          if (result.status !== 'pending') {
+            success = result.status === 'success'
+            replaced = result.status === 'replaced'
+            transaction.hash = result.hash ?? transaction.hash
+          }
+          transaction.messageCid = result.messageCid ?? transaction.messageCid
         } catch {
           // Not found, connection failures and replaced hashes are not proof of failure.
         }
-        if (success === undefined && (await reconcile(pending))) success = true
-        if (!cancelled && success !== undefined) await finish(scope, pending, success)
+        if (success === undefined && (await reconcile(transaction))) success = true
+        if (!cancelled) {
+          if (success !== undefined) await finish(scope, transaction, success, replaced, pending.hash)
+          else if (!pending.messageCid && transaction.messageCid) {
+            saveWalletTransaction(scope, transaction)
+            setRecord({ scope, transaction })
+          }
+        }
       } catch {
         // Preserve the hash and allow later reads to recover, including storage errors.
       } finally {
@@ -101,15 +130,34 @@ export function useWalletTransaction(
     }
   }, [pending, busy, network, scope, reconcile, finish, queryClient])
 
-  const confirm = async (hash: Hash, kind: WalletTransactionKind, expiresAt?: number) => {
+  const confirm = async (
+    hash: Hash,
+    kind: WalletTransactionKind,
+    expiresAt?: number,
+    session?: WalletTransaction['session']
+  ) => {
     if (!scope) throw new Error('Connect a wallet first.')
     setError(null)
-    const transaction: WalletTransaction = { hash, kind, submittedAt: Date.now(), ...(expiresAt ? { expiresAt } : {}) }
+    const transaction: WalletTransaction = {
+      hash,
+      kind,
+      submittedAt: Date.now(),
+      ...(expiresAt ? { expiresAt } : {}),
+      ...(session ? { session } : {}),
+    }
     setRecord({ scope, transaction })
     try {
       saveWalletTransaction(scope, transaction)
     } catch {
       setError('Keep this tab open: the pending transaction could not be saved in browser storage.')
+    }
+    // Preserve the original message CID while the node still knows the submitted transaction.
+    // Missing RPC data must never prevent tracking the hash itself.
+    try {
+      transaction.messageCid = await getTransactionMessageCid(publicClient(network), hash)
+      if (transaction.messageCid) saveWalletTransaction(scope, transaction)
+    } catch {
+      /* Receipt tracking and permission reconciliation still work without a message CID. */
     }
     let receipt: TransactionReceipt
     let replaced = false
@@ -133,8 +181,7 @@ export function useWalletTransaction(
       throw new PendingWalletTransactionError('Transaction confirmation is taking longer than expected.')
     }
     if (replaced) {
-      saveWalletTransaction(scope, null)
-      setRecord(null)
+      await finish(scope, transaction, false, true)
       throw new Error('Transaction was cancelled or replaced in your wallet. Check its result before trying again.')
     }
     await finish(scope, transaction, receipt.status === 'success')

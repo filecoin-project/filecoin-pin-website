@@ -31,7 +31,12 @@ import { readWalletConnectAccount } from '../lib/filecoin-pin/wallet-connect-acc
 import { WalletConnectionError } from '../lib/filecoin-pin/wallet-error.ts'
 import { installedWalletOptions, type WalletOption } from '../lib/filecoin-pin/wallet-options.ts'
 import { readNetworkPreference, saveNetworkPreference } from '../lib/local-storage/network.ts'
-import { type BrowserSession, loadBrowserSession, saveBrowserSession } from '../lib/local-storage/session-vault.ts'
+import {
+  type BrowserSession,
+  loadBrowserSession,
+  subscribeBrowserSession,
+  updateBrowserSession,
+} from '../lib/local-storage/session-vault.ts'
 import { readWalletPreference, saveWalletPreference } from '../lib/local-storage/wallet-connection.ts'
 import type { WalletTransaction } from '../lib/local-storage/wallet-transaction.ts'
 import { ChainProvider } from './chain-provider.tsx'
@@ -109,6 +114,12 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
   const reconcileTransaction = useCallback(
     async (transaction: WalletTransaction) => {
       if (!address || !session || (transaction.kind !== 'authorize' && transaction.kind !== 'revoke')) return false
+      if (
+        transaction.session &&
+        (transaction.session.key !== privateKeyToAccount(session.privateKey).address ||
+          transaction.session.revision !== session.revision)
+      )
+        return false
       const runtime = browserSynapse(address, network, session)
       if (transaction.kind === 'revoke') return runtime.isRevoked()
       try {
@@ -126,14 +137,32 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
       if (!address) return
       const scope = scopeFor(address, network)
       if (transaction.kind === 'revoke') {
-        await saveBrowserSession(scope, null)
-        if (identity.current === scope) setSession(null)
+        // Older pending records have no key address; only clear those after checking the current grant.
+        const key =
+          transaction.session?.key ??
+          (session && (await browserSynapse(address, network, session).isRevoked())
+            ? privateKeyToAccount(session.privateKey).address
+            : undefined)
+        const remaining = await updateBrowserSession(scope, (current) =>
+          current &&
+          privateKeyToAccount(current.privateKey).address === key &&
+          (!transaction.session || current.revision === transaction.session.revision)
+            ? null
+            : current
+        )
+        if (identity.current === scope) setSession(remaining)
       } else if (transaction.kind === 'authorize') {
-        const restored = await loadBrowserSession(scope)
+        const restored = await updateBrowserSession(scope, (current) =>
+          current &&
+          transaction.session?.key === privateKeyToAccount(current.privateKey).address &&
+          transaction.session.revision === current.revision
+            ? { ...current, transactionHash: transaction.hash }
+            : current
+        )
         if (identity.current === scope && restored) setSession(restored)
       }
     },
-    [address, network]
+    [address, network, session]
   )
   const selectedNetwork = useRef(network)
   selectedNetwork.current = network
@@ -220,15 +249,30 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
     setSession(null)
     if (!address) return
     let cancelled = false
-    loadBrowserSession(scopeFor(address, network))
-      .then((value) => {
-        if (!cancelled) setSession(value)
-      })
-      .catch(() => {
+    let revision = 0
+    const scope = scopeFor(address, network)
+    const restore = async () => {
+      const reading = ++revision
+      try {
+        const value = await loadBrowserSession(scope)
+        if (!cancelled && reading === revision)
+          setSession((current) =>
+            current?.privateKey === value?.privateKey &&
+            current?.expiresAt === value?.expiresAt &&
+            current?.transactionHash === value?.transactionHash &&
+            current?.revision === value?.revision
+              ? current
+              : value
+          )
+      } catch {
         if (!cancelled) setError('Unable to restore the upload session. Browser storage must be available.')
-      })
+      }
+    }
+    const unsubscribe = subscribeBrowserSession(scope, () => void restore())
+    void restore()
     return () => {
       cancelled = true
+      unsubscribe()
     }
   }, [address, network])
 
@@ -257,9 +301,13 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
             if (expiresAt !== session.expiresAt) {
               const verified = { ...session, expiresAt }
               setSession(verified)
-              void saveBrowserSession(scopeFor(address, network), verified).catch(() =>
-                setError('Unable to save the verified session expiry.')
-              )
+              void updateBrowserSession(scopeFor(address, network), (current) =>
+                current?.privateKey === session.privateKey &&
+                current.revision === session.revision &&
+                current.expiresAt === session.expiresAt
+                  ? { ...current, expiresAt }
+                  : current
+              ).catch(() => setError('Unable to save the verified session expiry.'))
             }
           }
         })
@@ -495,27 +543,27 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
             if (!address || ![1, 7, 30].includes(days)) throw new Error('Choose a session duration')
             const scope = scopeFor(address, network)
             const client = await requireOwner()
-            const next: BrowserSession = {
-              privateKey: session?.privateKey ?? generatePrivateKey(),
+            const next = await updateBrowserSession(scope, (current) => ({
+              privateKey: current?.privateKey ?? generatePrivateKey(),
               expiresAt: Math.floor(Date.now() / 1000) + days * 86400,
-            }
+              revision: crypto.randomUUID(),
+            }))
+            if (!next) throw new Error('Unable to save the upload session.')
             // Save before requesting a transaction so a reload cannot lose an authorized key.
-            await saveBrowserSession(scope, next)
             if (identity.current === scope) setSession({ ...next })
+            const sessionKey = privateKeyToAccount(next.privateKey).address
             const hash = await writeContract(
               client,
               loginCall({
                 chain: chains[network],
-                address: privateKeyToAccount(next.privateKey).address,
+                address: sessionKey,
                 permissions: SESSION_PERMISSIONS,
                 expiresAt: BigInt(next.expiresAt),
                 origin: 'Filecoin Drive',
               })
             )
-            next.transactionHash = hash
             // Track the submitted hash immediately; the key was saved before signing.
-            await transaction.confirm(hash, 'authorize', next.expiresAt)
-            if (identity.current === scope) setSession({ ...next })
+            await transaction.confirm(hash, 'authorize', next.expiresAt, { key: sessionKey, revision: next.revision })
           }),
         revoke: () =>
           run(async () => {
@@ -530,7 +578,10 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
                 origin: 'Filecoin Drive',
               })
             )
-            await transaction.confirm(hash, 'revoke')
+            await transaction.confirm(hash, 'revoke', undefined, {
+              key: privateKeyToAccount(session.privateKey).address,
+              revision: session.revision,
+            })
           }),
         paymentAction: (action, kind = 'deposit') =>
           run(async () => {

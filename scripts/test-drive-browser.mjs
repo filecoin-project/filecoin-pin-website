@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { chromium } from 'playwright'
 import { checkDirectoryTabs } from './check-drive-directory-tabs.mjs'
+import { checkSessionTabs } from './check-drive-session-tabs.mjs'
 import { checkWalletSelection } from './check-drive-wallet-selection.mjs'
 import { prepareBrowserPage } from './drive-browser-fixtures.mjs'
 
@@ -49,6 +50,7 @@ try {
       optionalChains: [314159],
     })
   }
+  await checkSessionTabs(page)
   await checkDirectoryTabs(page, errors)
   await page.getByRole('textbox', { name: 'New folder name' }).fill('reports/2026')
   await page.getByRole('button', { name: 'Create folder', exact: true }).click()

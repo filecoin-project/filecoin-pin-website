@@ -1,7 +1,12 @@
 import { webcrypto } from 'node:crypto'
 import { indexedDB } from 'fake-indexeddb'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { loadBrowserSession, saveBrowserSession } from './session-vault.ts'
+import {
+  loadBrowserSession,
+  saveBrowserSession,
+  subscribeBrowserSession,
+  updateBrowserSession,
+} from './session-vault.ts'
 
 beforeEach(() => {
   vi.stubGlobal('indexedDB', indexedDB)
@@ -18,6 +23,27 @@ describe('browser session vault', () => {
     expect(localStorage.length).toBe(0)
     await saveBrowserSession('314:alice', null)
     expect(await loadBrowserSession('314:alice')).toBeNull()
+  })
+
+  it('selects one key for concurrent authorizations and notifies readers after durable writes', async () => {
+    const scope = '314:concurrent-wallet'
+    const first = { privateKey: `0x${'3'.repeat(64)}` as const, expiresAt: 1800000000 }
+    const second = { ...first, privateKey: `0x${'4'.repeat(64)}` as const }
+    const changed = vi.fn()
+    const unsubscribe = subscribeBrowserSession(scope, changed)
+    try {
+      const selected = await Promise.all([
+        updateBrowserSession(scope, (current) => current ?? first),
+        updateBrowserSession(scope, (current) => current ?? second),
+      ])
+      expect(selected).toEqual([first, first])
+      expect(await loadBrowserSession(scope)).toEqual(first)
+      expect(changed).toHaveBeenCalledOnce()
+    } finally {
+      unsubscribe()
+      await saveBrowserSession(scope, null)
+    }
+    expect(changed).toHaveBeenCalledOnce()
   })
 })
 

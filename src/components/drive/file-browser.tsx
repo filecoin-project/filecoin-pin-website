@@ -201,10 +201,6 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
     const parsed = parseDirectoryBackup(await file.text(), storageScope ?? '', connection.network)
     for (const record of parsed.files)
       for (const id of record.datasetIds ?? [record.datasetId]) {
-        if (!Number.isSafeInteger(Number(id))) throw new Error('Dataset ID exceeds browser storage limits')
-      }
-    for (const record of parsed.files)
-      for (const id of record.datasetIds ?? [record.datasetId]) {
         addStoredDataSetId(storageScope ?? '', Number(id))
         addDataSetId(BigInt(id))
       }

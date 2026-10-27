@@ -1,7 +1,7 @@
 import { Check, Circle, CircleAlert, Loader2 } from 'lucide-react'
-import type { StepName, StepState } from '../../types/upload/step.ts'
+import type { StepState } from '../../types/upload/step.ts'
 import { getIpfsGatewayRenderLink, getTxExplorerLink } from '../../utils/links.ts'
-import { getStepEstimatedTime } from '../../utils/upload/step-utils.ts'
+import { getStepEstimatedTime, getStepLabel } from '../../utils/upload/step-utils.ts'
 import { TextWithCopyToClipboard } from '../ui/text-with-copy-to-clipboard.tsx'
 import type { UploadStatusProps } from './upload-status.tsx'
 
@@ -13,15 +13,6 @@ interface UploadProgressProps {
   expectedCopies?: number
   cid?: string
   network?: string
-}
-
-const stepLabels: Record<StepName, string> = {
-  'creating-car': 'Preparing IPFS data',
-  'checking-readiness': 'Checking storage setup',
-  'uploading-car': 'Uploading to Filecoin',
-  replicating: 'Replicating storage copies',
-  'announcing-cids': 'IPFS indexing',
-  'finalizing-transaction': 'Storage provider confirmation',
 }
 
 function UploadProgress({
@@ -57,7 +48,7 @@ function UploadProgress({
               <div className="min-w-0 flex-1 pt-0.5">
                 <div className="flex items-start justify-between gap-3">
                   <p className={`text-sm leading-5 ${active || failed ? 'font-medium text-foreground' : 'text-muted'}`}>
-                    {stepLabels[step.step]}
+                    {getStepLabel(step.step, 'short')}
                   </p>
                   <span className={`shrink-0 text-[11px] leading-5 ${tone}`}>
                     {complete

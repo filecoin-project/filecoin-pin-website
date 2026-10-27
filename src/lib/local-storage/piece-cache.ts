@@ -100,13 +100,3 @@ export function mergeStorageCopies(recorded: DatasetPiece, incoming: DatasetPiec
     transactionHash: transactionHashes[0],
   }
 }
-
-/** Remove the cached piece list. Called alongside clearStoredDataSetIds so cache and ids stay in lockstep. */
-export const clearCachedPieces = (walletAddress: string): void => {
-  try {
-    localStorage.removeItem(getPieceCacheKey(walletAddress))
-    store.reset(walletAddress)
-  } catch (error) {
-    console.warn('[PieceCache] Failed to clear piece cache from localStorage:', error)
-  }
-}
