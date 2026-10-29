@@ -1,11 +1,17 @@
 import type { Synapse } from '@filoz/synapse-sdk'
 import type { StorageContext } from '@filoz/synapse-sdk/storage'
-import { expect, it, vi } from 'vitest'
+import { beforeEach, expect, it, vi } from 'vitest'
 import { prepareUploadContexts } from './upload-funding.ts'
 
 vi.mock('./storage-chain.ts', () => ({ assertCurrentStorageChain: vi.fn() }))
-const { freshContexts } = vi.hoisted(() => ({ freshContexts: vi.fn() }))
+const { freshContexts, live } = vi.hoisted(() => ({ freshContexts: vi.fn(), live: vi.fn() }))
+vi.mock('@filoz/synapse-core/pdp-verifier', () => ({ dataSetLive: live }))
 vi.mock('./fresh-contexts.ts', () => ({ createFreshUploadContexts: freshContexts }))
+
+beforeEach(() => {
+  vi.resetAllMocks()
+  live.mockResolvedValue(true)
+})
 
 it('quotes all selected contexts without executing an offered deposit or approval', async () => {
   const contexts = [{}, {}] as unknown as StorageContext[]
@@ -97,16 +103,6 @@ it('creates two fresh copies when none of the known datasets has the Drive marke
   expect(freshContexts).toHaveBeenLastCalledWith(synapse, expect.any(String), 2, [])
 })
 
-it('does not create datasets or quote funding when dataset resolution fails', async () => {
-  freshContexts.mockClear()
-  const createContexts = vi.fn().mockRejectedValue(new Error('metadata RPC unavailable'))
-  const prepare = vi.fn()
-  const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
-  await expect(prepareUploadContexts(synapse, 10n, { dataSetIds: [1n] })).rejects.toThrow('metadata RPC unavailable')
-  expect(freshContexts).not.toHaveBeenCalled()
-  expect(prepare).not.toHaveBeenCalled()
-})
-
 it('keeps the two-copy target when discovery finds datasets on more providers', async () => {
   const contexts = [1n, 2n, 3n].map((id) => ({ provider: { id }, dataSetMetadata: { source: 'filecoin-drive' } }))
   const createContexts = vi.fn(async ({ dataSetIds }: { dataSetIds: bigint[] }) => [
@@ -117,4 +113,47 @@ it('keeps the two-copy target when discovery finds datasets on more providers', 
   expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [1n, 2n, 3n] })).toEqual(contexts.slice(0, 2))
   expect(prepare).toHaveBeenCalledWith({ context: contexts.slice(0, 2), pieceSizes: [10n] })
   expect(createContexts).toHaveBeenCalledTimes(2)
+  expect(live).not.toHaveBeenCalled()
+})
+
+it('skips a chain-confirmed dead dataset and keeps the healthy candidates', async () => {
+  const healthy = [4n, 2n].map((id) => ({ provider: { id }, dataSetMetadata: { source: 'filecoin-drive' } }))
+  const createContexts = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('Data set 1 does not exist or is not live'))
+    .mockResolvedValueOnce([healthy[0]])
+    .mockResolvedValueOnce([healthy[1]])
+  const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
+  const readClient = {}
+  const synapse = { readClient, storage: { createContexts, prepare } } as unknown as Synapse
+  live.mockResolvedValueOnce(false)
+  expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [1n, 2n, 3n] })).toEqual(healthy)
+  expect(live).toHaveBeenCalledExactlyOnceWith(readClient, { dataSetId: 1n })
+  expect(createContexts).toHaveBeenCalledTimes(3)
+  expect(freshContexts).not.toHaveBeenCalled()
+  expect(prepare).toHaveBeenCalledWith({ context: healthy, pieceSizes: [10n] })
+})
+
+it('selects two fresh copies when every candidate is confirmed dead', async () => {
+  const createContexts = vi.fn().mockRejectedValue(new Error('Dataset unavailable'))
+  const fresh = [{ provider: { id: 4n } }, { provider: { id: 2n } }]
+  freshContexts.mockResolvedValueOnce(fresh)
+  live.mockResolvedValue(false)
+  const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
+  const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
+  expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [1n, 2n] })).toEqual(fresh)
+  expect(freshContexts).toHaveBeenCalledExactlyOnceWith(synapse, expect.any(String), 2, [])
+  expect(prepare).toHaveBeenCalledWith({ context: fresh, pieceSizes: [10n] })
+})
+
+it.each(['live', 'unknown'] as const)('preserves resolution errors when liveness is %s', async (state) => {
+  const error = new Error('metadata RPC unavailable')
+  const createContexts = vi.fn().mockRejectedValue(error)
+  if (state === 'live') live.mockResolvedValueOnce(true)
+  else live.mockRejectedValueOnce(new Error('liveness RPC unavailable'))
+  const prepare = vi.fn()
+  const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
+  await expect(prepareUploadContexts(synapse, 10n, { dataSetIds: [1n] })).rejects.toBe(error)
+  expect(freshContexts).not.toHaveBeenCalled()
+  expect(prepare).not.toHaveBeenCalled()
 })

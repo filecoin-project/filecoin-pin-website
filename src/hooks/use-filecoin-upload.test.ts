@@ -9,6 +9,7 @@ const {
   createFreshUploadContextsMock,
   createContextsMock,
   prepareMock,
+  dataSetLiveMock,
 } = vi.hoisted(() => ({
   executeUploadMock: vi.fn(),
   checkUploadReadinessMock: vi.fn(),
@@ -17,9 +18,14 @@ const {
   createFreshUploadContextsMock: vi.fn(),
   createContextsMock: vi.fn(),
   prepareMock: vi.fn(),
+  dataSetLiveMock: vi.fn(),
 }))
 
 vi.mock('../lib/filecoin-pin/storage-chain.ts', () => ({ assertCurrentStorageChain: vi.fn() }))
+vi.mock('@filoz/synapse-core/pdp-verifier', async (original) => ({
+  ...(await original<object>()),
+  dataSetLive: dataSetLiveMock,
+}))
 
 vi.mock('filecoin-pin/core/upload', () => ({
   executeUpload: executeUploadMock,
@@ -65,6 +71,7 @@ const fakeContexts = [
 
 beforeEach(() => {
   vi.clearAllMocks()
+  dataSetLiveMock.mockReset()
   localStorage.clear()
   prepareUploadInputMock.mockResolvedValue({
     rootCid: { toString: () => 'bafyrootcid' },
@@ -465,3 +472,23 @@ it('rejects metadata that cannot be restored before packing or contacting a prov
   expect(prepareUploadInputMock).not.toHaveBeenCalled()
   expect(executeUploadMock).not.toHaveBeenCalled()
 })
+
+it.each(['resolution', 'quote'] as const)(
+  'does not clear candidates or retry uploads for failed %s reads',
+  async (stage) => {
+    addStoredDataSetId('0xabc', 42)
+    setCachedPieces('0xabc', [{ pieceCid: 'history' } as never])
+    useFilecoinPinContextMock.mockReturnValue(baseContext)
+    const error = new Error('RPC method does not exist')
+    if (stage === 'resolution') {
+      createContextsMock.mockRejectedValueOnce(error)
+      dataSetLiveMock.mockRejectedValueOnce(new Error('RPC unavailable'))
+    } else prepareMock.mockRejectedValueOnce(error)
+    const { result } = renderHook(useFilecoinUpload)
+    await expect(result.current.uploadFile(testFile)).rejects.toBe(error)
+    expect(executeUploadMock).not.toHaveBeenCalled()
+    expect(createFreshUploadContextsMock).not.toHaveBeenCalled()
+    expect(getStoredDataSetIds('0xabc')).toEqual([42])
+    expect(getCachedPieces('0xabc')).toEqual([{ pieceCid: 'history' }])
+  }
+)

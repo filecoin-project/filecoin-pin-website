@@ -381,7 +381,9 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
         const walletAddress = storageScope ?? (wallet?.status === 'ready' ? wallet.data.address : null)
         const storedDataSetIds =
           debugParams.providerId == null && walletAddress ? getStoredDataSetIds(walletAddress) : []
+        let uploadExecutionStarted = false
         const executeFundedUpload = async (options: UploadExecutionOptions) => {
+          uploadExecutionStarted = false
           const contexts = await prepareUploadContexts(synapse, BigInt(carResult.carBytes.length), options)
           setUploadState((prev) => ({ ...prev, expectedCopies: contexts.length }))
           updateStepState('checking-readiness', { status: 'completed', progress: 100 })
@@ -393,6 +395,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           delete executionOptions.providerIds
           delete executionOptions.copies
           delete executionOptions.excludeProviderIds
+          uploadExecutionStarted = true
           return executeUpload(synapse, carResult.carBytes, carResult.rootCid, executionOptions)
         }
 
@@ -439,6 +442,9 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
               dataSetIds: storedDataSetIds.map((id) => BigInt(id)),
             })
           } catch (error) {
+            // Resolution/quote reads already distinguish dead datasets from
+            // unavailable chain state; never clear candidates for these errors.
+            if (!uploadExecutionStarted) throw error
             // Recoverable failures, both safe to retry into fresh datasets:
             //   1. Resolution failed: the stored id is gone or owned by another
             //      wallet. Resolution emits no progress events, so

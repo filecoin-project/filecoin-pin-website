@@ -1,3 +1,4 @@
+import { dataSetLive } from '@filoz/synapse-core/pdp-verifier'
 import { METADATA_KEYS, type Synapse } from '@filoz/synapse-sdk'
 import type { UploadExecutionOptions } from 'filecoin-pin/core/upload'
 import { formatUnits } from 'viem'
@@ -20,7 +21,15 @@ export async function prepareUploadContexts(
     const providers = new Set<bigint>()
     contexts = []
     for (const id of new Set(options.dataSetIds)) {
-      const resolved = await synapse.storage.createContexts({ withCDN: false, dataSetIds: [id] })
+      const resolved = await synapse.storage
+        .createContexts({ withCDN: false, dataSetIds: [id] })
+        .catch(async (cause) => {
+          // SDK resolution errors are untyped. Confirm liveness instead of
+          // treating RPC failures or error-message matches as a deleted dataset.
+          const live = await dataSetLive(synapse.readClient, { dataSetId: id }).catch(() => undefined)
+          if (live === false) return []
+          throw cause
+        })
       for (const context of resolved) {
         if (context.dataSetMetadata[METADATA_KEYS.SOURCE] !== APPLICATION_SOURCE || providers.has(context.provider.id))
           continue
