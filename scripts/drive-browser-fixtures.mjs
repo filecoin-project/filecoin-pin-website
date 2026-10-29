@@ -1,7 +1,10 @@
 import { calibration, mainnet } from '@filoz/synapse-sdk'
 import { decodeFunctionData, encodeFunctionResult, maxUint256, multicall3Abi, toFunctionSelector } from 'viem'
 
-export async function prepareBrowserPage(page, { seedDirectory = true, funded = true, approved = true } = {}) {
+export async function prepareBrowserPage(
+  page,
+  { seedDirectory = true, funded = true, approved = true, indexedDirectory = false } = {}
+) {
   let remoteSdkLoads = 0
   const mockedExpiry = Math.floor(Date.now() / 1000) + 7 * 86400
   await page.route('**/*', async (route) => {
@@ -35,6 +38,36 @@ export async function prepareBrowserPage(page, { seedDirectory = true, funded = 
     if (url.origin === new URL(process.env.DRIVE_TEST_URL || 'http://127.0.0.1:5173').origin) return route.continue()
     const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers })
+    if (url.hostname === 'api.filecoin.io') {
+      const visible = indexedDirectory && url.pathname.startsWith('/mainnet/')
+      const owner = '0x1111111111111111111111111111111111111111'
+      let response = { data: [], nextCursor: null }
+      if (visible && url.pathname === '/mainnet/data-sets' && url.searchParams.get('owner') === owner)
+        response = {
+          data: [{ dataSetId: '1', providerId: '4', owner, source: 'filecoin-drive', deleted: false }],
+          nextCursor: null,
+        }
+      else if (visible && url.pathname === '/mainnet/data-sets/1/pieces')
+        response = {
+          data: [
+            {
+              dataSetId: '1',
+              pieceId: '1',
+              cid: 'bafkzcibcd4bdomn3tgwgrh3g532zopskstnbrd2n3sxfqbze7rxt7vqn7veigmy',
+              removed: false,
+              metadata: {
+                label: 'Annual report.pdf',
+                path: 'reports/2026',
+                ipfsRootCID: 'bafkreigh2akiscaildcgck5x5wqlooqkztdxqv5t5uwmybnv5brkw4zj3m',
+              },
+            },
+          ],
+          nextCursor: null,
+        }
+      else if (url.pathname.includes('/providers/'))
+        response = { data: { name: 'Demo SP', serviceUrl: 'https://sp.example' } }
+      return route.fulfill({ headers, contentType: 'application/json', body: JSON.stringify(response) })
+    }
     let body
     try {
       body = route.request().postDataJSON()
@@ -68,6 +101,8 @@ export async function prepareBrowserPage(page, { seedDirectory = true, funded = 
             },
           },
         })
+      if (data.startsWith(toFunctionSelector('getScheduledRemovals(uint256)')))
+        return encodeFunctionResult({ abi: chain.contracts.pdp.abi, functionName: 'getScheduledRemovals', result: [] })
       if (data.startsWith(toFunctionSelector('viewContractAddress()')))
         return encodeFunctionResult({
           abi: chain.contracts.fwss.abi,

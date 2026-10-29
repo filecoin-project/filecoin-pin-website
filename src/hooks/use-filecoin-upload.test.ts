@@ -407,19 +407,61 @@ it('rejects an identical upload before permissions, funding or sending data when
   expect(executeUploadMock).toHaveBeenCalledOnce()
 })
 
-it('requires an unfinished recorded deletion to be resumed before reuploading the same content', async () => {
-  const scope = '314159:0xabc'
-  const file = { id: 'pending-delete', cid: 'bafyrootcid', datasetId: '1', deletion: {} }
-  setCachedPieces(scope, [file as never])
-  useFilecoinPinContextMock.mockReturnValue({ ...baseContext, storageScope: scope })
+it.each([{ deletion: {} }, { datasetIds: ['1', '2'], removalQueuedCopies: ['1'] }])(
+  'requires an unfinished local or indexed deletion to be resumed before reuploading the same content: %j',
+  async (progress) => {
+    const scope = '314159:0xabc'
+    const file = { id: 'pending-delete', cid: 'bafyrootcid', datasetId: '1', ...progress }
+    setCachedPieces(scope, [file as never])
+    useFilecoinPinContextMock.mockReturnValue({ ...baseContext, storageScope: scope })
+    const { result } = renderHook(useFilecoinUpload)
+    await act(async () => {
+      await expect(result.current.uploadFile(testFile)).rejects.toThrow('unfinished deletion')
+    })
+    expect(executeUploadMock).not.toHaveBeenCalled()
+    setCachedPieces(scope, [
+      {
+        ...file,
+        removedCopies: 'datasetIds' in file ? file.datasetIds : ['1'],
+        deletion: { '1': { confirmed: true, transactionHash: '0xabc' } },
+      } as never,
+    ])
+    await act(async () => {
+      await result.current.uploadFile(testFile)
+    })
+    expect(executeUploadMock).toHaveBeenCalledOnce()
+  }
+)
+
+it('records the immutable file name and normalized path in the three piece metadata slots', async () => {
+  useFilecoinPinContextMock.mockReturnValue(baseContext)
   const { result } = renderHook(useFilecoinUpload)
   await act(async () => {
-    await expect(result.current.uploadFile(testFile)).rejects.toThrow('unfinished deletion')
+    await result.current.uploadFile(testFile, { path: '/reports//2026/' })
   })
-  expect(executeUploadMock).not.toHaveBeenCalled()
-  setCachedPieces(scope, [{ ...file, deletion: { '1': { confirmed: true, transactionHash: '0xabc' } } } as never])
+  expect(executeUploadMock.mock.lastCall?.[3].pieceMetadata).toEqual({ label: 'a.txt', path: 'reports/2026' })
+})
+
+it('preserves the original CAR download mode through its path metadata key', async () => {
+  useFilecoinPinContextMock.mockReturnValue(baseContext)
+  prepareUploadInputMock.mockResolvedValue({
+    rootCid: { toString: () => 'bafyrootcid' },
+    carBytes: new Uint8Array([1]),
+    importedCar: true,
+  })
+  const { result } = renderHook(useFilecoinUpload)
   await act(async () => {
-    await result.current.uploadFile(testFile)
+    await result.current.uploadFile(testFile, { path: 'archives' })
   })
-  expect(executeUploadMock).toHaveBeenCalledOnce()
+  expect(executeUploadMock.mock.lastCall?.[3].pieceMetadata).toEqual({ label: 'a.txt', carPath: 'archives' })
+})
+
+it('rejects metadata that cannot be restored before packing or contacting a provider', async () => {
+  useFilecoinPinContextMock.mockReturnValue(baseContext)
+  const { result } = renderHook(useFilecoinUpload)
+  await act(async () => {
+    await expect(result.current.uploadFile(new File(['x'], '中'.repeat(33)))).rejects.toThrow('96 UTF-8')
+  })
+  expect(prepareUploadInputMock).not.toHaveBeenCalled()
+  expect(executeUploadMock).not.toHaveBeenCalled()
 })

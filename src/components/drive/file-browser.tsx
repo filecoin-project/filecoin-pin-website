@@ -7,7 +7,6 @@ import {
   File as FileIcon,
   Folder,
   FolderOpen,
-  FolderPlus,
   Loader2,
   MoreHorizontal,
   Search,
@@ -15,7 +14,7 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useUploadHistory } from '../../context/upload-history-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
@@ -23,18 +22,9 @@ import { useDownloadQueue } from '../../hooks/use-download-queue.ts'
 import { useFileDeletion } from '../../hooks/use-file-deletion.ts'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { IPFS_CHECK_LIMIT, resetIndexingChecks } from '../../hooks/use-ipfs-indexing.ts'
-import { saveBlob } from '../../lib/filecoin-pin/download.ts'
-import { addStoredDataSetId } from '../../lib/local-storage/data-set.ts'
-import {
-  deleteEmptyFolder,
-  directoryFolders,
-  normalizeFolder,
-  parseDirectoryBackup,
-  readFolders,
-  saveFolders,
-  subscribeFolders,
-} from '../../lib/local-storage/drive-directory.ts'
-import { isDeletionScheduled } from '../../utils/file-deletion.ts'
+import { displayFileName } from '../../lib/filecoin-pin/drive-api.ts'
+import { directoryFolders } from '../../lib/local-storage/drive-directory.ts'
+import { hasRemovalProgress, isDeletionScheduled } from '../../utils/file-deletion.ts'
 import {
   getDatasetExplorerLink,
   getIpfsGatewayDownloadLink,
@@ -44,12 +34,11 @@ import {
 } from '../../utils/links.ts'
 import { ButtonBase as Button, buttonVariants } from '../ui/button/button-base.tsx'
 import { CopyButton } from '../ui/copy-button.tsx'
-import { Select } from '../ui/select.tsx'
 import { ProviderLink } from './provider-link.tsx'
 
 export function fileStatus(file: DatasetPiece) {
   if (isDeletionScheduled(file)) return 'Deletion scheduled'
-  if (file.deletion) return 'Deletion incomplete'
+  if (hasRemovalProgress(file)) return 'Deletion incomplete'
   if (!file.cid) return 'Metadata missing'
   if (file.ipfsIndexed === false)
     return (file.ipfsCheckAttempts ?? 0) >= IPFS_CHECK_LIMIT
@@ -69,29 +58,17 @@ interface Props {
   uploadDisabled?: boolean
 }
 export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled = false }: Props) {
-  const { history, updateUpload, mutateHistory, getLatestHistory, error: directoryError } = useUploadHistory()
-  const { synapse, storageScope, addDataSetId } = useFilecoinPinContext()
+  const { history, updateUpload, refreshHistory, isLoading, error: directoryError } = useUploadHistory()
+  const { synapse, storageScope } = useFilecoinPinContext()
   const connection = useBrowserWallet()
-  const [folders, setFolders] = useState(() => readFolders(storageScope ?? ''))
-  useEffect(() => {
-    if (!storageScope) return
-    const sync = () => setFolders(readFolders(storageScope))
-    const unsubscribe = subscribeFolders(storageScope, sync)
-    sync()
-    return unsubscribe
-  }, [storageScope])
   const [search, setSearch] = useState('')
-  const [newFolder, setNewFolder] = useState('')
-  const [folderToDelete, setFolderToDelete] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [moveTo, setMoveTo] = useState('')
-  const [rename, setRename] = useState('')
-  const originalDirectory = useRef({ fileName: '', folderPath: '' })
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [isEditing, setIsEditing] = useState(false)
-  const { deleteFile, isDeleting, deletionError, clearDeletionError } = useFileDeletion()
+  const { deleteFile, isDeleting, deletingPieceCid, deletionError, clearDeletionError } = useFileDeletion()
   const working = isEditing || isDeleting
+  const displayStatus = (file: DatasetPiece) => (deletingPieceCid === file.pieceCid ? 'Deleting…' : fileStatus(file))
   const { download, queuedDownloads, downloadError, enqueueDownload, cancelQueuedDownload } = useDownloadQueue(
     synapse,
     storageScope
@@ -99,23 +76,19 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
   const [deleteConsent, setDeleteConsent] = useState(false)
   const [showFolders, setShowFolders] = useState(false)
   const visibleHistory = history.filter((file) => !isDeletionScheduled(file))
-  const allFolders = directoryFolders(visibleHistory, folders)
-  const folderHasContents =
-    folderToDelete !== null &&
-    (visibleHistory.some((file) => (file.folderPath ?? '') === folderToDelete) ||
-      allFolders.some((path) => path.startsWith(`${folderToDelete}/`)))
+  const allFolders = directoryFolders(visibleHistory, [])
   const selected = history.find((file) => file.id === selectedId)
   const selectedAliases = selected ? history.filter((file) => file.pieceCid === selected.pieceCid) : []
   const allAliasesScheduled =
     selectedAliases.length > 0 && selectedAliases.every((file) => fileStatus(file) === 'Deletion scheduled')
   const affectedAliases = selectedAliases.filter((file) => !isDeletionScheduled(file))
-  const hasDeletionProgress = affectedAliases.some((file) => file.deletion !== undefined)
-  const disabled = working || Boolean(download) || connection.busy || connection.uploading
+  const hasDeletionProgress = affectedAliases.some(hasRemovalProgress)
+  const disabled = working || Boolean(download) || connection.busy || connection.deleting
   const isQueued = (id: string) => queuedDownloads.some((file) => file.id === id)
   const files = visibleHistory
     .filter((file) =>
       search
-        ? `${file.folderPath ?? ''}/${file.fileName}`.toLowerCase().includes(search.toLowerCase())
+        ? `${file.folderPath ?? ''}/${displayFileName(file)}`.toLowerCase().includes(search.toLowerCase())
         : (file.folderPath ?? '') === folder
     )
     .sort((a, b) => b.uploadedAt - a.uploadedAt)
@@ -124,9 +97,6 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
   )
   const choose = (file: DatasetPiece) => {
     setSelectedId(file.id)
-    setMoveTo(file.folderPath ?? '')
-    setRename(file.fileName)
-    originalDirectory.current = { fileName: file.fileName, folderPath: file.folderPath ?? '' }
     setDeleteConsent(false)
     clearDeletionError()
     setError('')
@@ -145,8 +115,16 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
       setIsEditing(false)
     }
   }
+  const downloadBlocked = (file: DatasetPiece) =>
+    !isQueued(file.id) &&
+    (isEditing ||
+      deletingPieceCid === file.pieceCid ||
+      download?.id === file.id ||
+      !synapse ||
+      !file.cid ||
+      isDeletionScheduled(file))
   const downloadOriginal = (file: DatasetPiece) => {
-    if (working) return
+    if (downloadBlocked(file)) return
     if (isQueued(file.id)) {
       cancelQueuedDownload(file.id)
       return
@@ -155,61 +133,6 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
     clearDeletionError()
     setNotice('')
     enqueueDownload(file)
-  }
-  const createFolder = () =>
-    act(async () => {
-      if (!newFolder.trim()) return
-      const path = normalizeFolder([folder, newFolder.trim()].filter(Boolean).join('/'))
-      await saveFolders(storageScope ?? '', [path])
-      setNewFolder('')
-      onFolderChange(path)
-    })
-  const removeFolder = () =>
-    act(async () => {
-      if (!folderToDelete || !storageScope) return
-      const path = folderToDelete
-      await deleteEmptyFolder(storageScope, path)
-      setFolderToDelete(null)
-      if (folder === path) onFolderChange(path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '')
-      setNotice('Folder removed from this browser.')
-    })
-  const exportDirectory = () => {
-    const files = getLatestHistory()
-    const folders = directoryFolders(files, readFolders(storageScope ?? ''))
-    const blob = new Blob([JSON.stringify({ version: 1, scope: storageScope, files, folders }, null, 2)], {
-      type: 'application/json',
-    })
-    saveBlob(blob, `filecoin-drive-backup-${connection.network}-${connection.address}.json`)
-  }
-  const saveDirectoryChanges = () =>
-    act(async () => {
-      if (!selected) return
-      // Submit only edited fields so a rename cannot revert another tab's folder move.
-      await updateUpload(selected.id, {
-        ...(rename.trim() === originalDirectory.current.fileName ? {} : { fileName: rename.trim() }),
-        ...(moveTo === originalDirectory.current.folderPath ? {} : { folderPath: moveTo }),
-      })
-      const saved = getLatestHistory().find((file) => file.id === selected.id)
-      if (saved) {
-        originalDirectory.current = { fileName: saved.fileName, folderPath: saved.folderPath ?? '' }
-        setRename(saved.fileName)
-        setMoveTo(saved.folderPath ?? '')
-      }
-    })
-  const importDirectory = async (file: File) => {
-    if (file.size > 10_000_000) throw new Error('Directory backups must be smaller than 10 MB')
-    const parsed = parseDirectoryBackup(await file.text(), storageScope ?? '', connection.network)
-    for (const record of parsed.files)
-      for (const id of record.datasetIds ?? [record.datasetId]) {
-        addStoredDataSetId(storageScope ?? '', Number(id))
-        addDataSetId(BigInt(id))
-      }
-    await mutateHistory((current) => {
-      const byId = new Map(current.map((record) => [record.id, record]))
-      for (const record of parsed.files) if (!byId.has(record.id)) byId.set(record.id, record)
-      return [...byId.values()]
-    })
-    await saveFolders(storageScope ?? '', parsed.folders)
   }
   const deleteSelectedFile = async () => {
     if (!selected || disabled) return
@@ -232,46 +155,23 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
               {visibleHistory.length}
             </span>
           </h2>
-          <div className="flex flex-wrap items-center gap-2 sm:border-l sm:border-border sm:pl-5">
-            <Button
-              aria-label="Export backup"
-              className="w-auto"
-              disabled={disabled}
-              onClick={exportDirectory}
-              size="sm"
-              title="Export directory backup"
-              variant="secondary"
-            >
-              <Download aria-hidden="true" size={14} />
-              <span>Export backup</span>
-            </Button>
-            <label
-              className={`inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm text-foreground transition-colors hover:bg-surface-raised ${disabled ? 'opacity-50' : 'cursor-pointer'}`}
-              title="Import directory backup"
-            >
-              <Upload aria-hidden="true" size={14} />
-              <span>Import backup</span>
-              <input
-                accept=".json,application/json"
-                aria-label="Import backup"
-                className="sr-only"
-                disabled={disabled}
-                onChange={(event) => {
-                  const file = event.target.files?.[0]
-                  if (file) void act(() => importDirectory(file))
-                  event.target.value = ''
-                }}
-                type="file"
-              />
-            </label>
-          </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            className="w-auto"
+            disabled={isLoading || isEditing}
+            onClick={() => refreshHistory()}
+            size="sm"
+            variant="secondary"
+          >
+            {isLoading && <Loader2 aria-hidden="true" className="animate-spin" size={14} />}
+            Refresh files
+          </Button>
           {onUpload && (
             <Button
               aria-label="Upload files"
               className="w-auto"
-              disabled={working || connection.busy || connection.uploading || uploadDisabled}
+              disabled={isEditing || connection.busy || connection.uploading || uploadDisabled}
               onClick={onUpload}
               size="sm"
             >
@@ -281,10 +181,6 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
           )}
         </div>
       </div>
-      <p className="border-b border-border bg-canvas/30 px-5 py-3 text-xs leading-5 text-muted sm:px-6">
-        Folder structure and later name changes are saved only in this browser. Export a backup to transfer your
-        directory. Backups contain file records and folders, not file contents.
-      </p>
       {notice && (
         <p className="px-5 py-3 text-sm text-success" role="status">
           {notice}
@@ -389,26 +285,6 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                 </button>
               ))}
             </div>
-            <form
-              className="pt-3 space-y-2"
-              onSubmit={(event) => {
-                event.preventDefault()
-                createFolder()
-              }}
-            >
-              <input
-                aria-label="New folder name"
-                className="drive-field h-10 w-full px-3 text-xs"
-                disabled={disabled}
-                onChange={(event) => setNewFolder(event.target.value)}
-                placeholder="New folder name"
-                value={newFolder}
-              />
-              <Button disabled={disabled || !newFolder.trim()} size="sm" type="submit" variant="secondary">
-                <FolderPlus aria-hidden="true" size={14} />
-                Create folder
-              </Button>
-            </form>
           </div>
         </nav>
         <div className="min-w-0">
@@ -434,22 +310,6 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                     </span>
                   ))}
               </nav>
-              {folder && (
-                <Button
-                  className="w-auto"
-                  disabled={disabled || !storageScope}
-                  onClick={() => {
-                    setError('')
-                    clearDeletionError()
-                    setFolderToDelete(folder)
-                  }}
-                  size="sm"
-                  variant="secondary"
-                >
-                  <Trash2 aria-hidden="true" size={14} />
-                  Delete folder
-                </Button>
-              )}
             </div>
             <div className="relative w-full sm:w-56">
               <Search
@@ -508,14 +368,14 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                         </span>
                         <span className="max-w-[260px] truncate">
                           {search && file.folderPath ? `${file.folderPath}/` : ''}
-                          {file.fileName}
+                          {displayFileName(file)}
                         </span>
                       </button>
                     </td>
                     <td className="p-4 whitespace-nowrap">{file.fileSize}</td>
                     <td className="p-4">
                       <span
-                        className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] ${file.deletion ? 'bg-amber-500/10 text-warning' : file.cid ? (file.ipfsIndexed === false ? 'bg-brand-800/15 text-accent' : 'bg-emerald-500/10 text-success') : 'bg-surface-raised text-muted'}`}
+                        className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] ${deletingPieceCid === file.pieceCid || fileStatus(file) === 'Deletion incomplete' ? 'bg-amber-500/10 text-warning' : file.cid ? (file.ipfsIndexed === false ? 'bg-brand-800/15 text-accent' : 'bg-emerald-500/10 text-success') : 'bg-surface-raised text-muted'}`}
                         title={
                           file.ipfsIndexed === false && !file.deletion
                             ? (file.ipfsCheckAttempts ?? 0) >= IPFS_CHECK_LIMIT
@@ -525,21 +385,21 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                         }
                       >
                         <span className="h-1 w-1 shrink-0 rounded-full bg-current" />
-                        {fileStatus(file)}
+                        {displayStatus(file)}
                       </span>
                     </td>
                     <td className="p-4 tabular-nums text-muted">{file.copyCount ?? 1}</td>
                     <td className="p-4 whitespace-nowrap text-xs text-muted">
-                      {new Date(file.uploadedAt).toLocaleDateString()}
+                      {file.uploadedAt ? new Date(file.uploadedAt).toLocaleDateString() : 'Unknown'}
                     </td>
                     <td className="p-4">
                       <div className="flex gap-3">
                         <button
-                          aria-label={isQueued(file.id) ? `Cancel queued download for ${file.fileName}` : undefined}
-                          className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent disabled:opacity-40"
-                          disabled={
-                            working || download?.id === file.id || !synapse || !file.cid || isDeletionScheduled(file)
+                          aria-label={
+                            isQueued(file.id) ? `Cancel queued download for ${displayFileName(file)}` : undefined
                           }
+                          className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent disabled:opacity-40"
+                          disabled={downloadBlocked(file)}
                           onClick={() => downloadOriginal(file)}
                           type="button"
                         >
@@ -578,10 +438,22 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                         <FolderOpen size={24} />
                       </span>
                       <p className="mb-2 text-sm font-medium text-foreground">
-                        {search ? 'No matching files.' : 'A little space for something new'}
+                        {isLoading
+                          ? 'Loading file index…'
+                          : directoryError && !visibleHistory.length
+                            ? 'File index unavailable'
+                            : search
+                              ? 'No matching files.'
+                              : 'A little space for something new'}
                       </p>
                       <p className="text-xs">
-                        {search ? 'Try a different file name or folder.' : 'No files here yet. Upload to this folder.'}
+                        {isLoading
+                          ? 'Your cached files are kept while the index refreshes.'
+                          : directoryError && !visibleHistory.length
+                            ? 'Use Refresh files to retry.'
+                            : search
+                              ? 'Try a different file name or folder.'
+                              : 'No files here yet. Upload to this folder.'}
                       </p>
                     </td>
                   </tr>
@@ -591,58 +463,6 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
           </div>
         </div>
       </div>
-      <Dialog.Root
-        onOpenChange={(open) => {
-          if (!open && !working) setFolderToDelete(null)
-        }}
-        open={folderToDelete !== null}
-      >
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/70" />
-          <Dialog.Content
-            className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-surface p-6 shadow-xl"
-            onEscapeKeyDown={(event) => {
-              if (working) event.preventDefault()
-            }}
-            onPointerDownOutside={(event) => {
-              if (working) event.preventDefault()
-            }}
-          >
-            <Dialog.Title className="text-lg font-semibold">Delete folder?</Dialog.Title>
-            <p className="mt-2 break-words text-sm font-medium">{folderToDelete}</p>
-            <Dialog.Description className="mt-2 text-sm leading-relaxed text-muted">
-              {folderHasContents
-                ? 'This folder is not empty. Move its files and remove its subfolders first.'
-                : 'Remove this empty folder from this browser’s directory. No files will be deleted from Filecoin.'}
-            </Dialog.Description>
-            {(error || deletionError) && (
-              <p className="mt-3 text-sm text-warning" role="alert">
-                {error || deletionError}
-              </p>
-            )}
-            <div className="mt-5 flex justify-end gap-3">
-              <Button
-                className="w-auto"
-                disabled={working}
-                onClick={() => setFolderToDelete(null)}
-                size="sm"
-                variant="secondary"
-              >
-                Cancel
-              </Button>
-              <Button
-                className="w-auto"
-                disabled={disabled || folderHasContents || !storageScope}
-                onClick={() => void removeFolder()}
-                size="sm"
-                variant="danger"
-              >
-                Delete folder
-              </Button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
       <Dialog.Root
         onOpenChange={(open) => {
           if (!open && !isEditing) setSelectedId(null)
@@ -660,7 +480,9 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
               if (isEditing) event.preventDefault()
             }}
           >
-            <Dialog.Title className="pr-10 text-xl font-semibold break-all">{selected?.fileName}</Dialog.Title>
+            <Dialog.Title className="pr-10 text-xl font-semibold break-all">
+              {selected ? displayFileName(selected) : ''}
+            </Dialog.Title>
             <Dialog.Description className="text-sm text-muted">
               File details and storage copies on{' '}
               {connection.network === 'mainnet' ? 'Filecoin Mainnet' : 'Calibration Testnet'}.
@@ -676,7 +498,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
               <>
                 <div className="text-sm space-y-2">
                   <p>
-                    {selected.fileSize} · {fileStatus(selected)}
+                    {selected.fileSize} · {displayStatus(selected)}
                   </p>
                   {selected.ipfsIndexed === false &&
                     !selected.deletion &&
@@ -700,7 +522,10 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                         </Button>
                       </div>
                     )}
-                  <p>Uploaded {new Date(selected.uploadedAt).toLocaleString()}</p>
+                  <p>
+                    {selected.id.startsWith('indexed-') ? 'Storage confirmed' : 'Uploaded'}{' '}
+                    {selected.uploadedAt ? new Date(selected.uploadedAt).toLocaleString() : 'Unknown'}
+                  </p>
                   <p className="break-all">Wallet {connection.address}</p>
                   <div className="grid grid-cols-2 gap-2">
                     <Button
@@ -711,13 +536,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                             ? 'Cancel queued download'
                             : 'Download original file'
                       }
-                      disabled={
-                        working ||
-                        download?.id === selected.id ||
-                        !synapse ||
-                        !selected.cid ||
-                        isDeletionScheduled(selected)
-                      }
+                      disabled={downloadBlocked(selected)}
                       onClick={() => downloadOriginal(selected)}
                       size="sm"
                       variant={isQueued(selected.id) ? 'secondary' : 'primary'}
@@ -737,11 +556,11 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                     </Button>
                     {selected.cid &&
                     !selected.importedCar &&
-                    canPreview(selected.fileName) &&
+                    canPreview(displayFileName(selected)) &&
                     fileStatus(selected) !== 'Deletion scheduled' ? (
                       <a
                         className={buttonVariants({ variant: 'secondary', size: 'sm' })}
-                        href={getIpfsGatewayPreviewLink(selected.cid, selected.fileName)}
+                        href={getIpfsGatewayPreviewLink(selected.cid, displayFileName(selected))}
                         rel="noopener noreferrer"
                         target="_blank"
                         title="Open via IPFS gateway in a new tab. Media support depends on your browser and file encoding."
@@ -767,44 +586,6 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                     </p>
                   )}
                 </div>
-                <section className="space-y-3">
-                  <h3 className="font-medium">Browser directory</h3>
-                  <label className="block text-sm space-y-1">
-                    <span>Display name</span>
-                    <input
-                      className="drive-field h-10 w-full px-3"
-                      disabled={disabled}
-                      onChange={(event) => setRename(event.target.value)}
-                      value={rename}
-                    />
-                  </label>
-                  <label className="block text-sm space-y-1" htmlFor="drive-file-folder">
-                    <span>Folder</span>
-                    <Select
-                      aria-label="File folder"
-                      containerClassName="w-full"
-                      disabled={disabled}
-                      id="drive-file-folder"
-                      onChange={(event) => setMoveTo(event.target.value)}
-                      value={moveTo}
-                    >
-                      <option value="">Files</option>
-                      {allFolders.map((path) => (
-                        <option key={path} value={path}>
-                          {path}
-                        </option>
-                      ))}
-                    </Select>
-                  </label>
-                  <Button
-                    disabled={disabled || !rename.trim()}
-                    onClick={saveDirectoryChanges}
-                    size="sm"
-                    variant="secondary"
-                  >
-                    Save directory changes
-                  </Button>
-                </section>
                 <section className="space-y-3">
                   <h3 className="font-medium">Content identifiers</h3>
                   {selected.importedCar && (
@@ -832,7 +613,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                   {selected.cid && !selected.importedCar && (
                     <a
                       className="block text-sm underline"
-                      href={getIpfsGatewayDownloadLink(selected.cid, selected.fileName)}
+                      href={getIpfsGatewayDownloadLink(selected.cid, displayFileName(selected))}
                       rel="noopener noreferrer"
                       target="_blank"
                     >
@@ -883,6 +664,11 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                             Upload transaction
                           </a>
                         )}
+                        {selected.removedCopies?.includes(datasetId) ? (
+                          <span className="text-muted">Removed</span>
+                        ) : selected.removalQueuedCopies?.includes(datasetId) ? (
+                          <span className="text-warning">Removal scheduled</span>
+                        ) : null}
                         {selected.deletion?.[datasetId] && (
                           <a
                             className="underline"
@@ -908,17 +694,23 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                     Delete from Filecoin
                   </h3>
                   <p className="text-sm text-muted">
-                    Schedules removal of every recorded copy at its provider’s next proving period. Content may remain
-                    in IPFS caches. This does not terminate datasets or immediately stop every storage charge. Large
-                    removals are saved in batches; continue after the provider releases its removal queue.
+                    Delete this file and its stored copies. Removal may take some time.
                   </p>
+                  <details className="text-xs text-muted">
+                    <summary className="w-fit cursor-pointer hover:text-foreground">How deletion works</summary>
+                    <p className="mt-2 leading-relaxed">
+                      Storage providers remove copies during their next proving period. Cached copies may remain
+                      accessible through IPFS. Deleting files does not close your storage datasets or immediately stop
+                      all charges. Large deletions may require you to continue once the provider’s queue has space.
+                    </p>
+                  </details>
                   {affectedAliases.length > 1 && (
                     <div className="text-sm text-warning">
                       <p>These files contain identical content. Deletion affects all listed records:</p>
                       <ul className="mt-2 list-disc pl-5">
                         {affectedAliases.map((file) => (
                           <li className="break-words" key={file.id}>
-                            {[file.folderPath, file.fileName].filter(Boolean).join('/')}
+                            {[file.folderPath, displayFileName(file)].filter(Boolean).join('/')}
                           </li>
                         ))}
                       </ul>

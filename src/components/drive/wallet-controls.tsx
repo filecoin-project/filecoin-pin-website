@@ -56,7 +56,7 @@ export function WalletControls() {
           </label>
           <Select
             containerClassName="min-w-[190px] flex-1 sm:flex-none"
-            disabled={wallet.busy || wallet.uploading || wallet.restoring}
+            disabled={wallet.busy || wallet.uploading || wallet.deleting || wallet.restoring}
             id="network"
             leadingIcon={<span className="h-1.5 w-1.5 rounded-full bg-brand-500" />}
             onChange={(event) => void wallet.switchNetwork(event.target.value as 'mainnet' | 'calibration')}
@@ -76,7 +76,7 @@ export function WalletControls() {
               </span>
               <ButtonBase
                 className="w-auto"
-                disabled={wallet.busy || wallet.uploading || wallet.restoring}
+                disabled={wallet.busy || wallet.uploading || wallet.deleting || wallet.restoring}
                 onClick={() => void wallet.disconnect()}
                 size="sm"
                 variant="secondary"
@@ -171,7 +171,8 @@ export function WalletSetup({ inDrawer = false }: { inDrawer?: boolean }) {
   const [approvalConsent, setApprovalConsent] = useState(false)
   const [message, setMessage] = useState('')
   const active = connection.sessionStatus === 'active'
-  const disabled = connection.busy || connection.uploading || Boolean(connection.pendingTransaction)
+  const disabled =
+    connection.busy || connection.uploading || connection.deleting || Boolean(connection.pendingTransaction)
   const pay = async (kind: 'deposit' | 'approve') => {
     setMessage('')
     await connection.paymentAction(async (synapse, confirm) => {

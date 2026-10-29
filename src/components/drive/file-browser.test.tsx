@@ -2,7 +2,6 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { beforeEach, expect, it, vi } from 'vitest'
 import { UploadHistoryProvider } from '../../context/upload-history-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
-import { parseDirectoryBackup, readFolders, saveFolders } from '../../lib/local-storage/drive-directory.ts'
 import {
   addCachedPiece,
   getCachedPieces,
@@ -13,14 +12,20 @@ import { FileBrowser, fileStatus } from './file-browser.tsx'
 
 const mocks = vi.hoisted(() => ({
   context: vi.fn(),
+  index: vi.fn(),
   receipt: vi.fn(),
   permissions: vi.fn(),
   uploading: vi.fn(),
+  deleting: vi.fn(),
   submit: vi.fn(),
   download: vi.fn(),
   uploadInProgress: false,
 }))
 const scope = '314:0x1111111111111111111111111111111111111111'
+vi.mock('../../lib/filecoin-pin/drive-api.ts', async (original) => ({
+  ...(await original<object>()),
+  loadDriveFiles: mocks.index,
+}))
 vi.mock('../../hooks/use-filecoin-pin-context.ts', () => ({
   useFilecoinPinContext: () => ({
     storageScope: scope,
@@ -39,6 +44,7 @@ vi.mock('../../context/browser-wallet-provider.tsx', () => ({
     busy: false,
     uploading: mocks.uploadInProgress,
     setUploading: mocks.uploading,
+    setDeleting: mocks.deleting,
   }),
 }))
 vi.mock('../../lib/filecoin-pin/browser-wallet.ts', () => ({
@@ -69,6 +75,7 @@ const file = {
 } satisfies DatasetPiece
 beforeEach(() => {
   vi.resetAllMocks()
+  mocks.index.mockResolvedValue([])
   mocks.uploadInProgress = false
   mocks.permissions.mockResolvedValue(undefined)
   mocks.receipt.mockResolvedValue({ status: 'success' })
@@ -248,10 +255,7 @@ it('distinguishes pending indexing from stopped checks without treating storage 
 
 it('keeps removed files hidden after restore and reload, but shows a new identical upload', async () => {
   const archived = { ...file, folderPath: 'old/nested', deletion: { '1': { confirmed: true, transactionHash: hash } } }
-  const backup = JSON.stringify({ version: 1, scope, files: [archived], folders: [] })
-  const restored = parseDirectoryBackup(backup, scope, 'mainnet')
-  expect(restored.folders).toEqual([])
-  setCachedPieces(scope, restored.files)
+  setCachedPieces(scope, [archived])
   const mount = () =>
     render(
       <UploadHistoryProvider>
@@ -378,31 +382,6 @@ it('does not hide a later identical upload when an older deletion receipt lookup
   expect(screen.getByRole('button', { name: 'later.txt', hidden: true })).toBeTruthy()
 })
 
-it('saves only edited form fields when another tab moves the file while its details are open', async () => {
-  setCachedPieces(scope, [file])
-  render(
-    <UploadHistoryProvider>
-      <FileBrowser folder="" onFolderChange={vi.fn()} />
-    </UploadHistoryProvider>
-  )
-  fireEvent.click(await screen.findByRole('button', { name: 'first.txt' }))
-  fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'renamed.txt' } })
-  await act(async () => {
-    await mutateCachedPieces(scope, (current) =>
-      current.map((file) => ({ ...file, folderPath: 'reports', ipfsIndexed: true }))
-    )
-  })
-  fireEvent.click(screen.getByRole('button', { name: 'Save directory changes' }))
-  await waitFor(() =>
-    expect(getCachedPieces(scope)?.[0]).toMatchObject({
-      fileName: 'renamed.txt',
-      folderPath: 'reports',
-      ipfsIndexed: true,
-    })
-  )
-  expect(screen.getByRole('combobox', { name: 'File folder' })).toHaveProperty('value', 'reports')
-})
-
 it('preserves edits and later uploads made while a deletion receipt is pending', async () => {
   setCachedPieces(scope, [file])
   mocks.context.mockResolvedValue({ deletePieces: mocks.submit, getScheduledRemovals: async () => [] })
@@ -498,7 +477,7 @@ it('blocks a second deletion tab, then resumes the latest progress after the fir
   if (!dialogB) throw new Error('Missing second tab dialog')
   fireEvent.click(within(dialogB).getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
   fireEvent.click(within(dialogB).getByRole('button', { name: 'Continue deletion' }))
-  await within(dialogB).findByText(/being uploaded or deleted in another tab/)
+  await within(dialogB).findByText(/being uploaded or deleted in this or another tab/)
   expect(mocks.submit).toHaveBeenCalledOnce()
   expect(mocks.receipt).toHaveBeenCalledOnce()
   await act(async () => confirm({ status: 'success' }))
@@ -512,45 +491,6 @@ it('blocks a second deletion tab, then resumes the latest progress after the fir
     '1': { transactionHash: hash, confirmed: true },
     '2': { transactionHash: secondHash, confirmed: true },
   })
-})
-
-it('confirms empty-folder removal, returns to its parent and never submits a chain transaction', async () => {
-  await saveFolders(scope, ['reports/empty'])
-  const navigate = vi.fn()
-  render(
-    <UploadHistoryProvider>
-      <FileBrowser folder="reports/empty" onFolderChange={navigate} />
-    </UploadHistoryProvider>
-  )
-  fireEvent.click(screen.getByRole('button', { name: 'Delete folder' }))
-  const dialog = screen.getByRole('dialog', { name: 'Delete folder?' })
-  expect(within(dialog).getByText(/No files will be deleted from Filecoin/)).toBeTruthy()
-  fireEvent.click(within(dialog).getByRole('button', { name: 'Delete folder' }))
-  await waitFor(() => expect(navigate).toHaveBeenCalledWith('reports'))
-  expect(readFolders(scope)).toEqual(['reports'])
-  expect(mocks.submit).not.toHaveBeenCalled()
-  expect(mocks.permissions).not.toHaveBeenCalled()
-})
-
-it('explains why a nonempty folder cannot be deleted and does not offer root deletion', async () => {
-  await saveFolders(scope, ['reports/child'])
-  const view = render(
-    <UploadHistoryProvider>
-      <FileBrowser folder="reports" onFolderChange={vi.fn()} />
-    </UploadHistoryProvider>
-  )
-  fireEvent.click(screen.getByRole('button', { name: 'Delete folder' }))
-  const dialog = screen.getByRole('dialog', { name: 'Delete folder?' })
-  expect(within(dialog).getByText(/not empty/)).toBeTruthy()
-  expect(within(dialog).getByRole('button', { name: 'Delete folder' })).toHaveProperty('disabled', true)
-  fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-  view.rerender(
-    <UploadHistoryProvider>
-      <FileBrowser folder="" onFolderChange={vi.fn()} />
-    </UploadHistoryProvider>
-  )
-  expect(screen.queryByRole('button', { name: 'Delete folder' })).toBeNull()
-  expect(screen.getByRole('button', { name: 'Files (root)' }).getAttribute('aria-current')).toBe('page')
 })
 
 it.each([false, true])('keeps deletion running after closing details (failure: %s)', async (fails) => {
@@ -574,7 +514,8 @@ it.each([false, true])('keeps deletion running after closing details (failure: %
   await waitFor(() => expect(mocks.submit).toHaveBeenCalledOnce())
   fireEvent.click(screen.getByRole('button', { name: 'Close details' }))
   expect(screen.queryByRole('dialog')).toBeNull()
-  expect(mocks.uploading).not.toHaveBeenCalledWith(false)
+  expect(screen.getByText('Deleting…', { exact: true })).toBeTruthy()
+  expect(mocks.deleting).not.toHaveBeenCalledWith(false)
   await act(async () => finish())
   if (fails) {
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'provider unavailable')
@@ -584,5 +525,84 @@ it.each([false, true])('keeps deletion running after closing details (failure: %
     )
     expect(screen.getByRole('status').textContent).toContain('Removed from the file list')
   }
-  expect(mocks.uploading).toHaveBeenLastCalledWith(false)
+  expect(mocks.deleting).toHaveBeenLastCalledWith(false)
+})
+
+it.each([false, true])(
+  'keeps unrelated actions available during deletion (upload active: %s)',
+  async (uploadActive) => {
+    mocks.uploadInProgress = uploadActive
+    const other = { ...file, id: 'other', fileName: 'other.txt', pieceCid: 'other-piece', cid: 'other-root' }
+    setCachedPieces(scope, [file, { ...file, id: 'alias', fileName: 'alias.txt' }, other])
+    let finish!: (hash: string) => void
+    mocks.submit.mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          finish = resolve
+        })
+    )
+    mocks.context.mockResolvedValue({ deletePieces: mocks.submit, getScheduledRemovals: async () => [] })
+    render(
+      <UploadHistoryProvider>
+        <FileBrowser folder="" onFolderChange={vi.fn()} onUpload={vi.fn()} />
+      </UploadHistoryProvider>
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'first.txt' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule deletion' }))
+    await waitFor(() => expect(mocks.submit).toHaveBeenCalledOnce())
+    fireEvent.click(screen.getByRole('button', { name: 'Close details' }))
+    const rowDownload = (name: string) =>
+      within(screen.getByRole('button', { name }).closest('tr') as HTMLElement).getByRole('button', {
+        name: 'Download',
+      })
+    expect(rowDownload('first.txt')).toHaveProperty('disabled', true)
+    expect(rowDownload('alias.txt')).toHaveProperty('disabled', true)
+    expect(rowDownload('other.txt')).toHaveProperty('disabled', false)
+    expect(screen.getByRole('button', { name: 'Upload files' })).toHaveProperty('disabled', uploadActive)
+    const refresh = screen.getByRole('button', { name: 'Refresh files' })
+    expect(refresh).toHaveProperty('disabled', false)
+    fireEvent.click(refresh)
+    await waitFor(() => expect(mocks.index).toHaveBeenCalledTimes(2))
+    fireEvent.click(rowDownload('other.txt'))
+    await waitFor(() => expect(mocks.download).toHaveBeenCalledOnce())
+    await act(async () => finish(hash))
+  }
+)
+
+it('shows fallback CIDs without offering edits, backups or standalone folders', async () => {
+  setCachedPieces(scope, [{ ...file, fileName: '', folderPath: 'reports/2026' }])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="reports/2026" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('button', { name: file.cid }))
+  expect(screen.getByRole('dialog').textContent).toContain(file.cid)
+  expect(screen.queryByLabelText('Display name')).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Export backup' })).toBeNull()
+  expect(screen.queryByLabelText('New folder name')).toBeNull()
+})
+
+it('shows a partially queued deletion per provider and offers continuing the remaining copy', async () => {
+  setCachedPieces(scope, [
+    {
+      ...file,
+      datasetIds: ['1', '2'],
+      providerIds: ['1', '2'],
+      providerNames: ['First', 'Second'],
+      pieceIds: ['1', '1'],
+      copyCount: 2,
+      removalQueuedCopies: ['1'],
+    },
+  ])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'first.txt' }))
+  expect(within(screen.getByRole('dialog')).getByText('Removal scheduled')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Continue deletion' })).toBeTruthy()
+  expect(screen.getByText('Deletion incomplete', { exact: true })).toBeTruthy()
 })

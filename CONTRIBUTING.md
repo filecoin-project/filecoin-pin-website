@@ -18,7 +18,7 @@ Connect an Ethereum-compatible browser wallet. Reloads silently restore the sele
 
 WalletConnect defaults to Beck’s registered public project ID. To override it, copy [`.env.example`](.env.example) to `.env.local`, set `VITE_WALLETCONNECT_PROJECT_ID`, then restart Vite. The remote provider and QR modal are loaded for explicit pairing or restoration of a previously selected WalletConnect session by [`wallet-connect.ts`](src/lib/filecoin-pin/wallet-connect.ts). Injected and remote wallets share the same session authorization and wallet/network isolation.
 
-Session credentials are encrypted in IndexedDB using a non-exportable AES-GCM wrapping key. Directory backups contain file metadata only. Scripts running on the same origin can still use stored credentials; encryption does not protect against a compromised application origin.
+Session credentials are encrypted in IndexedDB using a non-exportable AES-GCM wrapping key. File caches contain metadata and operation checkpoints only. Scripts running on the same origin can still use stored credentials; encryption does not protect against a compromised application origin.
 
 ### 3. Get Test Tokens (if using your own wallet)
 
@@ -70,14 +70,16 @@ The main logic demonstrating `filecoin-pin` usage:
 
 - [`src/context/chain-provider.tsx`](src/context/chain-provider.tsx) — wagmi connector registry and TanStack Query cache.
 - [`src/context/browser-wallet-provider.tsx`](src/context/browser-wallet-provider.tsx) — wagmi connection adapter, session authorization and revocation. Synapse React resolves owner signing clients; the lazy WalletConnect transport retains namespace account normalization.
-- [`src/lib/filecoin-pin/piece-metadata.ts`](src/lib/filecoin-pin/piece-metadata.ts) — bounded best-effort recovery of original upload metadata from FWSS events. Directory backups still preserve local folders and later renames.
+- [`src/lib/filecoin-pin/drive-api.ts`](src/lib/filecoin-pin/drive-api.ts) — wallet-scoped indexed file discovery, scheduled-removal checks, and additive cache reconciliation.
+- [`src/lib/filecoin-pin/file-size.ts`](src/lib/filecoin-pin/file-size.ts) — optional bounded root-block reads for original-file sizes, with CID verification and two concurrent workers.
+- [`src/lib/filecoin-pin/drive-metadata.ts`](src/lib/filecoin-pin/drive-metadata.ts) — UTF-8 limits for immutable upload names and paths.
 - [`src/lib/filecoin-pin/browser-wallet.ts`](src/lib/filecoin-pin/browser-wallet.ts) — owner and session clients with chain permission validation.
 - [`src/hooks/use-file-deletion.ts`](src/hooks/use-file-deletion.ts) — deletion operation state, permission checks, content locks and durable directory checkpoints. `planDeletion` in [`delete.ts`](src/lib/filecoin-pin/delete.ts) computes active aliases and resumable checkpoints without side effects.
 - [`src/hooks/use-wallet-transaction.ts`](src/hooks/use-wallet-transaction.ts) — bounded confirmation recovery for owner-wallet transactions, with foreground/manual status refresh and wallet/network-scoped pending hashes.
 - [`src/lib/filecoin-pin/transaction-receipt.ts`](src/lib/filecoin-pin/transaction-receipt.ts) — receipt recovery using a persisted Filecoin message CID and Lotus `StateSearchMsg` with a 120-epoch lookback; ordinary Ethereum receipts and session-permission reconciliation remain available.
 - [`src/lib/local-storage/session-vault.ts`](src/lib/local-storage/session-vault.ts) — encrypted browser session persistence using idb-keyval, with short key-mutation locks, revision-guarded revocation and cross-tab/foreground synchronization.
-- [`src/lib/local-storage/drive-directory.ts`](src/lib/local-storage/drive-directory.ts) — virtual folders and validated directory backups.
-- [`src/lib/local-storage/directory-store.ts`](src/lib/local-storage/directory-store.ts) — short per-wallet/network Web Locks, directory notifications and recovery of unsaved local mutations. All live file and folder changes must use this shared persistence path; never save a captured React history array over the directory.
+- [`src/lib/local-storage/drive-directory.ts`](src/lib/local-storage/drive-directory.ts) — path normalization and deriving the folder tree from file records.
+- [`src/lib/local-storage/directory-store.ts`](src/lib/local-storage/directory-store.ts) — short per-wallet/network Web Locks, directory notifications and recovery of unsaved local mutations. All live file and checkpoint changes must use this shared persistence path; never save a captured React history array over the directory.
 - [`src/components/drive/`](src/components/drive/) — wallet setup, file table, folder navigation and file details.
 - [`src/lib/filecoin-pin/download.ts`](src/lib/filecoin-pin/download.ts) and [`delete.ts`](src/lib/filecoin-pin/delete.ts) — original-file retrieval and resumable scheduling of removals.
 - [`src/lib/filecoin-pin/content-lock.ts`](src/lib/filecoin-pin/content-lock.ts) — cross-tab content operation locks, held through upload directory persistence. Missing-root deletions use an exclusive wallet/network lock; normal operations share that lock and exclusively lock their root CID.
@@ -85,7 +87,7 @@ The main logic demonstrating `filecoin-pin` usage:
 - [`src/components/drive/storage-runway.tsx`](src/components/drive/storage-runway.tsx) — lazy SDK runway display in wallet setup, using Filecoin Pay Console’s duration convention.
 - [`src/lib/filecoin-pin/upload-funding.ts`](src/lib/filecoin-pin/upload-funding.ts) — read-only funding quotes for the exact storage contexts used by an upload.
 
-To run the mocked browser checks, start `npm run dev`, install Chromium with `npx playwright install chromium`, then run `npm run test:drive`. On a machine with Chrome installed, use `PLAYWRIGHT_CHANNEL=chrome npm run test:drive`. The checks mock wallet requests and external RPCs and do not submit transactions to a live network. They also open two pages in one browser context to exercise native Web Locks, concurrent directory/folder writes, same-content upload/deletion exclusion, storage events and rereading missed changes on resume. Mobile viewport checks cover layout, not physical-device browser compatibility.
+To run the mocked browser checks, start `npm run dev`, install Chromium with `npx playwright install chromium`, then run `npm run test:drive`. On a machine with Chrome installed, use `PLAYWRIGHT_CHANNEL=chrome npm run test:drive`. The checks mock wallet requests and external RPCs and do not submit transactions to a live network. They also open two pages in one browser context to exercise native Web Locks, concurrent file-cache writes, same-content upload/deletion exclusion, storage events and rereading missed changes on resume. Mobile viewport checks cover layout, not physical-device browser compatibility.
 
 To exercise the WalletConnect UI without a live relay, use the running dev server and run `DRIVE_TEST_WALLETCONNECT=1 npm run test:drive`. This replaces the remote SDK with a mock and checks lazy loading, pairing parameters, authorization, network/account isolation and disconnect. Use `DRIVE_TEST_URL` if the dev server is on another port. A real project ID and a Filecoin-compatible mobile wallet are required for live QR pairing validation.
 

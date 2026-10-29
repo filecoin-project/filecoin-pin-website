@@ -12,16 +12,17 @@ export function useFileDeletion() {
   const { mutateHistory, getLatestHistory } = useUploadHistory()
   const connection = useBrowserWallet()
   const running = useRef(false)
-  const [isDeleting, setIsDeleting] = useState(false)
+  const [deletingPieceCid, setDeletingPieceCid] = useState<string | null>(null)
+  const isDeleting = deletingPieceCid !== null
   const [deletionError, setDeletionError] = useState('')
 
   const deleteFile = async (selected: DatasetPiece): Promise<boolean> => {
-    if (running.current || connection.busy || connection.uploading || !synapse || !ensurePermissions || !storageScope)
+    if (running.current || connection.busy || connection.deleting || !synapse || !ensurePermissions || !storageScope)
       return false
     running.current = true
-    setIsDeleting(true)
+    setDeletingPieceCid(selected.pieceCid)
     setDeletionError('')
-    connection.setUploading(true)
+    connection.setDeleting(true)
     try {
       await withFileDeletionLock(storageScope, selected.cid, async () => {
         // Retry retained checkpoints before planning from the latest locked directory.
@@ -42,11 +43,11 @@ export function useFileDeletion() {
       setDeletionError(cause instanceof Error ? cause.message : 'File deletion failed')
       return false
     } finally {
-      connection.setUploading(false)
+      connection.setDeleting(false)
       running.current = false
-      setIsDeleting(false)
+      setDeletingPieceCid(null)
     }
   }
 
-  return { deleteFile, isDeleting, deletionError, clearDeletionError: () => setDeletionError('') }
+  return { deleteFile, isDeleting, deletingPieceCid, deletionError, clearDeletionError: () => setDeletionError('') }
 }

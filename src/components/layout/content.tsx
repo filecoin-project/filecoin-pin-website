@@ -1,4 +1,4 @@
-import { AlertTriangle, Loader2, ShieldCheck, Wallet } from 'lucide-react'
+import { AlertTriangle, Folder, Loader2, ShieldCheck, Wallet } from 'lucide-react'
 import { useState } from 'react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
@@ -146,7 +146,9 @@ export default function Content() {
         )}
       </div>
       <div className="flex flex-wrap justify-between gap-2 text-xs text-muted">
-        <span>Export a directory backup before clearing browser data.</span>
+        <span>
+          File records sync from the Filecoin index. Recent changes may take time to appear on another browser.
+        </span>
         <span>Powered by Filecoin</span>
       </div>
       <DeveloperFooter />
@@ -192,7 +194,7 @@ export default function Content() {
         </div>
       </SidePanel>
       <SidePanel
-        description={`Upload a file to ${uploadFolder || 'Files'}.`}
+        description="Choose a location, then select or drop a file to upload."
         onOpenChange={(open) => {
           if (!open) setPanel(null)
         }}
@@ -200,14 +202,44 @@ export default function Content() {
         title="Upload files"
       >
         {canUpload ? (
-          <DragNDrop
-            isUploading={connection.busy || connection.uploading}
-            key={dragDropKey}
-            onUpload={(file) => {
-              void runUpload(() => startUpload(file, uploadFolder))
-              setPanel(null)
-            }}
-          />
+          <>
+            <div className="mb-5 rounded-xl border border-border bg-surface-raised/40 p-4">
+              <label className="mb-2 flex items-center gap-2 text-sm font-medium" htmlFor="upload-folder">
+                <Folder aria-hidden="true" className="text-accent" size={16} />
+                Upload location
+              </label>
+              <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent">
+                <span className="shrink-0 text-sm text-muted">Files /</span>
+                <input
+                  aria-describedby="upload-path-help"
+                  className="h-11 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted"
+                  disabled={connection.busy || connection.uploading}
+                  id="upload-folder"
+                  onChange={(event) => setUploadFolder(event.target.value)}
+                  placeholder="Choose a folder (optional)"
+                  value={uploadFolder}
+                />
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-muted" id="upload-path-help">
+                Leave empty to upload to Files. Use / for subfolders, e.g. documents/2026.
+              </p>
+              <details className="mt-3 text-xs text-muted">
+                <summary className="w-fit cursor-pointer hover:text-foreground">Name and folder requirements</summary>
+                <p className="mt-2 leading-relaxed">
+                  File names and full folder paths each allow 96 UTF-8 bytes. Names and paths are public and cannot be
+                  changed after upload.
+                </p>
+              </details>
+            </div>
+            <DragNDrop
+              isUploading={connection.busy || connection.uploading}
+              key={dragDropKey}
+              onUpload={(file) => {
+                void runUpload(() => startUpload(file, uploadFolder))
+                setPanel(null)
+              }}
+            />
+          </>
         ) : (
           <>
             <p className="text-sm text-muted">Complete wallet setup before uploading.</p>

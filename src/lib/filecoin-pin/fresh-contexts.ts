@@ -1,17 +1,8 @@
 /**
- * Direct provider selection for new upload copies.
- *
- * The SDK's smart-select looks for an existing metadata-matching dataset by
- * enumerating every dataset the wallet owns (one eth_call per dataset). On the
- * shared demo wallet that is unbounded: the wallet gains one dataset per new
- * visitor, so the enumeration grows without limit.
- *
- * A browser with no stored dataset ids is known to have no matching dataset,
- * so the search is pointless. This module selects providers straight from the
- * registry (two RPC calls total) and builds StorageContexts with no dataset
- * bound; the provider creates the dataset during the upload commit
- * (CreateDataSetAndAddPieces), exactly as it would after smart-select chose a
- * provider without a matching dataset.
+ * Select providers directly for fresh or missing upload copies. Known dataset
+ * IDs are resolved and metadata-checked by upload-funding; this path avoids
+ * enumerating every dataset owned by the wallet just to create a new one.
+ * Providers create datasets during the upload commit.
  */
 
 import { getEndorsedProviderIds } from '@filoz/synapse-core/endorsements'

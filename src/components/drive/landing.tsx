@@ -155,7 +155,7 @@ export function Landing() {
             step: '03',
             title: 'Keep everything in order',
             description:
-              'Upload, download and organize files in folders. Export a backup to take your directory with you.',
+              'Choose a folder when uploading. Connect the same wallet in another browser to find your indexed files.',
           },
         ].map(({ icon: Icon, step, title, description }) => (
           <article className="space-y-3" key={step}>

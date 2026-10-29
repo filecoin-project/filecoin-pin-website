@@ -3,6 +3,7 @@ import { CarReader } from '@ipld/car'
 import { exporter } from 'ipfs-unixfs-exporter'
 import { CID } from 'multiformats/cid'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
+import { displayFileName } from './drive-api.ts'
 
 export async function unpackFile(carBytes: Uint8Array, rootCid: string): Promise<Blob> {
   const reader = await CarReader.fromBytes(carBytes)
@@ -40,7 +41,7 @@ export async function downloadFile(
   onStage?: (stage: 'downloading' | 'preparing') => void
 ) {
   if (!file.cid)
-    throw new Error('The IPFS root CID is missing. Import the original directory backup to download the original file.')
+    throw new Error('The IPFS root CID is missing from this record. Refresh files after the index catches up.')
   let failure: unknown
   for (const datasetId of file.datasetIds ?? [file.datasetId]) {
     try {
@@ -52,8 +53,8 @@ export async function downloadFile(
         const reader = await CarReader.fromBytes(bytes)
         if (!(await reader.getRoots()).some((cid) => cid.toString() === file.cid))
           throw new Error('Downloaded CAR does not contain the expected root CID')
-        saveBlob(new Blob([new Uint8Array(bytes).buffer], { type: 'application/vnd.ipld.car' }), file.fileName)
-      } else saveBlob(await unpackFile(bytes, file.cid), file.fileName)
+        saveBlob(new Blob([new Uint8Array(bytes).buffer], { type: 'application/vnd.ipld.car' }), displayFileName(file))
+      } else saveBlob(await unpackFile(bytes, file.cid), displayFileName(file))
       return
     } catch (cause) {
       failure = cause

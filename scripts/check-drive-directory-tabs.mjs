@@ -32,18 +32,21 @@ export async function checkDirectoryTabs(page, errors) {
         window.__tabAdditionSaved = true
       })
     }, scope)
-    await page.getByRole('button', { name: 'Details', exact: true }).click()
-    await page.getByLabel('Display name', { exact: true }).fill('Renamed in tab A.pdf')
-    await page.getByRole('button', { name: 'Save directory changes', exact: true }).click()
+    await page.evaluate((scope) => {
+      window.__tabCheckpoint = import('/src/lib/local-storage/piece-cache.ts').then(
+        ({ addCachedPiece, getCachedPieces }) =>
+          addCachedPiece(scope, { ...getCachedPieces(scope)[0], id: 'tab-a', fileName: 'tab-a.txt' })
+      )
+    }, scope)
     assert.equal(await sibling.evaluate(() => window.__tabAdditionSaved === true), false)
     await page.evaluate(async () => {
       window.__releaseDirectoryLock()
       await window.__directoryLock
     })
     await sibling.evaluate(() => window.__tabAddition)
-    await page.getByRole('button', { name: 'Close details', exact: true }).click()
+    await page.evaluate(() => window.__tabCheckpoint)
     for (const tab of [page, sibling]) {
-      await tab.getByRole('button', { name: 'Renamed in tab A.pdf', exact: true }).waitFor()
+      await tab.getByRole('button', { name: 'tab-a.txt', exact: true }).waitFor()
       await tab.getByRole('button', { name: 'tab-b.txt', exact: true }).waitFor()
     }
 
@@ -70,7 +73,7 @@ export async function checkDirectoryTabs(page, errors) {
         return error.message
       }
     }, scope)
-    assert.match(concurrentDeletion, /being uploaded or deleted in another tab/)
+    assert.match(concurrentDeletion, /being uploaded or deleted in this or another tab/)
 
     const blockedUpload = await sibling.evaluate(async (scope) => {
       const { acquireContentLock } = await import('/src/lib/filecoin-pin/content-lock.ts')
@@ -88,22 +91,6 @@ export async function checkDirectoryTabs(page, errors) {
       const release = await acquireContentLock(scope, 'different-root')
       release()
     }, scope)
-
-    // Independent folder writes must also merge instead of replacing another tab's folders.
-    await Promise.all(
-      [page, sibling].map((tab, index) =>
-        tab.evaluate(
-          async ({ scope, index }) => {
-            const { saveFolders } = await import('/src/lib/local-storage/drive-directory.ts')
-            await saveFolders(scope, [`tab-${index + 1}`])
-          },
-          { scope, index }
-        )
-      )
-    )
-    for (const tab of [page, sibling])
-      for (const name of ['tab-1', 'tab-2'])
-        await tab.getByRole('navigation', { name: 'File folders' }).getByRole('button', { name, exact: true }).waitFor()
 
     await page.evaluate(async () => {
       window.__releaseDeletionLock()
@@ -146,18 +133,12 @@ export async function checkDirectoryTabs(page, errors) {
         await mutateCachedPieces(scope, (files) =>
           files.map((file) => (file.id === 'demo-file' ? { ...file, fileName: 'Changed while asleep.pdf' } : file))
         )
-        const { saveFolders } = await import('/src/lib/local-storage/drive-directory.ts')
-        await saveFolders(scope, ['created-while-asleep'])
       }, scope)
     } finally {
       await lifecycle.send('Page.setWebLifecycleState', { state: 'active' })
       await lifecycle.detach()
     }
     await page.getByRole('button', { name: 'Changed while asleep.pdf', exact: true }).waitFor()
-    await page
-      .getByRole('navigation', { name: 'File folders' })
-      .getByRole('button', { name: 'created-while-asleep', exact: true })
-      .waitFor()
     await page.evaluate(() => window.removeEventListener('storage', window.__ignoreStorage, true))
 
     // Leave the original fixture in place for the remaining browser scenarios.
@@ -165,7 +146,7 @@ export async function checkDirectoryTabs(page, errors) {
       const { mutateCachedPieces } = await import('/src/lib/local-storage/piece-cache.ts')
       await mutateCachedPieces(scope, (files) =>
         files
-          .filter((file) => file.id !== 'tab-b')
+          .filter((file) => !['tab-a', 'tab-b'].includes(file.id))
           .map((file) => (file.id === 'demo-file' ? { ...file, fileName: 'report.pdf' } : file))
       )
     }, scope)

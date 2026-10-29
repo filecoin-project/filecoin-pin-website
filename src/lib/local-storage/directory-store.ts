@@ -1,5 +1,5 @@
 export const DIRECTORY_SAVE_ERROR =
-  'Unable to save the browser directory. Keep this page open and export a directory backup before reloading.'
+  'Unable to save the browser directory. Keep this page open, free browser storage and retry saving before reloading.'
 
 const CHANGE_EVENT = 'filecoin-drive-directory-change'
 

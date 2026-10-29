@@ -147,11 +147,6 @@ try {
       await page.getByText('Session ready', { exact: true }).waitFor()
     }
     await page.getByRole('button', { name: 'Close Wallet and storage', exact: true }).click()
-    if (process.env.DRIVE_TEST_IMPORT_DIRECTORY) {
-      await page.getByText('Session ready', { exact: true }).waitFor()
-      await page.getByLabel('Import backup').setInputFiles(process.env.DRIVE_TEST_IMPORT_DIRECTORY)
-      console.log('Existing directory imported for dataset reuse acceptance')
-    }
     console.log('Owner session authorized; storage funding and payment approval ready')
     const bytes = Buffer.from(Array.from({ length: 256 * 1024 + 123 }, (_, index) => index % 251))
     const fileName = process.env.DRIVE_TEST_EXISTING_FILE || `验收-${Date.now()}.bin`
@@ -213,12 +208,8 @@ try {
       console.log(`Existing datasets reused: ${currentIds.join(', ')}`)
     }
     console.log('Real provider upload and original-file retrieval verified')
-    const exportedDownload = page.waitForEvent('download')
-    await page.getByRole('button', { name: 'Export backup', exact: true }).click()
-    const exported = await exportedDownload
-    const backupPath = await exported.path()
     const restoredPage = await newWalletPage()
-    await restoredPage.getByLabel('Import backup').setInputFiles(backupPath)
+    await restoredPage.getByRole('button', { name: 'Refresh files', exact: true }).click()
     await restoredPage.getByRole('button', { name: fileName, exact: true }).waitFor()
     const [restoredDownload] = await Promise.all([
       restoredPage.waitForEvent('download', { timeout: 300_000 }),

@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { MAX_FILE_SIZE } from '../constants/files.ts'
 import { DEFAULT_STORAGE_COPIES } from '../lib/filecoin-pin/config.ts'
 import { acquireContentLock } from '../lib/filecoin-pin/content-lock.ts'
+import { validateDriveMetadata } from '../lib/filecoin-pin/drive-metadata.ts'
 import { createFreshUploadContexts } from '../lib/filecoin-pin/fresh-contexts.ts'
 import { ensureSessionKeyPermissions } from '../lib/filecoin-pin/synapse.ts'
 import { prepareUploadContexts } from '../lib/filecoin-pin/upload-funding.ts'
@@ -20,7 +21,7 @@ import { addStoredDataSetId, clearStoredDataSetIds, getStoredDataSetIds } from '
 import { requireDirectoryLocks } from '../lib/local-storage/directory-store.ts'
 import { getCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import type { StepState } from '../types/upload/step.ts'
-import { isDeletionScheduled } from '../utils/file-deletion.ts'
+import { hasRemovalProgress, isDeletionScheduled } from '../utils/file-deletion.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 import { useWaitableRef } from './use-waitable-ref.ts'
 
@@ -140,6 +141,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           throw new Error('Wait for wallet setup to finish before uploading.')
         if (file.size > MAX_FILE_SIZE)
           throw new Error(`Files must be ${prettyBytes(MAX_FILE_SIZE)} or smaller for browser uploads.`)
+        const folderPath = validateDriveMetadata(file.name, metadata?.path ?? '')
         requireDirectoryLocks()
         updateStepState('creating-car', { status: 'in-progress', progress: 0 })
         logger.info('Preparing IPFS input')
@@ -170,7 +172,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
         if (
           storageScope &&
           getCachedPieces(storageScope)?.some(
-            (piece) => (!piece.cid || piece.cid === rootCid) && piece.deletion && !isDeletionScheduled(piece)
+            (piece) => (!piece.cid || piece.cid === rootCid) && hasRemovalProgress(piece) && !isDeletionScheduled(piece)
           )
         )
           throw new Error('This content has an unfinished deletion. Continue its deletion before uploading it again.')
@@ -220,8 +222,8 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           logger,
           contextId: `upload-${Date.now()}`,
           pieceMetadata: {
-            ...(metadata ?? {}),
-            ...(new TextEncoder().encode(file.name).length <= 96 ? { label: file.name } : {}),
+            label: file.name,
+            [carResult.importedCar ? 'carPath' : 'path']: folderPath,
           },
           onProgress: (event) => {
             sawUploadProgress = true
@@ -396,8 +398,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
 
         // Select providers directly from the registry and create fresh
         // per-browser datasets during the upload commit, skipping the SDK's
-        // smart-select (which enumerates every dataset on the shared demo
-        // wallet). Falls back to smart-select with per-browser metadata when
+        // smart-select (which enumerates every dataset the wallet owns). Falls back to smart-select with per-browser metadata when
         // no provider is reachable. The created dataset ids are stored on
         // `piecesConfirmed`, so later uploads take the resume path.
         const uploadIntoFreshDataSets = async (): Promise<UploadExecutionResult> => {
@@ -431,7 +432,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
         } else if (walletAddress != null && storedDataSetIds.length > 0) {
           // Resume into this browser's known datasets. Passing explicit ids
           // skips the SDK's smart-select, which enumerates every dataset on
-          // the shared demo wallet (one eth_call per dataset, unbounded).
+          // a large wallet (one eth_call per dataset).
           try {
             result = await executeFundedUpload({
               ...baseOptions,

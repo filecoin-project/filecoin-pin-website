@@ -51,6 +51,7 @@ interface WalletConnection {
   busy: boolean
   restoring: boolean
   uploading: boolean
+  deleting: boolean
   error: string | null
   options: WalletOption[]
   connect: (id?: string) => Promise<void>
@@ -68,6 +69,7 @@ interface WalletConnection {
   checkingTransaction: boolean
   transactionRevision: number
   refreshTransaction: () => void
+  setDeleting: (deleting: boolean) => void
   setUploading: (uploading: boolean) => void
 }
 const Context = createContext<WalletConnection | null>(null)
@@ -96,13 +98,15 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
   const [sessionStatus, setSessionStatus] = useState<WalletConnection['sessionStatus']>('none')
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const operations = useRef({ uploading: false, deleting: false })
   const [error, setError] = useState<string | null>(null)
   const options: WalletOption[] = installedWalletOptions(connectors)
   const [provider, setProvider] = useState<InjectedProvider | null>(null)
   const identity = useRef('')
   identity.current = address ? scopeFor(address, network) : ''
   const locked = useRef(false)
-  locked.current = busy || uploading
+  locked.current = busy || uploading || deleting
   const connectionAttempts = useRef(new Map<string, AbortController>())
   useEffect(
     () => () => {
@@ -358,13 +362,13 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
   }, [selectedConnection?.accounts, address, provider])
 
   useEffect(() => {
-    if (!busy && !uploading && deferredAccount.current !== undefined) {
+    if (!busy && !uploading && !deleting && deferredAccount.current !== undefined) {
       setSession(null)
       setAddress(deferredAccount.current)
       if (!deferredAccount.current) setProvider(null)
       deferredAccount.current = undefined
     }
-  }, [busy, uploading])
+  }, [busy, uploading, deleting])
 
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -400,7 +404,7 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
       }
     } finally {
       setBusy(false)
-      locked.current = uploading
+      locked.current = operations.current.uploading || operations.current.deleting
     }
   }
   const runConnection = (walletId: string, action: (signal: AbortSignal) => Promise<void>) =>
@@ -459,6 +463,7 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
         busy,
         restoring,
         uploading,
+        deleting,
         error: error ?? transaction.error,
         pendingTransaction: transaction.pending,
         checkingTransaction: transaction.checking,
@@ -467,8 +472,14 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
         options,
         walletConnectAvailable,
         setUploading: (value) => {
-          locked.current = value || busy
+          operations.current.uploading = value
+          locked.current = value || operations.current.deleting || busy
           setUploading(value)
+        },
+        setDeleting: (value) => {
+          operations.current.deleting = value
+          locked.current = value || operations.current.uploading || busy
+          setDeleting(value)
         },
         connect: (id) =>
           runConnection(id ?? options[0]?.id ?? 'unavailable', async (signal) => {

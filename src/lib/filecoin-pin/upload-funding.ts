@@ -17,16 +17,21 @@ export async function prepareUploadContexts(
   if (!contexts && options.dataSetIds) {
     // Resolve individually: old and new datasets may share a provider, which
     // SDK batch resolution rejects before we can filter their metadata.
-    const resolved = await Promise.all(
-      [...new Set(options.dataSetIds)].map((id) => synapse.storage.createContexts({ withCDN: false, dataSetIds: [id] }))
-    )
     const providers = new Set<bigint>()
-    contexts = resolved.flat().filter((context) => {
-      if (context.dataSetMetadata[METADATA_KEYS.SOURCE] !== APPLICATION_SOURCE || providers.has(context.provider.id))
-        return false
-      providers.add(context.provider.id)
-      return true
-    })
+    contexts = []
+    for (const id of new Set(options.dataSetIds)) {
+      const resolved = await synapse.storage.createContexts({ withCDN: false, dataSetIds: [id] })
+      for (const context of resolved) {
+        if (context.dataSetMetadata[METADATA_KEYS.SOURCE] !== APPLICATION_SOURCE || providers.has(context.provider.id))
+          continue
+        providers.add(context.provider.id)
+        contexts.push(context)
+        if (contexts.length === DEFAULT_STORAGE_COPIES) break
+      }
+      // Discovery can remember many datasets. Resolve only enough matching
+      // providers for this upload, rather than scanning every known dataset.
+      if (contexts.length === DEFAULT_STORAGE_COPIES) break
+    }
   }
   contexts ??= await synapse.storage.createContexts({
     withCDN: false,

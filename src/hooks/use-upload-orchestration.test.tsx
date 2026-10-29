@@ -1,6 +1,11 @@
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+vi.mock('../lib/filecoin-pin/drive-api.ts', async (original) => ({
+  ...(await original<object>()),
+  loadDriveFiles: vi.fn().mockResolvedValue([]),
+}))
+
 const mocks = vi.hoisted(() => ({ execute: vi.fn() }))
 vi.mock('../lib/filecoin-pin/storage-chain.ts', () => ({ assertCurrentStorageChain: vi.fn() }))
 
@@ -165,7 +170,7 @@ it.each(['retry button', 'another directory save'] as const)(
         progress({ type: 'ipniProviderResults:complete', data: {} })
         finish({ copies: [{ role: 'primary', providerId: 4n, dataSetId: 1n, pieceId: 10n }], network: 'mainnet' })
       })
-      await waitFor(() => expect(result.current.upload.directorySaveError).toContain('export a directory backup'))
+      await waitFor(() => expect(result.current.upload.directorySaveError).toContain('free browser storage'))
       expect(result.current.upload.activeUpload.isUploading).toBe(false)
       expect(result.current.upload.uploadedFile).not.toBeNull()
       const rootCid = result.current.upload.activeUpload.currentCid
@@ -179,7 +184,7 @@ it.each(['retry button', 'another directory save'] as const)(
         expect(screen.queryByRole('button', { name: 'Retry Upload' })).toBeNull()
         fireEvent.click(screen.getByRole('button', { name: 'Retry saving' }))
       } else {
-        await act(async () => result.current.directory.updateUpload(checkpoint.id, { fileName: 'renamed.txt' }))
+        await act(async () => result.current.directory.updateUpload(checkpoint.id, { ipfsCheckAttempts: 1 }))
       }
       await waitFor(() => expect(result.current.upload.uploadedFile).toBeNull())
       expect(result.current.upload.directorySaveError).toBeNull()

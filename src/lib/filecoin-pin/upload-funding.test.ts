@@ -106,3 +106,15 @@ it('does not create datasets or quote funding when dataset resolution fails', as
   expect(freshContexts).not.toHaveBeenCalled()
   expect(prepare).not.toHaveBeenCalled()
 })
+
+it('keeps the two-copy target when discovery finds datasets on more providers', async () => {
+  const contexts = [1n, 2n, 3n].map((id) => ({ provider: { id }, dataSetMetadata: { source: 'filecoin-drive' } }))
+  const createContexts = vi.fn(async ({ dataSetIds }: { dataSetIds: bigint[] }) => [
+    contexts[Number(dataSetIds[0]) - 1],
+  ])
+  const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
+  const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
+  expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [1n, 2n, 3n] })).toEqual(contexts.slice(0, 2))
+  expect(prepare).toHaveBeenCalledWith({ context: contexts.slice(0, 2), pieceSizes: [10n] })
+  expect(createContexts).toHaveBeenCalledTimes(2)
+})

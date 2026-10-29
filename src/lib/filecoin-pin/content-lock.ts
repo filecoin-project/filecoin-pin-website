@@ -1,6 +1,7 @@
 import { requireDirectoryLocks } from '../local-storage/directory-store.ts'
 
-const CONFLICT = 'This content is being uploaded or deleted in another tab. Retry after that operation finishes.'
+const CONFLICT =
+  'This content is being uploaded or deleted in this or another tab. Retry after that operation finishes.'
 
 function acquire(name: string, mode: LockMode): Promise<() => Promise<void>> {
   return new Promise((resolve, reject) => {

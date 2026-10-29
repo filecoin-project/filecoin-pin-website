@@ -36,7 +36,7 @@ describe('deletion across storage copies', () => {
     try {
       await expect(
         mutateCachedPieces(scope, (files) => files.map((file) => applyDeletionUpdate(file, change)))
-      ).rejects.toThrow('export a directory backup')
+      ).rejects.toThrow('free browser storage')
     } finally {
       write.mockRestore()
     }
@@ -237,4 +237,18 @@ it('plans outstanding batches ahead of an alias with a completed receipt', async
     },
   }
   expect(planDeletion([finished, ongoing], ongoing).file.deletion?.['1'].remaining).toBe(true)
+})
+
+it('skips indexed removals while continuing deletion of the remaining copy', async () => {
+  const { planDeletion } = await import('./delete.ts')
+  const selected = { ...file, id: 'recovered', removedCopies: ['1'] }
+  const plan = planDeletion([selected], selected)
+  const submit = vi.fn().mockResolvedValue(hash)
+  const createContext = vi.fn().mockResolvedValue({ deletePieces: submit, getScheduledRemovals: async () => [] })
+  receipt.mockResolvedValue({ status: 'success' })
+  await scheduleFileDeletion({ storage: { createContext } } as unknown as Synapse, plan.file, vi.fn())
+  expect(createContext).toHaveBeenCalledOnce()
+  expect(createContext).toHaveBeenCalledWith({ dataSetId: 2n })
+  const newer = { ...file, id: 'newer' }
+  expect(planDeletion([selected, newer], selected).file.removedCopies).toEqual([])
 })

@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
 import { chromium } from 'playwright'
 import { checkDirectoryTabs } from './check-drive-directory-tabs.mjs'
 import { checkSessionTabs } from './check-drive-session-tabs.mjs'
@@ -52,32 +51,17 @@ try {
   }
   await checkSessionTabs(page)
   await checkDirectoryTabs(page, errors)
-  await page.getByRole('textbox', { name: 'New folder name' }).fill('reports/2026')
-  await page.getByRole('button', { name: 'Create folder', exact: true }).click()
-  await page.getByRole('button', { name: 'Files (root)', exact: true }).click()
-  await page.getByRole('textbox', { name: 'New folder name' }).fill('temporary-review')
-  await page.getByRole('button', { name: 'Create folder', exact: true }).click()
-  await page.getByRole('button', { name: 'Delete folder', exact: true }).click()
-  const folderDialog = page.getByRole('dialog', { name: 'Delete folder?' })
-  await folderDialog.getByRole('button', { name: 'Delete folder', exact: true }).click()
-  await folderDialog.waitFor({ state: 'hidden' })
-  assert.equal(
-    await page
-      .getByRole('navigation', { name: 'File folders' })
-      .getByRole('button', { name: 'temporary-review', exact: true })
-      .count(),
-    0
-  )
-  await page.getByRole('button', { name: 'Files (root)', exact: true }).waitFor()
-
-  await page.getByRole('button', { name: 'Details', exact: true }).click()
-  await page.getByLabel('Display name', { exact: true }).fill('Annual report.pdf')
-  await page.getByRole('combobox', { name: 'File folder', exact: true }).selectOption('reports/2026')
-  await page.screenshot({ path: '/tmp/filecoin-drive-details.png', animations: 'disabled' })
-  await page.getByRole('button', { name: 'Save directory changes', exact: true }).click()
-  await page.getByRole('button', { name: 'Close details', exact: true }).click()
+  await page.evaluate(async () => {
+    const { mutateCachedPieces } = await import('/src/lib/local-storage/piece-cache.ts')
+    await mutateCachedPieces('314:0x1111111111111111111111111111111111111111', (files) =>
+      files.map((file) => ({ ...file, fileName: 'Annual report.pdf', folderPath: 'reports/2026' }))
+    )
+  })
   await page.getByRole('button', { name: '2026', exact: true }).click()
-  await page.getByRole('button', { name: 'Annual report.pdf', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Annual report.pdf', exact: true }).click()
+  assert.equal(await page.getByLabel('Display name', { exact: true }).count(), 0)
+  await page.screenshot({ path: '/tmp/filecoin-drive-details.png', animations: 'disabled' })
+  await page.getByRole('button', { name: 'Close details', exact: true }).click()
   assert((await page.locator('table').boundingBox()).y < 500, 'File table should occupy the first desktop viewport')
   await page.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
   await page.getByRole('checkbox', { name: 'I authorize storage uploads and file deletions for this browser.' }).check()
@@ -140,24 +124,14 @@ try {
   )
   assert.equal(backup[0].folderPath, 'reports/2026')
   assert.equal(backup[0].fileName, 'Annual report.pdf')
-  const exporting = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Export backup', exact: true }).click()
-  const directoryDownload = await exporting
-  const backupPath = '/tmp/filecoin-drive-directory-test.json'
-  await directoryDownload.saveAs(backupPath)
-  const exported = JSON.parse(await readFile(backupPath, 'utf8'))
-  assert.equal(exported.scope, '314:0x1111111111111111111111111111111111111111')
-  assert.deepEqual(exported.files, backup)
-  assert.equal(JSON.stringify(exported).includes('privateKey'), false)
-
+  assert.equal(await page.getByRole('button', { name: 'Export backup', exact: true }).count(), 0)
   // A new browser context shares neither the directory nor the session vault.
   const restored = await browser.newPage({ viewport: { width: 1440, height: 1080 } })
   restored.on('pageerror', (error) => errors.push(error.message))
-  await prepareBrowserPage(restored, { seedDirectory: false })
+  await prepareBrowserPage(restored, { seedDirectory: false, indexedDirectory: true })
   await restored.goto(process.env.DRIVE_TEST_URL || 'http://127.0.0.1:5173/')
   await restored.getByRole('button', { name: 'Connect wallet', exact: true }).click()
-  await restored.getByText('No files here yet. Upload to this folder.', { exact: true }).waitFor()
-  await restored.locator('input[accept=".json,application/json"]').setInputFiles(backupPath)
+  await restored.getByRole('button', { name: '2026', exact: true }).waitFor()
   await restored.getByRole('button', { name: '2026', exact: true }).click()
   await restored.getByRole('button', { name: 'Annual report.pdf', exact: true }).waitFor()
   await restored.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
@@ -180,11 +154,6 @@ try {
   await restored.getByRole('button', { name: 'Annual report.pdf', exact: true }).waitFor()
   await restored.evaluate(() => window.ethereum.switchAccount('0x2222222222222222222222222222222222222222'))
   await restored.getByText('No files here yet. Upload to this folder.', { exact: true }).waitFor()
-  await restored.locator('input[accept=".json,application/json"]').setInputFiles(backupPath)
-  await restored
-    .getByRole('alert')
-    .filter({ hasText: 'Choose a directory backup for this wallet and network.' })
-    .waitFor()
   await restored.unrouteAll({ behavior: 'ignoreErrors' })
   await restored.close()
   await page.getByLabel('Network', { exact: true }).selectOption('calibration')
@@ -254,7 +223,7 @@ try {
   }
   assert.deepEqual(errors, [])
   console.log(
-    'Browser checks passed: cross-tab directory writes and resume, session authorization, folders, file details, cross-browser export/import and reload, wallet/network isolation, desktop/mobile rendering'
+    'Browser checks passed: cross-tab directory writes and resume, session authorization, folders, file details, cross-browser indexed recovery and reload, wallet/network isolation, desktop/mobile rendering'
   )
 } finally {
   for (const context of browser.contexts())

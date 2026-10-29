@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useUploadHistory } from '../context/upload-history-context.tsx'
 import { DIRECTORY_SAVE_ERROR } from '../lib/local-storage/directory-store.ts'
+import { normalizeFolder } from '../lib/local-storage/drive-directory.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
 import { useFilecoinUpload } from './use-filecoin-upload.ts'
 import { useUploadProgress } from './use-upload-progress.ts'
@@ -106,7 +107,7 @@ export function useUploadOrchestration() {
 
     const newPiece = {
       id: uploadedFile.id ?? crypto.randomUUID(),
-      folderPath: uploadedFile.folderPath,
+      folderPath: normalizeFolder(uploadedFile.folderPath ?? ''),
       ipfsIndexed: uploadState.stepStates.find((step) => step.step === 'announcing-cids')?.status === 'completed',
       pieceIds: orderedCopies.map((c) => String(c.pieceId)),
       fileName: uploadedFile.file.name,
@@ -185,7 +186,7 @@ export function useUploadOrchestration() {
       setUploadedFile({ file, cid: '', id, folderPath, startedAt: Date.now() })
 
       // Expose completion so callers can release their operation lock even on early failures.
-      return uploadFile(file)
+      return uploadFile(file, { path: folderPath })
         .then((cid) => {
           console.debug('[UploadOrchestration] Upload returned CID:', cid)
           setUploadedFile((current) => (current?.id === id ? { ...current, cid } : current))

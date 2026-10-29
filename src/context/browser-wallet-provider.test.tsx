@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   remoteConnect: vi.fn(),
   remoteRestore: vi.fn(),
   remoteDisconnect: vi.fn(),
+  chainExpiry: 0,
 }))
 vi.mock('../lib/filecoin-pin/browser-wallet.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/filecoin-pin/browser-wallet.ts')>()),
@@ -26,7 +27,7 @@ vi.mock('../lib/filecoin-pin/browser-wallet.ts', async (importOriginal) => ({
   browserSynapse: () => ({
     isRevoked: mocks.revoked,
     validate: mocks.validate,
-    expiresAt: () => Math.floor(Date.now() / 1000) + 7 * 86400,
+    expiresAt: () => mocks.chainExpiry,
   }),
 }))
 vi.mock('@filoz/synapse-react', () => ({ getSignerClient: vi.fn(async () => ({})) }))
@@ -67,6 +68,7 @@ let request: ReturnType<typeof vi.fn>
 const wrapper = ({ children }: { children: ReactNode }) => <BrowserWalletProvider>{children}</BrowserWalletProvider>
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.chainExpiry = Math.floor(Date.now() / 1000) + 7 * 86400
   chainId = '0x13a'
   accounts = [ALICE]
   listeners = new Map()
@@ -244,6 +246,33 @@ describe('BYOW browser sessions', () => {
     act(() => result.current.setUploading(false))
     await waitFor(() => expect(result.current.address).toBeNull())
   })
+
+  it.each(['upload', 'delete'] as const)(
+    'keeps the wallet locked until both operations finish (%s first)',
+    async (first) => {
+      const { result } = renderHook(useBrowserWallet, { wrapper })
+      await act(async () => result.current.connectWalletConnect())
+      act(() => {
+        result.current.setUploading(true)
+        result.current.setDeleting(true)
+      })
+      await act(async () => {
+        await listeners.get('disconnect')?.()
+      })
+      act(() => {
+        if (first === 'upload') result.current.setUploading(false)
+        else result.current.setDeleting(false)
+      })
+      expect(result.current.address).toBe(ALICE)
+      await act(async () => result.current.switchNetwork('calibration'))
+      expect(result.current.network).toBe('mainnet')
+      act(() => {
+        result.current.setUploading(false)
+        result.current.setDeleting(false)
+      })
+      await waitFor(() => expect(result.current.address).toBeNull())
+    }
+  )
 
   it('reports cancelled remote connections without attaching a wallet', async () => {
     mocks.remoteConnect.mockRejectedValue(new Error('Connection cancelled'))

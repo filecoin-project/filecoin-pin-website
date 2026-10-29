@@ -1,6 +1,7 @@
 import type { Synapse } from '@filoz/synapse-sdk'
 import { useEffect, useRef, useState } from 'react'
 import { downloadFile } from '../lib/filecoin-pin/download.ts'
+import { displayFileName } from '../lib/filecoin-pin/drive-api.ts'
 import { isDeletionScheduled } from '../utils/file-deletion.ts'
 import type { DatasetPiece } from './use-dataset-pieces.ts'
 
@@ -30,7 +31,7 @@ export function useDownloadQueue(synapse: Synapse | null, scope: string | undefi
   }, [scope])
 
   const syncQueue = (worker: Worker) =>
-    setQueuedDownloads(worker.pending.map(({ file }) => ({ id: file.id, name: file.fileName })))
+    setQueuedDownloads(worker.pending.map(({ file }) => ({ id: file.id, name: displayFileName(file) })))
 
   const runNext = async (worker: Worker): Promise<void> => {
     if (worker.stopped || worker.active) return
@@ -38,20 +39,20 @@ export function useDownloadQueue(synapse: Synapse | null, scope: string | undefi
     if (!job) return
     worker.active = job
     syncQueue(worker)
-    setDownload({ id: job.file.id, name: job.file.fileName, stage: 'Downloading from storage provider' })
+    setDownload({ id: job.file.id, name: displayFileName(job.file), stage: 'Downloading from storage provider' })
     try {
       await downloadFile(job.synapse, job.file, (stage) => {
         if (!worker.stopped && worker.active === job)
           setDownload({
             id: job.file.id,
-            name: job.file.fileName,
+            name: displayFileName(job.file),
             stage: stage === 'downloading' ? 'Downloading from storage provider' : 'Preparing original file',
           })
       })
     } catch (cause) {
       if (!worker.stopped)
         setDownloadError(
-          `${job.file.fileName}: ${cause instanceof Error ? cause.message : 'Unable to download the file'}`
+          `${displayFileName(job.file)}: ${cause instanceof Error ? cause.message : 'Unable to download the file'}`
         )
     } finally {
       worker.active = null

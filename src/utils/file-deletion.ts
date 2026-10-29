@@ -30,8 +30,19 @@ export function applyDeletionUpdate(file: DatasetPiece, { datasetId, previous, n
   return { ...file, deletion }
 }
 
-/** A confirmed removal request is a local tombstone, not proof of physical erasure. */
+export const hasRemovalProgress = (file: DatasetPiece): boolean =>
+  Boolean(file.deletion || file.removedCopies?.length || file.removalQueuedCopies?.length)
+
+/** Queue entries and local receipts acknowledge scheduling, not physical erasure. */
+export function isCopyRemovalScheduled(file: DatasetPiece, id: string): boolean {
+  return Boolean(
+    file.removedCopies?.includes(id) ||
+      file.removalQueuedCopies?.includes(id) ||
+      (file.deletion?.[id]?.confirmed && !file.deletion[id].remaining)
+  )
+}
+
 export function isDeletionScheduled(file: DatasetPiece): boolean {
   const copies = file.datasetIds ?? [file.datasetId]
-  return copies.length > 0 && copies.every((id) => file.deletion?.[id]?.confirmed && !file.deletion[id].remaining)
+  return copies.length > 0 && copies.every((id) => isCopyRemovalScheduled(file, id))
 }

@@ -1,7 +1,4 @@
-/** Browser file directory, scoped by chain ID and wallet address. Chain reads
- * cannot reconstruct names or IPFS root CIDs; this is durable local metadata,
- * rather than a disposable RPC cache. Directory backups make it portable.
- */
+/** Wallet/network-scoped cache plus durable checkpoints for uploads and removals. */
 
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { createDirectoryStore } from './directory-store.ts'
@@ -13,12 +10,11 @@ const getPieceCacheKey = (walletAddress: string): string => `${PIECE_CACHE_KEY}-
 const store = createDirectoryStore<DatasetPiece[]>(getPieceCacheKey, (raw) => {
   if (raw === null) return []
   const parsed: unknown = JSON.parse(raw)
-  if (!Array.isArray(parsed)) throw new Error('Invalid browser file directory. Export a backup before continuing.')
+  if (!Array.isArray(parsed))
+    throw new Error('Invalid browser file directory. Check browser storage before continuing.')
   return parsed as DatasetPiece[]
 })
 
-/** Strict read for directory operations that must not treat corrupt metadata as empty. */
-export const readDirectoryPieces = store.read
 export const mutateCachedPieces = store.mutate
 export const subscribeCachedPieces = store.subscribe
 export const hasUnsavedPieces = store.hasUnsaved
@@ -54,6 +50,12 @@ export const setCachedPieces = (walletAddress: string, pieces: DatasetPiece[]): 
 /** Prepend a piece to the cached list (used after an upload completes). Idempotent by file record ID. */
 export const addCachedPiece = (walletAddress: string, piece: DatasetPiece): Promise<DatasetPiece[]> =>
   mutateCachedPieces(walletAddress, (current) => {
+    const indexed = current.filter(
+      (record) =>
+        record.id.startsWith('indexed-') &&
+        record.pieceCid === piece.pieceCid &&
+        storageInstances(record).some((instance) => storageInstances(piece).includes(instance))
+    )
     const previous = current.find((record) => record.id === piece.id)
     const next = previous
       ? {
@@ -61,7 +63,8 @@ export const addCachedPiece = (walletAddress: string, piece: DatasetPiece): Prom
           ipfsIndexed: previous.ipfsIndexed === true || piece.ipfsIndexed === true,
         }
       : piece
-    return [next, ...current.filter((record) => record.id !== piece.id)]
+    const complete = indexed.reduce((value, record) => mergeStorageCopies(value, record), next)
+    return [complete, ...current.filter((record) => record.id !== piece.id && !indexed.includes(record))]
   })
 
 /** Merge storage facts without reverting names, folders, indexing progress or removal receipts. */
@@ -100,3 +103,6 @@ export function mergeStorageCopies(recorded: DatasetPiece, incoming: DatasetPiec
     transactionHash: transactionHashes[0],
   }
 }
+
+export const storageInstances = (file: DatasetPiece) =>
+  (file.datasetIds ?? [file.datasetId]).map((id, i) => `${id}:${file.pieceIds?.[i] ?? (i === 0 ? file.pieceId : '')}`)

@@ -246,9 +246,13 @@ try {
     await consolePage.getByRole('button', { name: 'Close details', exact: true }).click()
     console.log(`${theme}: landing, wallet console, file table, directory controls and file details contrast passed`)
   }
-  await consolePage.getByRole('button', { name: 'report.pdf', exact: true }).click()
-  await consolePage.getByLabel('Display name', { exact: true }).fill('report.tar.gz')
-  await consolePage.getByRole('button', { name: 'Save directory changes', exact: true }).click()
+  await consolePage.evaluate(async () => {
+    const { mutateCachedPieces } = await import('/src/lib/local-storage/piece-cache.ts')
+    await mutateCachedPieces('314:0x1111111111111111111111111111111111111111', (files) =>
+      files.map((file) => ({ ...file, fileName: 'report.tar.gz' }))
+    )
+  })
+  await consolePage.getByRole('button', { name: 'report.tar.gz', exact: true }).click()
   assert.equal(await consolePage.getByRole('button', { name: 'Preview', exact: true }).isDisabled(), true)
   assert.equal(
     await consolePage.getByRole('button', { name: 'Download original file', exact: true }).isDisabled(),

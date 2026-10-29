@@ -33,6 +33,7 @@ export async function scheduleFileDeletion(
   }
   const deferred: string[] = []
   for (const datasetId of [...new Set(file.datasetIds ?? [file.datasetId])]) {
+    if (file.removedCopies?.includes(datasetId) || file.removalQueuedCopies?.includes(datasetId)) continue
     const previous = updated.deletion?.[datasetId]
     if (previous?.confirmed && !previous.remaining) continue
     let hash = (previous?.confirmed ? undefined : previous?.transactionHash) as `0x${string}` | undefined
@@ -118,5 +119,10 @@ export function planDeletion(history: DatasetPiece[], selected: DatasetPiece) {
     )
       deletion[id] = { ...checkpoint, remaining: true }
   }
-  return { aliasIds, file: { ...selected, datasetIds, deletion } }
+  const settled = datasetIds.filter((id) =>
+    aliases
+      .filter((alias) => (alias.datasetIds ?? [alias.datasetId]).includes(id))
+      .every((alias) => alias.removedCopies?.includes(id) || alias.removalQueuedCopies?.includes(id))
+  )
+  return { aliasIds, file: { ...selected, datasetIds, deletion, removedCopies: settled, removalQueuedCopies: [] } }
 }
