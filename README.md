@@ -1,6 +1,6 @@
 # Filecoin Drive
 
-A browser file manager for Filecoin, built on `filecoin-pin` and Synapse. Connect your own wallet, authorize a browser session, then upload, download and manage a local file directory.
+Filecoin Drive is an open-source reference app built on Filecoin, using public libraries including Synapse SDK and Filecoin Pin. It provides a browser file manager for Filecoin. Connect your own wallet, authorize a browser session, then upload, download and manage a local file directory.
 
 ## Run locally
 

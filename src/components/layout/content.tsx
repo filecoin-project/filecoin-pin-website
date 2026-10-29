@@ -5,6 +5,7 @@ import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { useUploadOrchestration } from '../../hooks/use-upload-orchestration.ts'
 import { formatFileSize } from '../../utils/format-file-size.ts'
 import { getStepLabel } from '../../utils/upload/step-utils.ts'
+import { DeveloperFooter } from '../drive/developer-footer.tsx'
 import { FileBrowser } from '../drive/file-browser.tsx'
 import { SidePanel } from '../drive/side-panel.tsx'
 import { WalletSetup } from '../drive/wallet-controls.tsx'
@@ -144,10 +145,11 @@ export default function Content() {
           </aside>
         )}
       </div>
-      <footer className="flex flex-wrap justify-between gap-2 text-xs text-muted">
+      <div className="flex flex-wrap justify-between gap-2 text-xs text-muted">
         <span>Export a directory backup before clearing browser data.</span>
         <span>Powered by Filecoin</span>
-      </footer>
+      </div>
+      <DeveloperFooter />
       <SidePanel
         description="Manage browser authorization, balances and storage payments."
         onOpenChange={(open) => {

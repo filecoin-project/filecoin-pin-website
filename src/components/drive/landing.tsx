@@ -1,6 +1,7 @@
 import { Check, FileText, Folder, HardDrive, KeyRound, Layers, ShieldCheck, Wallet } from 'lucide-react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { ConnectWalletButton } from './connect-wallet-button.tsx'
+import { DeveloperFooter } from './developer-footer.tsx'
 
 function WorkspacePreview() {
   return (
@@ -117,6 +118,21 @@ export function Landing() {
         </section>
         <WorkspacePreview />
       </div>
+      <section aria-label="About Filecoin Drive" className="mb-10 max-w-3xl space-y-2 text-sm leading-6 text-muted">
+        <p>
+          Filecoin Drive is an{' '}
+          <a
+            className="text-foreground underline decoration-border underline-offset-4 hover:text-accent"
+            href="https://github.com/filecoin-project/filecoin-pin-website"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            open-source reference app
+          </a>{' '}
+          built entirely on public libraries. Built with 💙 by FilOz.
+        </p>
+        <p>Your files live on Filecoin, not in this app. Retrieve them with or without Drive.</p>
+      </section>
       <section
         aria-label="How it works"
         className="grid gap-8 border-y border-border py-8 sm:py-10 md:grid-cols-3 md:gap-10"
@@ -138,7 +154,7 @@ export function Landing() {
             icon: Folder,
             step: '03',
             title: 'Keep everything in order',
-            description: 'Upload, download and organize files in folders. Export your directory to take it with you.',
+            description: 'Upload, download and organize files in folders. Export a backup to take your directory with you.',
           },
         ].map(({ icon: Icon, step, title, description }) => (
           <article className="space-y-3" key={step}>
@@ -151,13 +167,7 @@ export function Landing() {
           </article>
         ))}
       </section>
-      <footer className="flex flex-col justify-between gap-4 py-7 text-xs leading-5 text-muted sm:flex-row">
-        <p>Files live on Filecoin. Folder structure and later name changes stay in this browser.</p>
-        <p>
-          Uploaded content is not encrypted. Original file names and content identifiers may be publicly visible
-          on-chain.
-        </p>
-      </footer>
+      <DeveloperFooter />
     </main>
   )
 }
