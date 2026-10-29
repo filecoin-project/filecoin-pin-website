@@ -393,7 +393,7 @@ export function WalletSetup({ inDrawer = false }: { inDrawer?: boolean }) {
               rel="noopener noreferrer"
               target="_blank"
             >
-              Open Pay Console <ArrowUpRight aria-hidden="true" size={13} />
+              Open Filecoin User Console <ArrowUpRight aria-hidden="true" size={13} />
             </a>
           </div>
           {message && (

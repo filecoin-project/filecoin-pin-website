@@ -131,7 +131,7 @@ export function Landing() {
           {
             icon: KeyRound,
             step: '02',
-            title: 'Authorize once',
+            title: 'Authorize per session',
             description: 'A time-limited session key handles uploads and deletions without repeated prompts.',
           },
           {

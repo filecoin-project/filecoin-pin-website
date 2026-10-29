@@ -225,12 +225,47 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
   return (
     <section className="drive-panel overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
-        <h2 className="flex items-center gap-2.5 text-base font-semibold">
-          Files{' '}
-          <span className="rounded-md bg-surface-raised px-2 py-0.5 text-xs font-normal tabular-nums text-muted">
-            {visibleHistory.length}
-          </span>
-        </h2>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3">
+          <h2 className="flex items-center gap-2.5 text-base font-semibold">
+            Files{' '}
+            <span className="rounded-md bg-surface-raised px-2 py-0.5 text-xs font-normal tabular-nums text-muted">
+              {visibleHistory.length}
+            </span>
+          </h2>
+          <div className="flex flex-wrap items-center gap-2 sm:border-l sm:border-border sm:pl-5">
+            <Button
+              aria-label="Export backup"
+              className="w-auto"
+              disabled={disabled}
+              onClick={exportDirectory}
+              size="sm"
+              title="Export directory backup"
+              variant="secondary"
+            >
+              <Download aria-hidden="true" size={14} />
+              <span>Export backup</span>
+            </Button>
+            <label
+              className={`inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm text-foreground transition-colors hover:bg-surface-raised ${disabled ? 'opacity-50' : 'cursor-pointer'}`}
+              title="Import directory backup"
+            >
+              <Upload aria-hidden="true" size={14} />
+              <span>Import backup</span>
+              <input
+                accept=".json,application/json"
+                aria-label="Import backup"
+                className="sr-only"
+                disabled={disabled}
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) void act(() => importDirectory(file))
+                  event.target.value = ''
+                }}
+                type="file"
+              />
+            </label>
+          </div>
+        </div>
         <div className="flex items-center gap-2">
           {onUpload && (
             <Button
@@ -244,42 +279,11 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
               Upload
             </Button>
           )}
-          <Button
-            aria-label="Export directory"
-            className="w-auto"
-            disabled={disabled}
-            onClick={exportDirectory}
-            size="sm"
-            title="Export directory backup"
-            variant="secondary"
-          >
-            <Download aria-hidden="true" size={14} />
-            <span className="hidden sm:inline">Export directory</span>
-          </Button>
-          <label
-            className={`inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm text-foreground transition-colors hover:bg-surface-raised ${disabled ? 'opacity-50' : 'cursor-pointer'}`}
-            title="Import directory backup"
-          >
-            <Upload aria-hidden="true" size={14} />
-            <span className="hidden sm:inline">Import directory</span>
-            <input
-              accept=".json,application/json"
-              aria-label="Import directory"
-              className="sr-only"
-              disabled={disabled}
-              onChange={(event) => {
-                const file = event.target.files?.[0]
-                if (file) void act(() => importDirectory(file))
-                event.target.value = ''
-              }}
-              type="file"
-            />
-          </label>
         </div>
       </div>
       <p className="border-b border-border bg-canvas/30 px-5 py-3 text-xs leading-5 text-muted sm:px-6">
         Folder structure and later name changes are saved only in this browser. Export a backup to transfer your
-        directory.
+        directory. Backups contain file records and folders, not file contents.
       </p>
       {notice && (
         <p className="px-5 py-3 text-sm text-success" role="status">
@@ -641,7 +645,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
       </Dialog.Root>
       <Dialog.Root
         onOpenChange={(open) => {
-          if (!open && !working) setSelectedId(null)
+          if (!open && !isEditing) setSelectedId(null)
         }}
         open={Boolean(selected)}
       >
@@ -650,10 +654,10 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
           <Dialog.Content
             className="fixed right-0 top-0 z-50 h-full w-full max-w-xl overflow-y-auto border-l border-border bg-surface p-6 space-y-6"
             onEscapeKeyDown={(event) => {
-              if (working) event.preventDefault()
+              if (isEditing) event.preventDefault()
             }}
             onPointerDownOutside={(event) => {
-              if (working) event.preventDefault()
+              if (isEditing) event.preventDefault()
             }}
           >
             <Dialog.Title className="pr-10 text-xl font-semibold break-all">{selected?.fileName}</Dialog.Title>
@@ -664,7 +668,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
             <Dialog.Close
               aria-label="Close details"
               className="absolute right-5 top-5 rounded p-2 hover:bg-surface-raised"
-              disabled={working}
+              disabled={isEditing}
             >
               <X size={20} />
             </Dialog.Close>

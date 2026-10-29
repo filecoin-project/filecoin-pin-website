@@ -141,7 +141,7 @@ try {
   assert.equal(backup[0].folderPath, 'reports/2026')
   assert.equal(backup[0].fileName, 'Annual report.pdf')
   const exporting = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Export directory', exact: true }).click()
+  await page.getByRole('button', { name: 'Export backup', exact: true }).click()
   const directoryDownload = await exporting
   const backupPath = '/tmp/filecoin-drive-directory-test.json'
   await directoryDownload.saveAs(backupPath)

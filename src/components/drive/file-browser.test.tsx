@@ -552,3 +552,37 @@ it('explains why a nonempty folder cannot be deleted and does not offer root del
   expect(screen.queryByRole('button', { name: 'Delete folder' })).toBeNull()
   expect(screen.getByRole('button', { name: 'Files (root)' }).getAttribute('aria-current')).toBe('page')
 })
+
+it.each([false, true])('keeps deletion running after closing details (failure: %s)', async (fails) => {
+  setCachedPieces(scope, [file])
+  let finish!: () => void
+  mocks.submit.mockImplementation(
+    () =>
+      new Promise<string>((resolve, reject) => {
+        finish = () => (fails ? reject(new Error('provider unavailable')) : resolve(hash))
+      })
+  )
+  mocks.context.mockResolvedValue({ deletePieces: mocks.submit, getScheduledRemovals: async () => [] })
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'first.txt' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Schedule deletion' }))
+  await waitFor(() => expect(mocks.submit).toHaveBeenCalledOnce())
+  fireEvent.click(screen.getByRole('button', { name: 'Close details' }))
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(mocks.uploading).not.toHaveBeenCalledWith(false)
+  await act(async () => finish())
+  if (fails) {
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'provider unavailable')
+  } else {
+    await waitFor(() =>
+      expect(getCachedPieces(scope)?.every((record) => record.deletion?.[record.datasetId]?.confirmed)).toBe(true)
+    )
+    expect(screen.getByRole('status').textContent).toContain('Removed from the file list')
+  }
+  expect(mocks.uploading).toHaveBeenLastCalledWith(false)
+})
