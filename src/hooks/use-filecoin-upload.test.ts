@@ -102,6 +102,21 @@ it('refuses uploads before packing when safe directory writes are unavailable', 
   }
 })
 
+describe('useFilecoinUpload readiness', () => {
+  it('stops before uploading when the readiness check is blocked', async () => {
+    useFilecoinPinContextMock.mockReturnValue(baseContext)
+    checkUploadReadinessMock.mockResolvedValueOnce({
+      status: 'blocked',
+      validation: { errorMessage: 'Insufficient storage funds' },
+    })
+
+    const { result } = renderHook(() => useFilecoinUpload())
+
+    await expect(result.current.uploadFile(testFile)).rejects.toThrow('Insufficient storage funds')
+    expect(executeUploadMock).not.toHaveBeenCalled()
+  })
+})
+
 describe('useFilecoinUpload providerId debug param', () => {
   const getOpts = () => executeUploadMock.mock.lastCall?.at(-1)
 
