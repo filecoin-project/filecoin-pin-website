@@ -179,7 +179,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
     const blob = new Blob([JSON.stringify({ version: 1, scope: storageScope, files, folders }, null, 2)], {
       type: 'application/json',
     })
-    saveBlob(blob, `filecoin-directory-${connection.network}-${connection.address}.json`)
+    saveBlob(blob, `filecoin-drive-backup-${connection.network}-${connection.address}.json`)
   }
   const saveDirectoryChanges = () =>
     act(async () => {
