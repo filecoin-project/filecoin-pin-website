@@ -4,7 +4,6 @@ import {
   ChevronRight,
   Download,
   Eye,
-  File as FileIcon,
   Folder,
   FolderOpen,
   Loader2,
@@ -34,6 +33,7 @@ import {
 } from '../../utils/links.ts'
 import { ButtonBase as Button, buttonVariants } from '../ui/button/button-base.tsx'
 import { CopyButton } from '../ui/copy-button.tsx'
+import { FileTypeIcon } from './file-type-icon.tsx'
 import { ProviderLink } from './provider-link.tsx'
 import { ShareFileButton } from './share-file-button.tsx'
 
@@ -346,7 +346,9 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                           onClick={() => onFolderChange(path)}
                           type="button"
                         >
-                          <Folder size={17} />
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-800/10 text-accent">
+                            <Folder aria-hidden="true" size={16} />
+                          </span>
                           {path.split('/').at(-1)}
                         </button>
                       </td>
@@ -360,9 +362,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                         onClick={() => choose(file)}
                         type="button"
                       >
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-800/10 text-accent">
-                          <FileIcon size={16} />
-                        </span>
+                        <FileTypeIcon fileName={file.fileName} importedCar={file.importedCar} />
                         <span className="max-w-[260px] truncate">
                           {search && file.folderPath ? `${file.folderPath}/` : ''}
                           {displayFileName(file)}
