@@ -35,7 +35,7 @@ vi.mock('./use-filecoin-pin-context.ts', () => ({
 }))
 
 vi.mock('../lib/filecoin-pin/synapse.ts', () => ({
-  APPLICATION_SOURCE: 'filecoin-pin',
+  APPLICATION_SOURCE: 'filecoin-drive',
   ensureSessionKeyPermissions: vi.fn().mockResolvedValue(undefined),
 }))
 
@@ -58,7 +58,10 @@ const baseContext = {
 
 const testFile = new File(['hello'], 'a.txt')
 
-const fakeContexts = [{ provider: { id: 4n, name: 'provider-a' } }, { provider: { id: 2n, name: 'provider-b' } }]
+const fakeContexts = [
+  { provider: { id: 4n, name: 'provider-a' }, dataSetMetadata: { source: 'filecoin-drive' } },
+  { provider: { id: 2n, name: 'provider-b' }, dataSetMetadata: { source: 'filecoin-drive' } },
+]
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -157,7 +160,7 @@ describe('useFilecoinUpload dataset resume', () => {
     await result.current.uploadFile(testFile)
 
     expect(executeUploadMock).toHaveBeenCalledTimes(1)
-    expect(createContextsMock).toHaveBeenCalledWith({ withCDN: false, dataSetIds: [42n, 77n] })
+    expect(createContextsMock).toHaveBeenCalledWith({ withCDN: false, dataSetIds: [42n] })
     expect(getOpts()).toMatchObject({ contexts: fakeContexts })
     expect(getOpts()).not.toHaveProperty('dataSetIds')
     expect(getOpts()).not.toHaveProperty('metadata')
@@ -299,9 +302,7 @@ it('restores two-copy uploads after a one-copy result without changing existing 
   const oldFile = { id: 'old-file', datasetId: '44585', datasetIds: ['44585'], copyCount: 1 }
   setCachedPieces(scope, [oldFile as never])
   useFilecoinPinContextMock.mockReturnValue({ ...baseContext, storageScope: scope })
-  createContextsMock.mockImplementation(async ({ dataSetIds }) =>
-    dataSetIds.length === 1 ? [primary] : [primary, secondary]
-  )
+  createContextsMock.mockImplementation(async ({ dataSetIds }) => (dataSetIds[0] === 44585n ? [primary] : [secondary]))
   createFreshUploadContextsMock.mockResolvedValueOnce([secondary])
   executeUploadMock.mockImplementation(async (_synapse, _car, _root, options) => {
     for (const [index, context] of options.contexts.entries()) {
@@ -332,7 +333,7 @@ it('restores two-copy uploads after a one-copy result without changing existing 
     await result.current.uploadFile(testFile)
   })
   expect(createFreshUploadContextsMock).toHaveBeenCalledOnce()
-  expect(createContextsMock).toHaveBeenLastCalledWith({ withCDN: false, dataSetIds: [44585n, 44586n] })
+  expect(createContextsMock).toHaveBeenLastCalledWith({ withCDN: false, dataSetIds: [44586n] })
   expect(result.current.uploadState.copies).toHaveLength(2)
   expect(getCachedPieces(scope)).toEqual([oldFile])
 })

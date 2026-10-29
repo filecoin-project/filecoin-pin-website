@@ -20,6 +20,7 @@ import {
   SessionPermissionError,
   scopeFor,
 } from '../lib/filecoin-pin/browser-wallet.ts'
+import { APPLICATION_SOURCE } from '../lib/filecoin-pin/synapse.ts'
 import {
   type BrowserProvider,
   connectWalletConnect,
@@ -587,7 +588,7 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
           run(async () => {
             if (transaction.pending) return
             const client = await requireOwner()
-            await action(new Synapse({ client: asClient(client), source: 'filecoin-pin' }), (hash) =>
+            await action(new Synapse({ client: asClient(client), source: APPLICATION_SOURCE }), (hash) =>
               transaction.confirm(hash, kind)
             )
           }),

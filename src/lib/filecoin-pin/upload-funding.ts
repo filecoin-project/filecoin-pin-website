@@ -13,22 +13,30 @@ export async function prepareUploadContexts(
   options: Pick<UploadExecutionOptions, 'contexts' | 'dataSetIds' | 'providerIds' | 'metadata'>
 ) {
   await assertCurrentStorageChain(synapse)
-  let contexts =
-    options.contexts ??
-    (await synapse.storage.createContexts({
-      withCDN: false,
-      ...(options.dataSetIds
-        ? { dataSetIds: options.dataSetIds }
-        : {
-            providerIds: options.providerIds,
-            metadata: {
-              [METADATA_KEYS.WITH_IPFS_INDEXING]: '',
-              [METADATA_KEYS.SOURCE]: APPLICATION_SOURCE,
-              ...options.metadata,
-            },
-          }),
-    }))
-  if (!contexts.length) throw new Error('No storage providers available')
+  let contexts = options.contexts
+  if (!contexts && options.dataSetIds) {
+    // Resolve individually: old and new datasets may share a provider, which
+    // SDK batch resolution rejects before we can filter their metadata.
+    const resolved = await Promise.all(
+      [...new Set(options.dataSetIds)].map((id) => synapse.storage.createContexts({ withCDN: false, dataSetIds: [id] }))
+    )
+    const providers = new Set<bigint>()
+    contexts = resolved.flat().filter((context) => {
+      if (context.dataSetMetadata[METADATA_KEYS.SOURCE] !== APPLICATION_SOURCE || providers.has(context.provider.id))
+        return false
+      providers.add(context.provider.id)
+      return true
+    })
+  }
+  contexts ??= await synapse.storage.createContexts({
+    withCDN: false,
+    providerIds: options.providerIds,
+    metadata: {
+      [METADATA_KEYS.WITH_IPFS_INDEXING]: '',
+      ...options.metadata,
+      [METADATA_KEYS.SOURCE]: APPLICATION_SOURCE,
+    },
+  })
   // A previous partial upload may have saved only one dataset. Reuse it, but
   // select the missing provider before quoting this new upload's full cost.
   if (options.dataSetIds && contexts.length < DEFAULT_STORAGE_COPIES) {
@@ -40,6 +48,7 @@ export async function prepareUploadContexts(
     )
     contexts = [...contexts, ...additional]
   }
+  if (!contexts.length) throw new Error('No storage providers available')
   // prepare is a read-only quote. Never execute its optional funding transaction:
   // deposits and owner approvals require the separate Wallet setup actions.
   const { costs } = await synapse.storage.prepare({ context: contexts, pieceSizes: [dataSize] })

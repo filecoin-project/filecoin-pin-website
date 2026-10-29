@@ -154,7 +154,8 @@ export function Landing() {
             icon: Folder,
             step: '03',
             title: 'Keep everything in order',
-            description: 'Upload, download and organize files in folders. Export a backup to take your directory with you.',
+            description:
+              'Upload, download and organize files in folders. Export a backup to take your directory with you.',
           },
         ].map(({ icon: Icon, step, title, description }) => (
           <article className="space-y-3" key={step}>

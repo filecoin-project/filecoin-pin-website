@@ -1,6 +1,6 @@
 export type { Synapse } from '@filoz/synapse-sdk'
 
-export const APPLICATION_SOURCE = 'filecoin-pin'
+export const APPLICATION_SOURCE = 'filecoin-drive'
 
 // Callers must validate the connected owner's session rather than a deployment key.
 export const ensureSessionKeyPermissions = async (): Promise<void> => {

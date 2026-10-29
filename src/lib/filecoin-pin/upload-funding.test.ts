@@ -8,7 +8,7 @@ const { freshContexts } = vi.hoisted(() => ({ freshContexts: vi.fn() }))
 vi.mock('./fresh-contexts.ts', () => ({ createFreshUploadContexts: freshContexts }))
 
 it('quotes all selected contexts without executing an offered deposit or approval', async () => {
-  const contexts = [{}, {}] as StorageContext[]
+  const contexts = [{}, {}] as unknown as StorageContext[]
   const execute = vi.fn()
   const prepare = vi.fn().mockResolvedValue({
     costs: { ready: false, depositNeeded: 5n * 10n ** 16n, needsFwssMaxApproval: true },
@@ -23,7 +23,9 @@ it('quotes all selected contexts without executing an offered deposit or approva
 })
 
 it('keeps the existing dataset and quotes its missing copy before returning upload contexts', async () => {
-  const contexts = [{ provider: { id: 4n } }] as StorageContext[]
+  const contexts = [
+    { provider: { id: 4n }, dataSetMetadata: { source: 'filecoin-drive' } },
+  ] as unknown as StorageContext[]
   const additional = { provider: { id: 2n } } as StorageContext
   freshContexts.mockResolvedValueOnce([additional])
   const createContexts = vi.fn().mockResolvedValue(contexts)
@@ -36,7 +38,9 @@ it('keeps the existing dataset and quotes its missing copy before returning uplo
 })
 
 it('checks funding for both the reused and new copies before sending any data', async () => {
-  const contexts = [{ provider: { id: 4n } }] as StorageContext[]
+  const contexts = [
+    { provider: { id: 4n }, dataSetMetadata: { source: 'filecoin-drive' } },
+  ] as unknown as StorageContext[]
   const additional = { provider: { id: 2n } } as StorageContext
   freshContexts.mockResolvedValueOnce([additional])
   const prepare = vi.fn().mockResolvedValue({
@@ -61,8 +65,44 @@ it('preserves IPFS indexing and browser metadata for smart-selected providers', 
     providerIds: [4n],
     metadata: {
       withIPFSIndexing: '',
-      source: 'filecoin-pin',
+      source: 'filecoin-drive',
       clientId: 'browser',
     },
   })
+})
+
+it('skips non-Drive datasets and fills the missing copy on a different provider', async () => {
+  const drive = { provider: { id: 4n }, dataSetMetadata: { source: 'filecoin-drive' } }
+  const other = { provider: { id: 4n }, dataSetMetadata: { source: 'filecoin-pin' } }
+  const fresh = { provider: { id: 3n } }
+  freshContexts.mockResolvedValueOnce([fresh])
+  const createContexts = vi.fn().mockResolvedValueOnce([other]).mockResolvedValueOnce([drive])
+  const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
+  const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
+  expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [1n, 2n] })).toEqual([drive, fresh])
+  expect(freshContexts).toHaveBeenLastCalledWith(synapse, expect.any(String), 1, [4n])
+  expect(prepare).toHaveBeenCalledWith({ context: [drive, fresh], pieceSizes: [10n] })
+})
+
+it('creates two fresh copies when none of the known datasets has the Drive marker', async () => {
+  const createContexts = vi
+    .fn()
+    .mockResolvedValueOnce([{ dataSetMetadata: {} }])
+    .mockResolvedValueOnce([{ dataSetMetadata: { source: 'filecoin-pin' } }])
+  const fresh = [{ provider: { id: 2n } }, { provider: { id: 4n } }]
+  freshContexts.mockResolvedValueOnce(fresh)
+  const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
+  const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
+  expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [1n, 2n] })).toEqual(fresh)
+  expect(freshContexts).toHaveBeenLastCalledWith(synapse, expect.any(String), 2, [])
+})
+
+it('does not create datasets or quote funding when dataset resolution fails', async () => {
+  freshContexts.mockClear()
+  const createContexts = vi.fn().mockRejectedValue(new Error('metadata RPC unavailable'))
+  const prepare = vi.fn()
+  const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
+  await expect(prepareUploadContexts(synapse, 10n, { dataSetIds: [1n] })).rejects.toThrow('metadata RPC unavailable')
+  expect(freshContexts).not.toHaveBeenCalled()
+  expect(prepare).not.toHaveBeenCalled()
 })

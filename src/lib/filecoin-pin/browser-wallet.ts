@@ -10,6 +10,7 @@ import {
 import { calibration, mainnet, Synapse } from '@filoz/synapse-sdk'
 import { type Address, createClient, createPublicClient, http } from 'viem'
 import type { BrowserSession } from '../local-storage/session-vault.ts'
+import { APPLICATION_SOURCE } from './synapse.ts'
 
 export type DriveNetwork = 'mainnet' | 'calibration'
 export const chains = { mainnet, calibration }
@@ -41,7 +42,7 @@ export function browserSynapse(
   const synapse = new Synapse({
     client,
     ...(key ? { sessionClient: key.client } : {}),
-    source: 'filecoin-pin',
+    source: APPLICATION_SOURCE,
     withCDN: false,
   })
   const validate = async () => {
