@@ -23,11 +23,11 @@ import { useFileDeletion } from '../../hooks/use-file-deletion.ts'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { IPFS_CHECK_LIMIT, resetIndexingChecks } from '../../hooks/use-ipfs-indexing.ts'
 import { displayFileName } from '../../lib/filecoin-pin/drive-api.ts'
+import { canPreviewFile, fileGatewayLink } from '../../lib/filecoin-pin/file-links.ts'
 import { directoryFolders } from '../../lib/local-storage/drive-directory.ts'
 import { hasRemovalProgress, isDeletionScheduled } from '../../utils/file-deletion.ts'
 import {
   getDatasetExplorerLink,
-  getIpfsGatewayDownloadLink,
   getIpfsGatewayPreviewLink,
   getPieceExplorerLink,
   getTxExplorerLink,
@@ -35,6 +35,7 @@ import {
 import { ButtonBase as Button, buttonVariants } from '../ui/button/button-base.tsx'
 import { CopyButton } from '../ui/copy-button.tsx'
 import { ProviderLink } from './provider-link.tsx'
+import { ShareFileButton } from './share-file-button.tsx'
 
 export function fileStatus(file: DatasetPiece) {
   if (isDeletionScheduled(file)) return 'Deletion scheduled'
@@ -46,10 +47,6 @@ export function fileStatus(file: DatasetPiece) {
       : 'Stored · IPFS indexing pending'
   return 'Stored'
 }
-
-// Formats browsers commonly display inline; media playback also depends on codecs.
-const canPreview = (name: string) =>
-  /\.(avif|bmp|gif|ico|jpe?g|png|svg|webp|pdf|txt|json|html?|mp3|wav|ogg|mp4|webm)$/i.test(name)
 
 interface Props {
   folder: string
@@ -416,6 +413,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                               ? 'Queued · Cancel'
                               : 'Download'}
                         </button>
+                        <ShareFileButton disabled={deletingPieceCid === file.pieceCid} file={file} />
                         <button
                           className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent"
                           onClick={() => choose(file)}
@@ -554,10 +552,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                           ? 'Queued · Cancel'
                           : 'Download'}
                     </Button>
-                    {selected.cid &&
-                    !selected.importedCar &&
-                    canPreview(displayFileName(selected)) &&
-                    fileStatus(selected) !== 'Deletion scheduled' ? (
+                    {canPreviewFile(selected) && fileStatus(selected) !== 'Deletion scheduled' ? (
                       <a
                         className={buttonVariants({ variant: 'secondary', size: 'sm' })}
                         href={getIpfsGatewayPreviewLink(selected.cid, displayFileName(selected))}
@@ -613,7 +608,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                   {selected.cid && !selected.importedCar && (
                     <a
                       className="block text-sm underline"
-                      href={getIpfsGatewayDownloadLink(selected.cid, displayFileName(selected))}
+                      href={fileGatewayLink(selected)}
                       rel="noopener noreferrer"
                       target="_blank"
                     >

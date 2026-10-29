@@ -40,6 +40,7 @@
     "multiformats": "^14.0.0",
     "pino": "^10.0.0",
     "pretty-bytes": "^7.1.0",
+    "qrcode.react": "^4.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "sonner": "^2.0.7",

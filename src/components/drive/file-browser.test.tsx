@@ -532,7 +532,13 @@ it.each([false, true])(
   'keeps unrelated actions available during deletion (upload active: %s)',
   async (uploadActive) => {
     mocks.uploadInProgress = uploadActive
-    const other = { ...file, id: 'other', fileName: 'other.txt', pieceCid: 'other-piece', cid: 'other-root' }
+    const other = {
+      ...file,
+      id: 'other',
+      fileName: 'other.txt',
+      pieceCid: 'other-piece',
+      cid: 'bafkreig4nl6nqu64xpwqfimx5bwhcntmpbgbjnly7dzs6u6zkeqfkimtfe',
+    }
     setCachedPieces(scope, [file, { ...file, id: 'alias', fileName: 'alias.txt' }, other])
     let finish!: (hash: string) => void
     mocks.submit.mockImplementation(
@@ -605,4 +611,18 @@ it('shows a partially queued deletion per provider and offers continuing the rem
   expect(within(screen.getByRole('dialog')).getByText('Removal scheduled')).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Continue deletion' })).toBeTruthy()
   expect(screen.getByText('Deletion incomplete', { exact: true })).toBeTruthy()
+})
+
+it('keeps original CAR downloads without offering a gateway export', async () => {
+  setCachedPieces(scope, [{ ...file, importedCar: true, fileName: 'archive.car' }])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'archive.car' }))
+  expect(screen.queryByRole('link', { name: /IPFS gateway/ })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Download original file' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Preview' })).toHaveProperty('disabled', true)
+  expect(screen.queryByText(/The gateway exports a new CAR/)).toBeNull()
 })
