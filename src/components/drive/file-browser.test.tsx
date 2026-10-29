@@ -314,7 +314,7 @@ it.each(['archived', 'partial'] as const)(
     await screen.findByText(
       'Removed from the file list. Storage providers will process removal in a subsequent proving period.'
     )
-    expect(mocks.receipt).toHaveBeenCalledWith({ hash })
+    expect(mocks.receipt).toHaveBeenCalledWith({ hash, checkReplacement: false })
     expect(mocks.submit).not.toHaveBeenCalled()
     expect(getCachedPieces(scope)?.find((record) => record.id === 'later')?.deletion?.['1'].confirmed).toBe(true)
     if (older === 'archived')

@@ -1,6 +1,7 @@
 import { findPieceIdsByCid } from '@filoz/synapse-core/pdp-verifier'
 import { from as pieceFrom } from '@filoz/synapse-core/piece'
 import type { Synapse } from '@filoz/synapse-sdk'
+import { BaseError, WaitForTransactionReceiptTimeoutError } from 'viem'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import type { DeletionCheckpoint, DeletionUpdate } from '../../utils/file-deletion.ts'
 import { isDeletionScheduled } from '../../utils/file-deletion.ts'
@@ -79,7 +80,21 @@ export async function scheduleFileDeletion(
       hash = await context.deletePieces({ pieces })
       await save(datasetId, { transactionHash: hash, confirmed: false, ...(remaining ? { remaining } : {}) })
     }
-    const receipt = await publicClient(file.network as DriveNetwork).waitForTransactionReceipt({ hash })
+    // Session-key transactions keep their persisted hash. Ethereum replacement scans
+    // read skipped Filecoin epochs and can fail on normal null rounds.
+    const receipt = await publicClient(file.network as DriveNetwork)
+      .waitForTransactionReceipt({ hash, checkReplacement: false })
+      .catch((cause: unknown) => {
+        if (
+          cause instanceof BaseError &&
+          cause.walk((error) => error instanceof WaitForTransactionReceiptTimeoutError) instanceof
+            WaitForTransactionReceiptTimeoutError
+        )
+          throw new Error(
+            'Deletion is still waiting for transaction confirmation. Your progress is saved. Use Continue deletion to check again.'
+          )
+        throw cause
+      })
     if (receipt.status !== 'success') {
       await save(datasetId)
       throw new Error(`Deletion transaction reverted for dataset ${datasetId}. Retry to submit again.`)

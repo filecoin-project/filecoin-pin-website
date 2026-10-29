@@ -1,4 +1,5 @@
 import type { Synapse } from '@filoz/synapse-sdk'
+import { WaitForTransactionReceiptTimeoutError } from 'viem'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 
@@ -69,7 +70,7 @@ describe('deletion across storage copies', () => {
     expect(receipt).not.toHaveBeenCalled()
     saved()
     await deletion
-    expect(receipt).toHaveBeenCalledWith({ hash })
+    expect(receipt).toHaveBeenCalledWith({ hash, checkReplacement: false })
   })
 
   it('persists submitted hashes and resumes a partial deletion without resubmitting confirmed copies', async () => {
@@ -106,7 +107,28 @@ describe('deletion across storage copies', () => {
       vi.fn()
     )
     expect(context).not.toHaveBeenCalled()
-    expect(receipt).toHaveBeenCalledWith({ hash })
+    expect(receipt).toHaveBeenCalledWith({ hash, checkReplacement: false })
+  })
+
+  it('keeps a timed-out hash and checks it on continuation without submitting again', async () => {
+    const submit = vi.fn().mockResolvedValue(hash)
+    const context = vi.fn().mockResolvedValue({ deletePieces: submit, getScheduledRemovals: async () => [] })
+    const synapse = { storage: { createContext: context } } as unknown as Synapse
+    receipt.mockRejectedValueOnce(new WaitForTransactionReceiptTimeoutError({ hash: hash as `0x${string}` }))
+    let checkpoint: DatasetPiece = { ...file, datasetIds: ['1'] }
+    const persist = (next: DatasetPiece) => {
+      checkpoint = next
+    }
+    await expect(scheduleFileDeletion(synapse, checkpoint, persist)).rejects.toThrow(
+      'Use Continue deletion to check again'
+    )
+    expect(checkpoint.deletion?.['1']).toEqual({ transactionHash: hash, confirmed: false })
+    receipt.mockResolvedValueOnce({ status: 'success' })
+    await scheduleFileDeletion(synapse, checkpoint, persist)
+    expect(submit).toHaveBeenCalledOnce()
+    expect(context).toHaveBeenCalledOnce()
+    expect(checkpoint.deletion?.['1']?.confirmed).toBe(true)
+    expect(receipt).toHaveBeenLastCalledWith({ hash, checkReplacement: false })
   })
 
   it('persists partial batches and resumes after the removal queue drains', async () => {
