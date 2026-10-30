@@ -358,11 +358,8 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
             file={openedDirectory}
             isQueued={isQueued}
             key={openedDirectory.id}
-            onBack={() => {
-              setDirectoryId(null)
-              setSearch('')
-            }}
             onDownload={downloadOriginal}
+            onFolderChange={onFolderChange}
             onSearchChange={setSearch}
             search={search}
           />

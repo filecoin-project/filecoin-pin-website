@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronRight, Download, Eye, Folder, FolderUp, Loader2 } from 'lucide-react'
+import { ChevronRight, Download, Eye, Folder, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import {
@@ -12,7 +12,6 @@ import { canPreviewFile } from '../../lib/filecoin-pin/file-links.ts'
 import { type ContentReader, contentReader } from '../../lib/filecoin-pin/ipfs-content.ts'
 import { formatFileSize } from '../../utils/format-file-size.ts'
 import { getIpfsGatewayPreviewLink } from '../../utils/links.ts'
-import { fileStatus } from '../../utils/upload/file-status.ts'
 import { ButtonBase as Button } from '../ui/button/button-base.tsx'
 import { FileTypeIcon } from './file-type-icon.tsx'
 import { ShareFileButton } from './share-file-button.tsx'
@@ -21,7 +20,7 @@ type Props = {
   file: DatasetPiece
   search: string
   onSearchChange: (value: string) => void
-  onBack: () => void
+  onFolderChange: (path: string) => void
   onDownload: (file: DatasetPiece) => void
   downloadBlocked: (file: DatasetPiece) => boolean
   isQueued: (id: string) => boolean
@@ -32,7 +31,7 @@ export function DirectoryBrowser({
   file,
   search,
   onSearchChange,
-  onBack,
+  onFolderChange,
   onDownload,
   downloadBlocked,
   isQueued,
@@ -107,56 +106,61 @@ export function DirectoryBrowser({
     path && page ? selection({ name: path.split('/').at(-1) ?? '', path, cid: page.cid, isDirectory: true }) : file
   return (
     <div className="flex min-h-0 min-w-0 flex-col">
-      <div className="shrink-0 space-y-2 border-b border-border px-5 py-4 sm:px-6">
-        <button
-          className="inline-flex items-center gap-2 text-xs text-muted hover:text-accent"
-          onClick={onBack}
-          type="button"
-        >
-          <ArrowLeft size={14} /> Back to files
-        </button>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <FolderUp className="text-accent" size={18} />
-              <button className="text-sm font-medium hover:underline" onClick={() => navigate('')} type="button">
-                {displayFileName(file)}
-              </button>
-              {path
-                .split('/')
-                .filter(Boolean)
-                .map((name, i, parts) => (
-                  <span className="inline-flex items-center gap-2 text-sm" key={parts.slice(0, i + 1).join('/')}>
-                    <ChevronRight className="text-muted" size={13} />
-                    <button onClick={() => navigate(parts.slice(0, i + 1).join('/'))} type="button">
-                      {name}
-                    </button>
-                  </span>
-                ))}
-            </div>
-            <p className="text-xs text-muted">
-              {fileStatus(file)} · {file.copyCount ?? 0} confirmed copies · Uploaded:{' '}
-              {file.uploadedAt ? new Date(file.uploadedAt).toLocaleString() : 'Unknown'}
-            </p>
-          </div>
-          <div className="grid w-full grid-cols-2 gap-2 sm:w-64">
-            <Button
-              className="min-h-9 w-full min-w-0 gap-1.5 px-3 py-1.5 text-xs"
-              disabled={(Boolean(path) && !page) || downloadBlocked(currentFolder)}
-              onClick={() => onDownload(currentFolder)}
-              size="sm"
-              type="button"
-              variant="secondary"
-            >
-              <Download size={14} />
-              {isQueued(currentFolder.id)
-                ? 'Cancel queued'
-                : activeDownloadId === currentFolder.id
-                  ? 'Downloading…'
-                  : 'Download ZIP'}
-            </Button>
-            <ShareFileButton disabled={Boolean(path) && !page} file={currentFolder} variant="button" />
-          </div>
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
+        <nav aria-label="Current folder" className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
+          <button className="text-muted hover:text-accent" onClick={() => onFolderChange('')} type="button">
+            Files
+          </button>
+          {(file.folderPath ?? '')
+            .split('/')
+            .filter(Boolean)
+            .map((name, i, parts) => (
+              <span className="inline-flex items-center gap-2" key={`parent:${parts.slice(0, i + 1).join('/')}`}>
+                <ChevronRight className="text-muted" size={13} />
+                <button onClick={() => onFolderChange(parts.slice(0, i + 1).join('/'))} type="button">
+                  {name}
+                </button>
+              </span>
+            ))}
+          <span className="inline-flex items-center gap-2">
+            <ChevronRight className="text-muted" size={13} />
+            <button aria-current={path ? undefined : 'page'} onClick={() => navigate('')} type="button">
+              {displayFileName(file)}
+            </button>
+          </span>
+          {path
+            .split('/')
+            .filter(Boolean)
+            .map((name, i, parts) => (
+              <span className="inline-flex items-center gap-2" key={`child:${parts.slice(0, i + 1).join('/')}`}>
+                <ChevronRight className="text-muted" size={13} />
+                <button
+                  aria-current={i === parts.length - 1 ? 'page' : undefined}
+                  onClick={() => navigate(parts.slice(0, i + 1).join('/'))}
+                  type="button"
+                >
+                  {name}
+                </button>
+              </span>
+            ))}
+        </nav>
+        <div className="grid w-full grid-cols-2 gap-2 sm:w-64">
+          <Button
+            className="min-h-9 w-full min-w-0 gap-1.5 px-3 py-1.5 text-xs"
+            disabled={(Boolean(path) && !page) || downloadBlocked(currentFolder)}
+            onClick={() => onDownload(currentFolder)}
+            size="sm"
+            type="button"
+            variant="secondary"
+          >
+            <Download size={14} />
+            {isQueued(currentFolder.id)
+              ? 'Cancel queued'
+              : activeDownloadId === currentFolder.id
+                ? 'Downloading…'
+                : 'Download ZIP'}
+          </Button>
+          <ShareFileButton disabled={Boolean(path) && !page} file={currentFolder} variant="button" />
         </div>
       </div>
       <section aria-label="Files list" className="drive-file-list" key={`${path}:${search}:${offset}`}>

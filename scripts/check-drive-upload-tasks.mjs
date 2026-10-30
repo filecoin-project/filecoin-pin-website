@@ -370,7 +370,10 @@ export async function checkUploadTasks(browser) {
     assert.equal(new TextDecoder().decode(subfolderZip['docs/notes.txt']), 'nested notes')
     assert.equal(subfolderZip['reports/研究.txt'], undefined)
     await page.screenshot({ path: '/tmp/drive-folder-browse-nested.png', fullPage: true, animations: 'disabled' })
-    await page.getByRole('button', { name: 'Back to files', exact: true }).click()
+    await page
+      .getByRole('navigation', { name: 'Current folder', exact: true })
+      .getByRole('button', { name: 'Files', exact: true })
+      .click()
     rawUnavailable = true
     await page.reload()
     const requestsBeforeReopen = rawRequests
@@ -378,7 +381,10 @@ export async function checkUploadTasks(browser) {
     await page.getByRole('button', { name: 'docs', exact: true }).click()
     await page.getByRole('row').filter({ hasText: 'notes.txt' }).waitFor()
     assert.equal(rawRequests, requestsBeforeReopen, 'Reloaded folders must use IndexedDB despite provider outage')
-    await page.getByRole('button', { name: 'Back to files', exact: true }).click()
+    await page
+      .getByRole('navigation', { name: 'Current folder', exact: true })
+      .getByRole('button', { name: 'Files', exact: true })
+      .click()
     await page.evaluate(() => {
       const key = 'filecoin-pin-piece-cache-v1-314:0x1111111111111111111111111111111111111111'
       const files = JSON.parse(localStorage.getItem(key))
@@ -403,6 +409,26 @@ export async function checkUploadTasks(browser) {
       .getByRole('button', { name: 'reports', exact: true })
       .click()
     await page.getByRole('searchbox', { name: 'Search this folder', exact: true }).waitFor()
+    const breadcrumbs = page.getByRole('navigation', { name: 'Current folder', exact: true })
+    assert.equal((await breadcrumbs.innerText()).replace(/\s+/g, ' ').trim(), 'Files reports')
+    await page
+      .getByRole('region', { name: 'Files list', exact: true })
+      .getByRole('button', { name: 'docs', exact: true })
+      .click()
+    await breadcrumbs.getByRole('button', { name: 'docs', exact: true }).waitFor()
+    await breadcrumbs.getByRole('button', { name: 'reports', exact: true }).click()
+    await page
+      .getByRole('region', { name: 'Files list', exact: true })
+      .getByRole('button', { name: 'docs', exact: true })
+      .waitFor()
+    await breadcrumbs.getByRole('button', { name: 'Files', exact: true }).click()
+    await page.getByRole('cell').getByRole('button', { name: 'testdir', exact: true }).waitFor()
+    assert.equal(
+      (await breadcrumbs.innerText()).trim(),
+      'Files',
+      'Files breadcrumb must return to root, not the previously selected folder'
+    )
+    await page.getByRole('cell').getByRole('button', { name: 'reports', exact: true }).click()
     await page.getByRole('button', { name: 'Upload files', exact: true }).click()
     assert.equal(await uploadLocation.inputValue(), '', 'Uploads opened inside stored folders must start at Files root')
     await page.getByRole('button', { name: 'Close Upload files', exact: true }).click()
@@ -455,7 +481,10 @@ export async function checkUploadTasks(browser) {
         { ...template, id: 'layout-directory', fileName: 'many-files', cid: packed.rootCid.toString() },
       ])
     })
-    await page.getByRole('button', { name: 'Back to files', exact: true }).click()
+    await page
+      .getByRole('navigation', { name: 'Current folder', exact: true })
+      .getByRole('button', { name: 'Files', exact: true })
+      .click()
     await page
       .getByRole('navigation', { name: 'File folders', exact: true })
       .getByRole('button', { name: 'Files (root)', exact: true })
@@ -501,7 +530,9 @@ export async function checkUploadTasks(browser) {
     await page.setViewportSize({ width: 390, height: 844 })
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
     await page.screenshot({ path: '/tmp/drive-directory-list-mobile.png', fullPage: true, animations: 'disabled' })
-    const mobileFolderMenu = page.getByRole('button', { name: 'Files', exact: true })
+    const mobileFolderMenu = page
+      .getByRole('navigation', { name: 'File folders', exact: true })
+      .getByRole('button', { name: 'Files', exact: true })
     await mobileFolderMenu.click()
     await page
       .getByRole('navigation', { name: 'File folders', exact: true })
