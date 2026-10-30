@@ -93,7 +93,12 @@ export async function loadDriveFiles(synapse: Synapse, owner: string, network: s
       } catch {
         /* Missing metadata does not hide stored content. */
       }
-      const fileName = typeof metadata.label === 'string' && metadata.label.trim() ? metadata.label : ''
+      const fileName =
+        typeof metadata.name === 'string' && metadata.name.trim()
+          ? metadata.name
+          : typeof metadata.label === 'string' && metadata.label.trim()
+            ? metadata.label
+            : ''
       let folderPath = ''
       try {
         const path = metadata.path ?? metadata.carPath

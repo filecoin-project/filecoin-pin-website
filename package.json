@@ -33,6 +33,7 @@
     "@walletconnect/ethereum-provider": "^2.25.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "fflate": "^0.8.3",
     "filecoin-pin": "^2.2.1",
     "idb-keyval": "^6.3.0",
     "ipfs-unixfs-exporter": "^15.0.4",

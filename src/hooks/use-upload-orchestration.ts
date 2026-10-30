@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useUploadHistory } from '../context/upload-history-context.tsx'
 import { DEFAULT_STORAGE_COPIES } from '../lib/filecoin-pin/config.ts'
 import type { UploadCheckpoint } from '../lib/filecoin-pin/upload-checkpoint.ts'
+import { isDirectoryUpload, type UploadSource } from '../lib/filecoin-pin/upload-source.ts'
 import { DIRECTORY_SAVE_ERROR } from '../lib/local-storage/directory-store.ts'
 import { normalizeFolder } from '../lib/local-storage/drive-directory.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
@@ -9,7 +10,7 @@ import { useFilecoinUpload } from './use-filecoin-upload.ts'
 import { useUploadProgress } from './use-upload-progress.ts'
 
 interface UploadedFile {
-  file: File
+  file: UploadSource
   cid: string
   id?: string
   folderPath?: string
@@ -142,6 +143,7 @@ export function useUploadOrchestration(taskId?: string) {
       pieceIds: orderedCopies.map((c) => String(c.pieceId)),
       fileName: uploadedFile.file.name,
       importedCar: uploadState.importedCar || undefined,
+      isDirectory: isDirectoryUpload(uploadedFile.file) || undefined,
       fileSize: formatFileSize(uploadedFile.file.size),
       cid: uploadState.currentCid || '',
       pieceCid: uploadState.pieceCid ?? '',
@@ -213,7 +215,7 @@ export function useUploadOrchestration(taskId?: string) {
   ])
 
   const handleUpload = useCallback(
-    (file: File, folderPath = '') => {
+    (file: UploadSource, folderPath = '') => {
       console.debug('[UploadOrchestration] Starting upload for file:', file.name)
 
       const id = taskId ?? crypto.randomUUID()

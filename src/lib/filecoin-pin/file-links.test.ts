@@ -18,12 +18,12 @@ it('shares previewable files on an isolated inbrowser origin without the IPLD in
   expect(url.searchParams.has('download')).toBe(false)
 })
 
-it('shares unsupported formats through a gateway download link', () => {
+it('lets the gateway handle unsupported formats without forcing a download', () => {
   const archive = { ...file, fileName: 'installer.dmg' }
   expect(canPreviewFile(archive)).toBe(false)
   const url = new URL(fileShareLink(archive) as string)
-  expect(url.hostname).toBe('inbrowser.link')
-  expect(url.searchParams.get('download')).toBe('true')
+  expect(url.hostname).toBe(`${cid}.ipfs.inbrowser.link`)
+  expect(url.searchParams.has('download')).toBe(false)
   expect(url.searchParams.get('filename')).toBe(archive.fileName)
 })
 
@@ -49,4 +49,19 @@ it('shares a remaining CAR copy rather than a removed or queued provider', () =>
   }
   expect(fileShareLink({ ...car, removedCopies: ['1'] })).toBe('https://active.example/piece/bafk-piece')
   expect(fileShareLink({ ...car, removalQueuedCopies: ['1'] })).toBe('https://active.example/piece/bafk-piece')
+})
+
+it('offers Markdown preview and shares its preview link, including directory entries', () => {
+  for (const fileName of ['README.md', 'notes.markdown', 'README.MD']) {
+    const markdown = {
+      ...file,
+      fileName,
+      directoryEntry: { rootCid: cid, path: `docs/${fileName}` },
+    }
+    expect(canPreviewFile(markdown)).toBe(true)
+    const url = new URL(fileShareLink(markdown) as string)
+    expect(url.hostname).toBe(`${cid}.ipfs.inbrowser.link`)
+    expect(url.searchParams.get('filename')).toBe(fileName)
+    expect(url.searchParams.has('download')).toBe(false)
+  }
 })

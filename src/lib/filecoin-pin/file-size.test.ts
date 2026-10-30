@@ -113,7 +113,7 @@ it('limits size requests to two and stops saving or starting jobs after abort', 
   const controller = new AbortController()
   const save = vi.fn()
   const work = recoverMissingFileSizes(records, controller.signal, save)
-  expect(fetcher).toHaveBeenCalledTimes(2)
+  await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2))
   controller.abort()
   for (const release of releases) release()
   await work

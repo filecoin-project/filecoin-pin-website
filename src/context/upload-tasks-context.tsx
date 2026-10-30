@@ -5,17 +5,19 @@ import { useUploadOrchestration } from '../hooks/use-upload-orchestration.ts'
 import { useUploadRecovery } from '../hooks/use-upload-recovery.ts'
 import { DEFAULT_STORAGE_COPIES } from '../lib/filecoin-pin/config.ts'
 import { acquireContentLock } from '../lib/filecoin-pin/content-lock.ts'
-import { normalizeFolder } from '../lib/local-storage/drive-directory.ts'
+import { isDirectoryUpload, type UploadSource } from '../lib/filecoin-pin/upload-source.ts'
+import { directoryFolders, normalizeFolder } from '../lib/local-storage/drive-directory.ts'
+import { isDeletionScheduled } from '../utils/file-deletion.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
 import { toast } from '../utils/toast.tsx'
 import { useBrowserWallet } from './browser-wallet-provider.tsx'
 import { useUploadHistory } from './upload-history-context.tsx'
 
-type Job = { id: string; file: File; folder: string; transferring: boolean }
+type Job = { id: string; file: UploadSource; folder: string; transferring: boolean }
 type Tasks = {
   transferring: boolean
   activeIds: ReadonlySet<string>
-  start: (file: File, folder: string, replaceId?: string) => Promise<boolean>
+  start: (file: UploadSource, folder: string, replaceId?: string) => Promise<boolean>
   check: (id: string) => Promise<void>
   checking: ReadonlySet<string>
 }
@@ -115,7 +117,7 @@ export function UploadTasksProvider({ children }: { children: ReactNode }) {
     [setUploading]
   )
   const start = useCallback(
-    async (file: File, folder: string, replaceId?: string) => {
+    async (file: UploadSource, folder: string, replaceId?: string) => {
       if (starting.current || latest.current.some((job) => job.transferring)) {
         toast.info(
           'A file is still being transferred. Wait for it to reach the storage provider before starting another upload.'
@@ -141,9 +143,38 @@ export function UploadTasksProvider({ children }: { children: ReactNode }) {
             !(previous.upload?.phase === 'interrupted' && !previous.pieceCid)
           )
             throw new Error('Check the existing upload status before trying again.')
+          const activeRecords = current.filter((record) => !isDeletionScheduled(record))
+          if (
+            activeRecords.some((record) => {
+              if (!record.isDirectory) return false
+              const path = [record.folderPath, record.fileName].filter(Boolean).join('/')
+              return (
+                folder === path ||
+                folder.startsWith(`${path}/`) ||
+                (record.id !== replaceId && (record.folderPath ?? '') === folder && record.fileName === file.name)
+              )
+            })
+          )
+            throw new Error(
+              'An uploaded folder cannot be changed or used as an upload location. Choose another location or rename the selected folder.'
+            )
+          if (isDirectoryUpload(file)) {
+            const path = [folder, file.name].filter(Boolean).join('/')
+            if (
+              directoryFolders(activeRecords, []).includes(path) ||
+              activeRecords.some(
+                (record) =>
+                  record.id !== replaceId && (record.folderPath ?? '') === folder && record.fileName === file.name
+              )
+            )
+              throw new Error(
+                'A file or folder with this name already exists here. Rename the folder before uploading, or choose another upload location.'
+              )
+          }
           return [
             {
               id,
+              isDirectory: isDirectoryUpload(file) || undefined,
               fileName: file.name,
               folderPath: folder,
               fileSize: formatFileSize(file.size),

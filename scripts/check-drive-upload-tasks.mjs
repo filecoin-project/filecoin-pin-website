@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { mainnet } from '@filoz/synapse-sdk'
+import { CarReader } from '@ipld/car'
+import { unzipSync } from 'fflate'
+import { CID } from 'multiformats/cid'
 import { decodeFunctionData, encodeFunctionResult, toFunctionSelector } from 'viem'
 import { prepareBrowserPage } from './drive-browser-fixtures.mjs'
 
 /** Exercise the real task UI/persistence and SDK recovery readers without submitting transactions. */
 export async function checkUploadTasks(browser) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1080 }, acceptDownloads: true })
+  const folderFixture = await mkdtemp(join(tmpdir(), 'drive-folder-browser-'))
   try {
     const page = await context.newPage()
     const errors = []
@@ -234,11 +241,124 @@ export async function checkUploadTasks(browser) {
     await page.getByRole('button', { name: 'first.txt', exact: true }).waitFor()
     assert.equal(await page.getByRole('button', { name: 'interrupted.txt', exact: true }).count(), 0)
     assert.equal(await page.getByRole('button', { name: 'second.txt', exact: true }).count(), 1)
+    const folderPath = join(folderFixture, 'reports')
+    await mkdir(join(folderPath, 'docs'), { recursive: true })
+    await writeFile(join(folderPath, '研究.txt'), 'hello folder')
+    await writeFile(join(folderPath, 'docs', 'notes.txt'), 'nested notes')
+    await page.getByRole('button', { name: 'Upload files', exact: true }).click()
+    const folderPanel = page.getByRole('dialog', { name: 'Upload files', exact: true })
+    await folderPanel.getByRole('button', { name: 'Folder', exact: true }).click()
+    await folderPanel.getByLabel('Select folder to upload').setInputFiles(folderPath)
+    await folderPanel.getByText('reports', { exact: true }).waitFor()
+    await page.screenshot({ path: '/tmp/drive-folder-upload-picker.png', fullPage: true, animations: 'disabled' })
+    await page.evaluate(() => {
+      const key = 'filecoin-pin-piece-cache-v1-314:0x1111111111111111111111111111111111111111'
+      const files = JSON.parse(localStorage.getItem(key))
+      const previous = files[0]
+      files.push({
+        ...previous,
+        id: 'deleted-folder',
+        fileName: 'reports',
+        isDirectory: true,
+        removedCopies: previous.datasetIds ?? [previous.datasetId],
+      })
+      localStorage.setItem(key, JSON.stringify(files))
+    })
+    await folderPanel.getByRole('button', { name: 'Upload folder', exact: true }).click()
+    await page.waitForFunction(() => Boolean(window.__taskUploads?.reports))
+    const folderBytes = await page.evaluate(() => window.__taskUploads.reports.bytes)
+    const folderCar = await CarReader.fromBytes(new Uint8Array(folderBytes))
+    let rawRequests = 0
+    let rawUnavailable = true
+    await page.route('https://sp*.example/ipfs/**', async (route) => {
+      rawRequests++
+      if (rawUnavailable) return route.fulfill({ status: 503, body: 'Provider not ready' })
+      const cid = new URL(route.request().url()).pathname.split('/')[2]
+      const block = await folderCar.get(CID.parse(cid))
+      return route.fulfill({
+        status: block ? 200 : 404,
+        contentType: 'application/vnd.ipld.raw',
+        headers: { 'access-control-allow-origin': '*' },
+        body: block ? Buffer.from(block.bytes) : '',
+      })
+    })
+    const folderRow = page.getByRole('row').filter({ has: page.getByRole('button', { name: 'reports', exact: true }) })
+    await folderRow.waitFor()
+    await page.getByRole('button', { name: 'About folder types', exact: true }).focus()
+    await page.getByRole('tooltip').filter({ hasText: 'Uploaded as one unit' }).waitFor()
+    await folderRow.getByRole('button', { name: 'reports', exact: true }).click()
+    await page.getByRole('button', { name: 'docs', exact: true }).waitFor()
+    await page.screenshot({ path: '/tmp/drive-folder-browse-root.png', fullPage: true, animations: 'disabled' })
+    const [folderDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Download ZIP', exact: true }).first().click(),
+    ])
+    assert.equal(folderDownload.suggestedFilename(), 'reports.zip')
+    const stream = await folderDownload.createReadStream()
+    const chunks = []
+    for await (const chunk of stream) chunks.push(chunk)
+    const zip = unzipSync(new Uint8Array(Buffer.concat(chunks)))
+    assert.equal(new TextDecoder().decode(zip['reports/研究.txt']), 'hello folder')
+    assert.equal(new TextDecoder().decode(zip['reports/docs/notes.txt']), 'nested notes')
+    await page.evaluate(() => window.__taskUploads.reports.finish())
+    await page.waitForFunction(
+      () =>
+        JSON.parse(
+          localStorage.getItem('filecoin-pin-piece-cache-v1-314:0x1111111111111111111111111111111111111111')
+        ).find((file) => file.fileName === 'reports').upload.phase === 'complete'
+    )
+    await page.getByRole('button', { name: 'docs', exact: true }).click()
+    const nestedRow = page.getByRole('row').filter({ hasText: 'notes.txt' })
+    await nestedRow.getByRole('link', { name: 'Preview', exact: true }).waitFor()
+    assert.match(
+      await nestedRow.getByRole('link', { name: 'Preview', exact: true }).getAttribute('href'),
+      /\.ipfs\.inbrowser\.link\/\?filename=notes.txt$/
+    )
+    assert.equal(rawRequests, 0, 'Fresh folder browsing must not require provider block reads')
+    rawUnavailable = false
+    const [childDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      nestedRow.getByRole('button', { name: 'Download', exact: true }).click(),
+    ])
+    assert.equal(childDownload.suggestedFilename(), 'notes.txt')
+    const [subfolderDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Download ZIP', exact: true }).click(),
+    ])
+    assert.equal(subfolderDownload.suggestedFilename(), 'docs.zip')
+    const subfolderZip = unzipSync(await readFile(await subfolderDownload.path()))
+    assert.equal(new TextDecoder().decode(subfolderZip['docs/notes.txt']), 'nested notes')
+    assert.equal(subfolderZip['reports/研究.txt'], undefined)
+    await page.screenshot({ path: '/tmp/drive-folder-browse-nested.png', fullPage: true, animations: 'disabled' })
+    await page.getByRole('button', { name: 'Back to files', exact: true }).click()
+    rawUnavailable = true
+    await page.reload()
+    const requestsBeforeReopen = rawRequests
+    await page.getByRole('cell').getByRole('button', { name: 'reports', exact: true }).click()
+    await page.getByRole('button', { name: 'docs', exact: true }).click()
+    await page.getByRole('row').filter({ hasText: 'notes.txt' }).waitFor()
+    assert.equal(rawRequests, requestsBeforeReopen, 'Reloaded folders must use IndexedDB despite provider outage')
+    await page.getByRole('button', { name: 'Back to files', exact: true }).click()
+    await page.evaluate(() => {
+      const key = 'filecoin-pin-piece-cache-v1-314:0x1111111111111111111111111111111111111111'
+      const files = JSON.parse(localStorage.getItem(key))
+      files.find((file) => file.fileName === 'first.txt').folderPath = 'testdir'
+      localStorage.setItem(key, JSON.stringify(files))
+    })
+    await page.reload()
+    const organizing = page.getByRole('cell').getByRole('button', { name: 'testdir', exact: true })
+    const uploaded = page.getByRole('cell').getByRole('button', { name: 'reports', exact: true })
+    await organizing.waitFor()
+    const left = await organizing.locator('svg').boundingBox()
+    const right = await uploaded.locator('svg').boundingBox()
+    assert.equal(left.x, right.x, 'Folder icons must share the same left edge')
+    await page.screenshot({ path: '/tmp/drive-folder-alignment.png', fullPage: true, animations: 'disabled' })
     assert.deepEqual(errors, [])
     console.log(
       'Upload task browser checks passed: parked download, consecutive uploads, per-file details and reload recovery.'
     )
   } finally {
     await context.close()
+    await rm(folderFixture, { recursive: true, force: true })
   }
 }

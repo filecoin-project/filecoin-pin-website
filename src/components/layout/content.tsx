@@ -1,10 +1,11 @@
-import { Folder, Loader2, ShieldCheck, Wallet } from 'lucide-react'
+import { File, Folder, Loader2, ShieldCheck, Wallet } from 'lucide-react'
 import { useState } from 'react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useUploadTasks } from '../../context/upload-tasks-context.tsx'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { DeveloperFooter } from '../drive/developer-footer.tsx'
 import { FileBrowser } from '../drive/file-browser.tsx'
+import { FolderPicker } from '../drive/folder-picker.tsx'
 import { SidePanel } from '../drive/side-panel.tsx'
 import { WalletSetup } from '../drive/wallet-controls.tsx'
 import { Alert } from '../ui/alert.tsx'
@@ -17,6 +18,7 @@ export default function Content() {
   const tasks = useUploadTasks()
   const [folder, setFolder] = useState('')
   const [uploadFolder, setUploadFolder] = useState('')
+  const [uploadKind, setUploadKind] = useState<'file' | 'folder'>('file')
   const [panel, setPanel] = useState<'wallet' | 'upload' | null>(null)
   const canUpload = Boolean(
     connection.sessionStatus === 'active' && synapse && wallet.status === 'ready' && storageSetup?.status === 'ready'
@@ -131,7 +133,7 @@ export default function Content() {
         </div>
       </SidePanel>
       <SidePanel
-        description="Choose a location, then select or drop a file to upload."
+        description="Choose a location, then upload a file or an entire folder."
         onOpenChange={(open) => {
           if (!open) setPanel(null)
         }}
@@ -168,15 +170,46 @@ export default function Content() {
                 </p>
               </details>
             </div>
-            <DragNDrop
-              isUploading={connection.busy || Boolean(tasks?.transferring)}
-              key={panel === 'upload' ? 'picker' : 'closed'}
-              onUpload={(file) => {
-                void tasks?.start(file, uploadFolder).then((started) => {
-                  if (started) setPanel(null)
-                })
-              }}
-            />
+            <fieldset
+              aria-label="Upload type"
+              className="mb-4 grid grid-cols-2 gap-1 rounded-xl border border-border bg-surface p-1"
+            >
+              {(['file', 'folder'] as const).map((kind) => {
+                const Icon = kind === 'file' ? File : Folder
+                return (
+                  <button
+                    aria-pressed={uploadKind === kind}
+                    className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${uploadKind === kind ? 'bg-surface-raised text-foreground shadow-sm' : 'text-muted hover:text-foreground'}`}
+                    key={kind}
+                    onClick={() => setUploadKind(kind)}
+                    type="button"
+                  >
+                    <Icon aria-hidden="true" size={16} />
+                    {kind === 'file' ? 'File' : 'Folder'}
+                  </button>
+                )
+              })}
+            </fieldset>
+            {uploadKind === 'folder' ? (
+              <FolderPicker
+                disabled={connection.busy || Boolean(tasks?.transferring)}
+                onUpload={(source) => {
+                  void tasks?.start(source, uploadFolder).then((started) => {
+                    if (started) setPanel(null)
+                  })
+                }}
+              />
+            ) : (
+              <DragNDrop
+                isUploading={connection.busy || Boolean(tasks?.transferring)}
+                key={panel === 'upload' ? 'picker' : 'closed'}
+                onUpload={(file) => {
+                  void tasks?.start(file, uploadFolder).then((started) => {
+                    if (started) setPanel(null)
+                  })
+                }}
+              />
+            )}
           </>
         ) : (
           <>

@@ -39,6 +39,9 @@ export interface DatasetPiece {
   removedCopies?: string[]
   removalQueuedCopies?: string[]
   /** Original CAR bytes are downloaded directly instead of unpacking a UnixFS file. */
+  isDirectory?: boolean
+  /** Transient child selection; never an independent storage/deletion record. */
+  directoryEntry?: { rootCid: string; path: string }
   importedCar?: boolean
   folderPath?: string
   ipfsIndexed?: boolean
@@ -163,12 +166,12 @@ export const useDatasetPieces = () => {
         addStoredDataSetId(walletAddress, Number(id))
         addDataSetId?.(BigInt(id))
       }
-      void recoverMissingFileSizes(getLatestPieces(), controller.signal, async (file, fileSize) => {
+      void recoverMissingFileSizes(getLatestPieces(), controller.signal, async (file, fileSize, isDirectory) => {
         if (controller.signal.aborted || !mounted.current || currentScope.current !== walletAddress) return
         await mutatePieces((current) =>
           current.map((record) =>
             record.cid === file.cid && !record.importedCar && record.fileSize === 'Unknown'
-              ? { ...record, fileSize }
+              ? { ...record, fileSize, isDirectory: isDirectory || record.isDirectory }
               : record
           )
         )

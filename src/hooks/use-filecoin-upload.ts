@@ -11,12 +11,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { MAX_FILE_SIZE } from '../constants/files.ts'
 import { DEFAULT_STORAGE_COPIES } from '../lib/filecoin-pin/config.ts'
 import { acquireContentLock } from '../lib/filecoin-pin/content-lock.ts'
+import { cacheDirectoryUpload } from '../lib/filecoin-pin/directory.ts'
 import { validateDriveMetadata } from '../lib/filecoin-pin/drive-metadata.ts'
 import { createFreshUploadContexts } from '../lib/filecoin-pin/fresh-contexts.ts'
 import { ensureSessionKeyPermissions } from '../lib/filecoin-pin/synapse.ts'
 import type { UploadProviderCheckpoint } from '../lib/filecoin-pin/upload-checkpoint.ts'
 import { prepareUploadContexts } from '../lib/filecoin-pin/upload-funding.ts'
 import { prepareUploadInput } from '../lib/filecoin-pin/upload-input.ts'
+import type { UploadSource } from '../lib/filecoin-pin/upload-source.ts'
 import { getOrCreateClientId } from '../lib/local-storage/client-id.ts'
 import { addStoredDataSetId, clearStoredDataSetIds, getStoredDataSetIds } from '../lib/local-storage/data-set.ts'
 import { requireDirectoryLocks } from '../lib/local-storage/directory-store.ts'
@@ -28,6 +30,7 @@ import { useWaitableRef } from './use-waitable-ref.ts'
 
 export interface UploadState {
   uploadProviders?: UploadProviderCheckpoint[]
+  isDirectory?: boolean
   importedCar?: boolean
   confirmedPieces?: { dataSetId: bigint; providerId: bigint; pieceId: bigint; transactionHash: string }[]
   isUploading: boolean
@@ -123,7 +126,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
   }, [])
 
   const uploadFile = useCallback(
-    async (file: File, metadata?: Record<string, string>): Promise<string> => {
+    async (file: UploadSource, metadata?: Record<string, string>): Promise<string> => {
       // Freeze the network before any asynchronous upload or balance refresh.
       const network = wallet.status === 'ready' ? wallet.data.network : undefined
       setUploadState({
@@ -156,11 +159,22 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           },
         })
 
+        if (carResult.isDirectory && carResult.carBytes.length > MAX_FILE_SIZE)
+          throw new Error('The packed folder exceeds the 200 MB browser upload limit.')
         const rootCid = carResult.rootCid.toString()
+        if (carResult.isDirectory) {
+          try {
+            await cacheDirectoryUpload(carResult.carBytes, rootCid)
+          } catch {
+            // Optional browsing cache must not prevent a valid upload.
+            logger.warn('Unable to cache folder contents; browsing will use storage providers')
+          }
+        }
         setUploadState((prev) => ({
           ...prev,
           currentCid: rootCid,
           importedCar: carResult.importedCar,
+          isDirectory: carResult.isDirectory,
         }))
 
         updateStepState('creating-car', { status: 'completed', progress: 100 })

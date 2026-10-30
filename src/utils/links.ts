@@ -17,7 +17,7 @@ export const getIpfsGatewayDownloadLink = (cid: string, fileName: string): strin
 /** Omit download=false: service-worker gateways interpret it as an IPLD inspector request. */
 export const getIpfsGatewayPreviewLink = (cid: string, fileName: string): string => {
   const gatewayCid = CID.parse(cid).toV1().toString()
-  return `https://${gatewayCid}.ipfs.inbrowser.link/?filename=${encodeURIComponent(fileName)}`
+  return `https://${gatewayCid}.ipfs.inbrowser.link/${fileName ? `?filename=${encodeURIComponent(fileName)}` : ''}`
 }
 
 /**

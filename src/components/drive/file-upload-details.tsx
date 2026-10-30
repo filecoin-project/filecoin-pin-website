@@ -6,6 +6,7 @@ import { getTxExplorerLink } from '../../utils/links.ts'
 import { copyProgress, fileStatus, fileStatusColors } from '../../utils/upload/file-status.ts'
 import { getStepLabel } from '../../utils/upload/step-utils.ts'
 import { ButtonBase as Button } from '../ui/button/button-base.tsx'
+import { FolderPicker } from './folder-picker.tsx'
 
 function canRemoveUpload(file: DatasetPiece) {
   const upload = file.upload
@@ -80,29 +81,42 @@ export function FileUploadDetails({ file }: { file: DatasetPiece }) {
               Retry saving
             </Button>
           )}
-          {canRetry && (
-            <>
-              <Button
-                className="w-auto px-3 py-1.5 text-xs sm:min-h-8"
-                disabled={!tasks || tasks.transferring}
-                onClick={() => picker.current?.click()}
-                size="sm"
-              >
-                Retry upload
-              </Button>
-              <input
-                aria-label="Select original file to retry"
-                className="hidden"
-                onChange={(event) => {
-                  const selected = event.target.files?.[0]
-                  if (selected) void tasks?.start(selected, file.folderPath ?? '', file.id)
-                  event.target.value = ''
-                }}
-                ref={picker}
-                type="file"
-              />
-            </>
-          )}
+          {canRetry &&
+            (file.isDirectory ? (
+              <details className="w-full text-xs">
+                <summary className="w-fit cursor-pointer text-link">Retry folder upload</summary>
+                <div className="mt-3">
+                  <FolderPicker
+                    disabled={!tasks || tasks.transferring}
+                    onUpload={(source) => {
+                      void tasks?.start(source, file.folderPath ?? '', file.id)
+                    }}
+                  />
+                </div>
+              </details>
+            ) : (
+              <>
+                <Button
+                  className="w-auto px-3 py-1.5 text-xs sm:min-h-8"
+                  disabled={!tasks || tasks.transferring}
+                  onClick={() => picker.current?.click()}
+                  size="sm"
+                >
+                  Retry upload
+                </Button>
+                <input
+                  aria-label="Select original file to retry"
+                  className="hidden"
+                  onChange={(event) => {
+                    const selected = event.target.files?.[0]
+                    if (selected) void tasks?.start(selected, file.folderPath ?? '', file.id)
+                    event.target.value = ''
+                  }}
+                  ref={picker}
+                  type="file"
+                />
+              </>
+            ))}
           {removable && (
             <Button
               className="w-auto px-3 py-1.5 text-xs sm:min-h-8"
