@@ -66,10 +66,12 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [directoryId, setDirectoryId] = useState<string | null>(null)
   const openDirectory = (id: string) => {
+    setShowFolders(false)
     setDirectoryId(id)
     setSearch('')
   }
   const onFolderChange = (path: string) => {
+    setShowFolders(false)
     setSearch('')
     setDirectoryId(null)
     setFolderPath(path)
@@ -306,10 +308,10 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
           {error || deletionError}
         </p>
       )}
-      <div className="grid md:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="drive-file-workspace grid grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[220px_minmax(0,1fr)] md:grid-rows-1">
         <nav
           aria-label="File folders"
-          className="space-y-1 border-b border-border bg-canvas/30 p-4 md:border-b-0 md:border-r md:p-5"
+          className="min-h-0 space-y-1 border-b border-border bg-canvas/30 p-4 md:border-b-0 md:border-r md:p-5"
         >
           <p className="flex items-center gap-1 px-2 pb-3 text-[10px] font-medium tracking-[0.14em] text-muted">
             FOLDERS <FolderInfo />
@@ -330,7 +332,9 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
               size={15}
             />
           </button>
-          <div className={`${showFolders ? 'block' : 'hidden'} md:block`}>
+          <div
+            className={`${showFolders ? 'block' : 'hidden'} max-h-40 overflow-y-auto md:block md:max-h-none md:overflow-visible`}
+          >
             <button
               aria-current={!directoryId && folder === '' ? 'page' : undefined}
               aria-label="Files (root)"
@@ -363,8 +367,8 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
             search={search}
           />
         ) : (
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
+          <div className="flex min-h-0 min-w-0 flex-col">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
               <div className="flex min-w-0 flex-wrap items-center gap-3">
                 <nav aria-label="Current folder" className="flex flex-wrap items-center gap-2 text-sm">
                   <button className="text-muted hover:text-accent" onClick={() => onFolderChange('')} type="button">
@@ -388,9 +392,9 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                 </nav>
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <section aria-label="Files list" className="drive-file-list" key={`${folder}:${search}`}>
               <table className={`${files.length || children.length ? 'min-w-[760px]' : ''} w-full text-left text-sm`}>
-                <thead className="bg-canvas/30 text-[11px] font-normal text-muted">
+                <thead className="text-[11px] font-normal text-muted">
                   <tr>
                     <th className="p-4">Name</th>
                     <th className="p-4">Size</th>
@@ -559,7 +563,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                   )}
                 </tbody>
               </table>
-            </div>
+            </section>
           </div>
         )}
       </div>

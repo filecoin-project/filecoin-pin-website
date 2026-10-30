@@ -106,8 +106,8 @@ export function DirectoryBrowser({
   const currentFolder =
     path && page ? selection({ name: path.split('/').at(-1) ?? '', path, cid: page.cid, isDirectory: true }) : file
   return (
-    <div className="min-w-0">
-      <div className="space-y-2 border-b border-border px-5 py-4 sm:px-6">
+    <div className="flex min-h-0 min-w-0 flex-col">
+      <div className="shrink-0 space-y-2 border-b border-border px-5 py-4 sm:px-6">
         <button
           className="inline-flex items-center gap-2 text-xs text-muted hover:text-accent"
           onClick={onBack}
@@ -159,126 +159,124 @@ export function DirectoryBrowser({
           </div>
         </div>
       </div>
-      {!page && !error && (
-        <p className="flex items-center gap-2 p-6 text-sm text-muted" role="status">
-          <Loader2 className="animate-spin" size={16} /> {search.trim() ? 'Searching folder…' : 'Loading folder…'}
-        </p>
-      )}
-      {error && (
-        <div className="space-y-3 p-6">
-          <p className="text-sm text-warning" role="alert">
-            {error}
+      <section aria-label="Files list" className="drive-file-list" key={`${path}:${search}:${offset}`}>
+        {!page && !error && (
+          <p className="flex items-center gap-2 p-6 text-sm text-muted" role="status">
+            <Loader2 className="animate-spin" size={16} /> {search.trim() ? 'Searching folder…' : 'Loading folder…'}
           </p>
-          <Button className="w-auto" onClick={() => setAttempt((value) => value + 1)} size="sm" variant="secondary">
-            Retry loading folder
-          </Button>
-        </div>
-      )}
-      {page && (
-        <>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[480px] text-left text-sm">
-              <thead className="bg-canvas/30 text-[11px] text-muted">
-                <tr>
-                  <th className="p-4">Name</th>
-                  <th className="p-4">Size</th>
-                  <th className="p-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {page.items.map((item) => {
-                  const child = selection(item)
-                  const preview =
-                    !item.isDirectory && canPreviewFile(child) && (!file.upload || file.upload.phase === 'complete')
-                  return (
-                    <tr className="border-t border-border hover:bg-surface" key={item.path}>
-                      <td className="p-4">
+        )}
+        {error && (
+          <div className="space-y-3 p-6">
+            <p className="text-sm text-warning" role="alert">
+              {error}
+            </p>
+            <Button className="w-auto" onClick={() => setAttempt((value) => value + 1)} size="sm" variant="secondary">
+              Retry loading folder
+            </Button>
+          </div>
+        )}
+        {page && (
+          <table className="w-full min-w-[480px] text-left text-sm">
+            <thead className="text-[11px] text-muted">
+              <tr>
+                <th className="p-4">Name</th>
+                <th className="p-4">Size</th>
+                <th className="p-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {page.items.map((item) => {
+                const child = selection(item)
+                const preview =
+                  !item.isDirectory && canPreviewFile(child) && (!file.upload || file.upload.phase === 'complete')
+                return (
+                  <tr className="border-t border-border hover:bg-surface" key={item.path}>
+                    <td className="p-4">
+                      <button
+                        className="inline-flex items-center gap-2 text-left disabled:cursor-default"
+                        disabled={!item.isDirectory}
+                        onClick={() => navigate(item.path)}
+                        type="button"
+                      >
+                        {item.isDirectory ? (
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-800/10 text-accent">
+                            <Folder size={16} />
+                          </span>
+                        ) : (
+                          <FileTypeIcon fileName={item.name} />
+                        )}
+                        <span className="max-w-[260px] truncate">{item.name}</span>
+                      </button>
+                    </td>
+                    <td className="p-4 whitespace-nowrap text-muted">
+                      {item.size === undefined ? '—' : formatFileSize(item.size)}
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center gap-3">
                         <button
-                          className="inline-flex items-center gap-2 text-left disabled:cursor-default"
-                          disabled={!item.isDirectory}
-                          onClick={() => navigate(item.path)}
+                          className="inline-flex items-center gap-1 text-xs text-muted hover:text-accent disabled:opacity-40"
+                          disabled={downloadBlocked(child)}
+                          onClick={() => onDownload(child)}
                           type="button"
                         >
-                          {item.isDirectory ? (
-                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-800/10 text-accent">
-                              <Folder size={16} />
-                            </span>
-                          ) : (
-                            <FileTypeIcon fileName={item.name} />
-                          )}
-                          <span className="max-w-[260px] truncate">{item.name}</span>
+                          <Download size={14} />
+                          {isQueued(child.id)
+                            ? 'Cancel queued download'
+                            : activeDownloadId === child.id
+                              ? 'Downloading…'
+                              : item.isDirectory
+                                ? 'Download ZIP'
+                                : 'Download'}
                         </button>
-                      </td>
-                      <td className="p-4 whitespace-nowrap text-muted">
-                        {item.size === undefined ? '—' : formatFileSize(item.size)}
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <button
-                            className="inline-flex items-center gap-1 text-xs text-muted hover:text-accent disabled:opacity-40"
-                            disabled={downloadBlocked(child)}
-                            onClick={() => onDownload(child)}
-                            type="button"
+                        {preview && (
+                          <a
+                            className="inline-flex items-center gap-1 text-xs text-muted hover:text-accent"
+                            href={getIpfsGatewayPreviewLink(item.cid, item.name)}
+                            rel="noopener noreferrer"
+                            target="_blank"
                           >
-                            <Download size={14} />
-                            {isQueued(child.id)
-                              ? 'Cancel queued download'
-                              : activeDownloadId === child.id
-                                ? 'Downloading…'
-                                : item.isDirectory
-                                  ? 'Download ZIP'
-                                  : 'Download'}
-                          </button>
-                          {preview && (
-                            <a
-                              className="inline-flex items-center gap-1 text-xs text-muted hover:text-accent"
-                              href={getIpfsGatewayPreviewLink(item.cid, item.name)}
-                              rel="noopener noreferrer"
-                              target="_blank"
-                            >
-                              <Eye size={14} /> Preview
-                            </a>
-                          )}
-                          <ShareFileButton file={child} />
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-                {!page.items.length && (
-                  <tr>
-                    <td className="p-8 text-center text-sm text-muted" colSpan={3}>
-                      {search.trim() ? 'No matching files in this folder.' : 'This folder is empty.'}
+                            <Eye size={14} /> Preview
+                          </a>
+                        )}
+                        <ShareFileButton file={child} />
+                      </div>
                     </td>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          {(offset > 0 || page.hasMore) && (
-            <div className="flex items-center justify-between border-t border-border p-4">
-              <Button
-                className="w-auto"
-                disabled={offset === 0}
-                onClick={() => setOffset((value) => Math.max(0, value - DIRECTORY_PAGE_SIZE))}
-                size="sm"
-                variant="secondary"
-              >
-                Previous
-              </Button>
-              <span className="text-xs text-muted">Page {offset / DIRECTORY_PAGE_SIZE + 1}</span>
-              <Button
-                className="w-auto"
-                disabled={!page.hasMore}
-                onClick={() => setOffset((value) => value + DIRECTORY_PAGE_SIZE)}
-                size="sm"
-                variant="secondary"
-              >
-                Next
-              </Button>
-            </div>
-          )}
-        </>
+                )
+              })}
+              {!page.items.length && (
+                <tr>
+                  <td className="p-8 text-center text-sm text-muted" colSpan={3}>
+                    {search.trim() ? 'No matching files in this folder.' : 'This folder is empty.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
+      </section>
+      {page && (offset > 0 || page.hasMore) && (
+        <div className="flex shrink-0 items-center justify-between border-t border-border p-4">
+          <Button
+            className="w-auto"
+            disabled={offset === 0}
+            onClick={() => setOffset((value) => Math.max(0, value - DIRECTORY_PAGE_SIZE))}
+            size="sm"
+            variant="secondary"
+          >
+            Previous
+          </Button>
+          <span className="text-xs text-muted">Page {offset / DIRECTORY_PAGE_SIZE + 1}</span>
+          <Button
+            className="w-auto"
+            disabled={!page.hasMore}
+            onClick={() => setOffset((value) => value + DIRECTORY_PAGE_SIZE)}
+            size="sm"
+            variant="secondary"
+          >
+            Next
+          </Button>
+        </div>
       )}
     </div>
   )

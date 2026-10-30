@@ -245,6 +245,11 @@ export async function checkUploadTasks(browser) {
     await mkdir(join(folderPath, 'docs'), { recursive: true })
     await writeFile(join(folderPath, '研究.txt'), 'hello folder')
     await writeFile(join(folderPath, 'docs', 'notes.txt'), 'nested notes')
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll('button')].some(
+        (button) => button.textContent.trim() === 'Load from Filecoin' && !button.disabled
+      )
+    )
     const mainSearchBox = await page.getByRole('searchbox', { name: 'Search file list', exact: true }).boundingBox()
     await page.getByRole('button', { name: 'Upload files', exact: true }).click()
     const folderPanel = page.getByRole('dialog', { name: 'Upload files', exact: true })
@@ -401,6 +406,115 @@ export async function checkUploadTasks(browser) {
     await page.getByRole('button', { name: 'Upload files', exact: true }).click()
     assert.equal(await uploadLocation.inputValue(), '', 'Uploads opened inside stored folders must start at Files root')
     await page.getByRole('button', { name: 'Close Upload files', exact: true }).click()
+    const list = page.getByRole('region', { name: 'Files list', exact: true })
+    await list.getByRole('button', { name: 'docs', exact: true }).waitFor()
+    const workspace = page.locator('.drive-file-workspace')
+    const frame = await workspace.evaluate((element) => ({
+      height: element.getBoundingClientRect().height,
+      bottom: element.getBoundingClientRect().bottom + scrollY,
+    }))
+    const checkFrame = async () => {
+      const next = await workspace.evaluate((element) => ({
+        height: element.getBoundingClientRect().height,
+        bottom: element.getBoundingClientRect().bottom + scrollY,
+      }))
+      assert.ok(
+        Math.abs(frame.height - next.height) < 1,
+        'Directory types and item counts must not resize the workspace'
+      )
+      assert.ok(Math.abs(frame.bottom - next.bottom) < 1, 'Switching folders must keep the panel bottom fixed')
+    }
+    const fewRows = await list.evaluate((element) => ({
+      height: element.clientHeight,
+      lastBottom: element.querySelector('tbody tr:last-child').getBoundingClientRect().bottom,
+      bottom: element.getBoundingClientRect().bottom,
+    }))
+    assert.ok(fewRows.height >= 320, 'A short list should retain a useful minimum height')
+    assert.ok(fewRows.bottom - fewRows.lastBottom >= 16, 'Short lists need space below the last file')
+    await page.screenshot({ path: '/tmp/drive-list-few-files.png', fullPage: true, animations: 'disabled' })
+    await page.evaluate(async () => {
+      const { mutateCachedPieces, getCachedPieces } = await import('/src/lib/local-storage/piece-cache.ts')
+      const { directoryUpload } = await import('/src/lib/filecoin-pin/upload-source.ts')
+      const { prepareUploadInput } = await import('/src/lib/filecoin-pin/upload-input.ts')
+      const { cacheDirectoryUpload } = await import('/src/lib/filecoin-pin/directory.ts')
+      const scope = '314:0x1111111111111111111111111111111111111111'
+      const existing = getCachedPieces(scope)
+      const files = Array.from({ length: 125 }, (_, i) => {
+        const name = `entry-${String(i).padStart(3, '0')}.txt`
+        const file = new File(['fixture'], name)
+        Object.defineProperty(file, 'webkitRelativePath', { value: `many-files/${name}` })
+        return file
+      })
+      const packed = await prepareUploadInput(directoryUpload(files))
+      await cacheDirectoryUpload(packed.carBytes, packed.rootCid.toString())
+      const template = existing.find((file) => file.fileName === 'reports' && !file.removedCopies?.length)
+      const normal = existing.find((file) => file.fileName === 'first.txt')
+      await mutateCachedPieces(scope, (current) => [
+        ...current,
+        ...files.map((file, i) => ({ ...normal, id: `layout-${i}`, fileName: file.name, folderPath: '' })),
+        { ...template, id: 'layout-directory', fileName: 'many-files', cid: packed.rootCid.toString() },
+      ])
+    })
+    await page.getByRole('button', { name: 'Back to files', exact: true }).click()
+    await page
+      .getByRole('navigation', { name: 'File folders', exact: true })
+      .getByRole('button', { name: 'Files (root)', exact: true })
+      .click()
+    await page.getByRole('cell').getByRole('button', { name: 'entry-124.txt', exact: true }).waitFor()
+    const checkScrolling = async () => {
+      const box = await list.boundingBox()
+      const head = list.locator('thead')
+      await list.evaluate((element) => {
+        element.scrollTop = 300
+      })
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)))
+      assert.ok(await list.evaluate((element) => element.scrollTop > 0 && element.scrollHeight > element.clientHeight))
+      assert.ok(Math.abs((await head.boundingBox()).y - box.y) < 2, 'Table header must stay visible during scrolling')
+      assert.ok(box.height < 700, 'Many files must scroll within the list rather than grow the whole page')
+    }
+    await checkFrame()
+    await checkScrolling()
+    await page.screenshot({ path: '/tmp/drive-list-many-files.png', fullPage: true, animations: 'disabled' })
+    await page
+      .getByRole('navigation', { name: 'File folders', exact: true })
+      .getByRole('button', { name: 'many-files', exact: true })
+      .click()
+    await page.getByRole('cell').getByRole('button', { name: 'entry-099.txt', exact: true }).waitFor()
+    await checkFrame()
+    await checkScrolling()
+    await page.screenshot({ path: '/tmp/drive-directory-many-files.png', fullPage: true, animations: 'disabled' })
+    const nextPage = page.getByRole('button', { name: 'Next', exact: true })
+    assert.ok(
+      (await nextPage.boundingBox()).y >= (await list.boundingBox()).y + (await list.boundingBox()).height,
+      'Pagination must remain outside the scrolling list'
+    )
+    await nextPage.click()
+    await page.getByRole('cell').getByRole('button', { name: 'entry-124.txt', exact: true }).waitFor()
+    assert.equal(await list.evaluate((element) => element.scrollTop), 0, 'Changing pages should start at the top')
+    await checkFrame()
+    await page.getByRole('searchbox', { name: 'Search this folder', exact: true }).fill('no-matching-entry')
+    await page.getByText('No matching files in this folder.', { exact: true }).waitFor()
+    await checkFrame()
+    await page.screenshot({ path: '/tmp/drive-list-empty.png', fullPage: true, animations: 'disabled' })
+    await page.getByRole('searchbox', { name: 'Search this folder', exact: true }).fill('')
+    await page.getByRole('cell').getByRole('button', { name: 'entry-000.txt', exact: true }).waitFor()
+    await page.setViewportSize({ width: 390, height: 844 })
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
+    await page.screenshot({ path: '/tmp/drive-directory-list-mobile.png', fullPage: true, animations: 'disabled' })
+    const mobileFolderMenu = page.getByRole('button', { name: 'Files', exact: true })
+    await mobileFolderMenu.click()
+    await page
+      .getByRole('navigation', { name: 'File folders', exact: true })
+      .getByRole('button', { name: 'reports', exact: true })
+      .click()
+    await list.getByRole('button', { name: 'docs', exact: true }).waitFor()
+    assert.equal(
+      await mobileFolderMenu.getAttribute('aria-expanded'),
+      'false',
+      'Choosing a mobile folder should return space to the file list'
+    )
+    assert.ok((await list.boundingBox()).height > 180, 'Mobile navigation must leave room for file rows')
+
     assert.deepEqual(errors, [])
     console.log(
       'Upload task browser checks passed: parked download, consecutive uploads, per-file details and reload recovery.'
