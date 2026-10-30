@@ -1,5 +1,5 @@
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
-import { hasRemovalProgress, isDeletionScheduled } from '../file-deletion.ts'
+import { hasRemovalProgress, isCopyRemovalScheduled, isDeletionScheduled } from '../file-deletion.ts'
 
 export function fileStatus(file: DatasetPiece) {
   if (file.upload && !(file.copyCount ?? 0)) {
@@ -9,7 +9,13 @@ export function fileStatus(file: DatasetPiece) {
     return 'Confirming'
   }
   if (isDeletionScheduled(file)) return 'Deletion scheduled'
-  if (hasRemovalProgress(file)) return 'Deletion incomplete'
+  if (hasRemovalProgress(file)) {
+    const unfinished = (file.datasetIds ?? [file.datasetId]).filter((id) => !isCopyRemovalScheduled(file, id))
+    return unfinished.length > 0 &&
+      unfinished.every((id) => file.deletion?.[id] && !file.deletion[id].confirmed && !file.deletion[id].remaining)
+      ? 'Deletion pending'
+      : 'Deletion incomplete'
+  }
   if (!file.cid) return 'Metadata missing'
   return 'Stored'
 }

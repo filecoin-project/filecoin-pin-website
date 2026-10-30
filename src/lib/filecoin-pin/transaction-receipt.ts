@@ -25,7 +25,7 @@ export async function getTransactionMessageCid(client: ReceiptClient, hash: Hash
 /** The regular receipt remains authoritative; Lotus additionally accepts gas-repriced messages. */
 export async function resolveTransactionReceipt(
   client: ReceiptClient,
-  transaction: WalletTransaction
+  transaction: Pick<WalletTransaction, 'hash' | 'messageCid'>
 ): Promise<WalletTransactionResult> {
   const receipt = await client.getTransactionReceipt({ hash: transaction.hash }).catch(() => null)
   if (receipt) return { status: receipt.status, hash: receipt.transactionHash ?? transaction.hash }

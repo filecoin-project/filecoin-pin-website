@@ -47,7 +47,7 @@ export interface DatasetPiece {
   ipfsIndexed?: boolean
   ipfsCheckAttempts?: number
   pieceIds?: string[]
-  deletion?: Record<string, { transactionHash: string; confirmed: boolean; remaining?: boolean }>
+  deletion?: Record<string, { transactionHash: string; confirmed: boolean; remaining?: boolean; messageCid?: string }>
   /** Total copies (1 for un-replicated). */
   copyCount?: number
   /** Datasets that hold a copy of this piece (primary first). */

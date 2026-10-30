@@ -1,28 +1,60 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useBrowserWallet } from '../context/browser-wallet-provider.tsx'
 import { useUploadHistory } from '../context/upload-history-context.tsx'
-import { planDeletion, scheduleFileDeletion, withFileDeletionLock } from '../lib/filecoin-pin/delete.ts'
-import { applyDeletionUpdate } from '../utils/file-deletion.ts'
+import {
+  DeletionConfirmationPendingError,
+  planDeletion,
+  scheduleFileDeletion,
+  withFileDeletionLock,
+} from '../lib/filecoin-pin/delete.ts'
+import { applyDeletionUpdate, isDeletionScheduled } from '../utils/file-deletion.ts'
 import type { DatasetPiece } from './use-dataset-pieces.ts'
+import { useDeletionRecovery } from './use-deletion-recovery.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 
 /** Coordinate the content lock, permission check and durable deletion checkpoints. */
 export function useFileDeletion() {
   const { synapse, storageScope, ensurePermissions } = useFilecoinPinContext()
-  const { mutateHistory, getLatestHistory } = useUploadHistory()
+  const { history, mutateHistory, getLatestHistory } = useUploadHistory()
   const connection = useBrowserWallet()
-  const running = useRef(false)
-  const [deletingPieceCid, setDeletingPieceCid] = useState<string | null>(null)
-  const isDeleting = deletingPieceCid !== null
-  const [deletionError, setDeletionError] = useState('')
+  const running = useRef(new Set<string>())
+  const [deletingPieceCids, setDeletingPieceCids] = useState<ReadonlySet<string>>(new Set())
+  const [deletionErrors, setDeletionErrors] = useState<Record<string, string>>({})
+  const autoCheckingPieceCids = useDeletionRecovery(deletingPieceCids, (pieceCid, message) => {
+    setDeletionErrors((current) => ({ ...current, [pieceCid]: message }))
+  })
+  useEffect(() => {
+    if (!Object.keys(deletionErrors).length) return
+    setDeletionErrors((current) => {
+      const next = Object.fromEntries(
+        Object.entries(current).filter(([pieceCid]) =>
+          history.some((file) => file.pieceCid === pieceCid && !isDeletionScheduled(file))
+        )
+      )
+      return Object.keys(next).length === Object.keys(current).length ? current : next
+    })
+  }, [history, deletionErrors])
+  const clearDeletionError = (pieceCid: string) =>
+    setDeletionErrors((current) => {
+      const next = { ...current }
+      delete next[pieceCid]
+      return next
+    })
 
   const deleteFile = async (selected: DatasetPiece): Promise<boolean> => {
-    if (running.current || connection.busy || connection.deleting || !synapse || !ensurePermissions || !storageScope)
+    if (
+      running.current.has(selected.pieceCid) ||
+      autoCheckingPieceCids.has(selected.pieceCid) ||
+      connection.busy ||
+      !synapse ||
+      !ensurePermissions ||
+      !storageScope
+    )
       return false
-    running.current = true
-    setDeletingPieceCid(selected.pieceCid)
-    setDeletionError('')
-    connection.setDeleting(true)
+    running.current.add(selected.pieceCid)
+    setDeletingPieceCids(new Set(running.current))
+    clearDeletionError(selected.pieceCid)
+    if (running.current.size === 1) connection.setDeleting(true)
     try {
       await withFileDeletionLock(storageScope, selected.cid, async () => {
         // Retry retained checkpoints before planning from the latest locked directory.
@@ -50,14 +82,18 @@ export function useFileDeletion() {
       })
       return true
     } catch (cause) {
-      setDeletionError(cause instanceof Error ? cause.message : 'File deletion failed')
+      if (cause instanceof DeletionConfirmationPendingError) return false
+      setDeletionErrors((current) => ({
+        ...current,
+        [selected.pieceCid]: cause instanceof Error ? cause.message : 'File deletion failed',
+      }))
       return false
     } finally {
-      connection.setDeleting(false)
-      running.current = false
-      setDeletingPieceCid(null)
+      running.current.delete(selected.pieceCid)
+      setDeletingPieceCids(new Set(running.current))
+      if (!running.current.size) connection.setDeleting(false)
     }
   }
 
-  return { deleteFile, isDeleting, deletingPieceCid, deletionError, clearDeletionError: () => setDeletionError('') }
+  return { deleteFile, deletingPieceCids, autoCheckingPieceCids, deletionErrors }
 }

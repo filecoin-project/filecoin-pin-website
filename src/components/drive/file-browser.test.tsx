@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { WaitForTransactionReceiptTimeoutError } from 'viem'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { UploadHistoryProvider } from '../../context/upload-history-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
@@ -14,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   context: vi.fn(),
   index: vi.fn(),
   receipt: vi.fn(),
+  getReceipt: vi.fn(),
+  rpc: vi.fn(),
   permissions: vi.fn(),
   uploading: vi.fn(),
   deleting: vi.fn(),
@@ -21,7 +24,9 @@ const mocks = vi.hoisted(() => ({
   download: vi.fn(),
   uploadInProgress: false,
   hasSession: true,
+  autoChecking: new Set<string>(),
 }))
+vi.mock('../../hooks/use-deletion-recovery.ts', () => ({ useDeletionRecovery: () => mocks.autoChecking }))
 const scope = '314:0x1111111111111111111111111111111111111111'
 vi.mock('../../lib/filecoin-pin/drive-api.ts', async (original) => ({
   ...(await original<object>()),
@@ -49,7 +54,11 @@ vi.mock('../../context/browser-wallet-provider.tsx', () => ({
   }),
 }))
 vi.mock('../../lib/filecoin-pin/browser-wallet.ts', () => ({
-  publicClient: () => ({ waitForTransactionReceipt: mocks.receipt }),
+  publicClient: () => ({
+    waitForTransactionReceipt: mocks.receipt,
+    getTransactionReceipt: mocks.getReceipt,
+    request: mocks.rpc,
+  }),
 }))
 vi.mock('@filoz/synapse-core/pdp-verifier', () => ({ findPieceIdsByCid: async () => ({ items: [1n] }) }))
 vi.mock('../../lib/filecoin-pin/download.ts', async (importOriginal) => ({
@@ -76,7 +85,10 @@ const file = {
 } satisfies DatasetPiece
 beforeEach(() => {
   vi.resetAllMocks()
+  mocks.getReceipt.mockResolvedValue(null)
+  mocks.rpc.mockResolvedValue(null)
   mocks.index.mockResolvedValue([])
+  mocks.autoChecking = new Set()
   mocks.hasSession = true
   mocks.uploadInProgress = false
   mocks.permissions.mockResolvedValue(undefined)
@@ -518,7 +530,7 @@ it.each([false, true])('keeps deletion running after closing details (failure: %
   expect(mocks.deleting).not.toHaveBeenCalledWith(false)
   await act(async () => finish())
   if (fails) {
-    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'provider unavailable')
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'first.txt: provider unavailable')
   } else {
     await waitFor(() =>
       expect(getCachedPieces(scope)?.every((record) => record.deletion?.[record.datasetId]?.confirmed)).toBe(true)
@@ -600,6 +612,7 @@ it('shows a partially queued deletion per provider and offers continuing the rem
       pieceIds: ['1', '1'],
       copyCount: 2,
       removalQueuedCopies: ['1'],
+      deletion: { '1': { transactionHash: hash, confirmed: true } },
     },
   ])
   render(
@@ -608,7 +621,10 @@ it('shows a partially queued deletion per provider and offers continuing the rem
     </UploadHistoryProvider>
   )
   fireEvent.click(await screen.findByRole('button', { name: 'first.txt' }))
-  expect(within(screen.getByRole('dialog')).getByText('Removal scheduled')).toBeTruthy()
+  const dialog = within(screen.getByRole('dialog'))
+  expect(dialog.getAllByText('Removal scheduled')).toHaveLength(1)
+  expect(dialog.getByRole('link', { name: 'Removal scheduled' }).getAttribute('href')).toContain(hash)
+  expect(dialog.queryByText('Deletion scheduled', { exact: true })).toBeNull()
   expect(screen.getByRole('button', { name: 'Continue deletion' })).toBeTruthy()
   expect(screen.getByText('Deletion incomplete', { exact: true })).toBeTruthy()
 })
@@ -765,4 +781,137 @@ it('highlights the session requirement without deleting or closing details', asy
   expect(screen.getByRole('alert')).not.toBe(hint)
   expect(screen.getByRole('dialog')).toBeTruthy()
   expect(mocks.submit).not.toHaveBeenCalled()
+})
+
+it.each(['success', 'reverted'])(
+  'keeps a second deletion independent when the first transaction is %s',
+  async (status) => {
+    const second = {
+      ...file,
+      id: 'independent',
+      fileName: 'independent.txt',
+      cid: 'bafkreig4nl6nqu64xpwqfimx5bwhcntmpbgbjnly7dzs6u6zkeqfkimtfe',
+      pieceCid: 'bafkzcibe5hgaodisksofrumva2x5oelxycmmjdbwnfrotfragnpdnlnt74rdvwnjfq',
+    }
+    setCachedPieces(scope, [file, second])
+    mocks.context.mockResolvedValue({ deletePieces: mocks.submit, getScheduledRemovals: async () => [] })
+    let firstDone!: (receipt: { status: string }) => void
+    let secondDone!: (receipt: { status: string }) => void
+    mocks.receipt
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            firstDone = resolve
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            secondDone = resolve
+          })
+      )
+    render(
+      <UploadHistoryProvider>
+        <FileBrowser folder="" onFolderChange={vi.fn()} />
+      </UploadHistoryProvider>
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'first.txt' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule deletion' }))
+    await waitFor(() => expect(mocks.receipt).toHaveBeenCalledOnce())
+    fireEvent.click(screen.getByRole('button', { name: 'Close details' }))
+    fireEvent.click(screen.getByRole('button', { name: 'independent.txt' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
+    expect(screen.getByRole('button', { name: 'Schedule deletion' })).toHaveProperty('disabled', false)
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule deletion' }))
+    expect(screen.getByRole('button', { name: 'Processing…' })).toHaveProperty('disabled', true)
+    await waitFor(() => expect(mocks.receipt).toHaveBeenCalledTimes(2))
+    expect(mocks.submit).toHaveBeenCalledTimes(2)
+    await act(async () => firstDone({ status }))
+    expect(mocks.deleting.mock.calls).toEqual([[true]])
+    expect(screen.getByRole('dialog').textContent).toContain('independent.txt')
+    expect(screen.queryByText('Deletion transaction reverted for dataset 1. Retry to submit again.')).toBeNull()
+    expect(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' })).toHaveProperty(
+      'checked',
+      true
+    )
+    await act(async () => secondDone({ status: 'success' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(mocks.deleting.mock.calls).toEqual([[true], [false]])
+    expect(getCachedPieces(scope)?.find((record) => record.id === second.id)?.deletion?.['1']?.confirmed).toBe(true)
+  }
+)
+
+it('keeps confirmation timeouts in file details without accumulating global alerts', async () => {
+  setCachedPieces(scope, [{ ...file, datasetIds: ['1', '2'] }])
+  mocks.context.mockResolvedValue({ deletePieces: mocks.submit, getScheduledRemovals: async () => [] })
+  mocks.receipt.mockRejectedValue(new WaitForTransactionReceiptTimeoutError({ hash: hash as `0x${string}` }))
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'first.txt' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Schedule deletion' }))
+  await screen.findByText('Waiting for deletion confirmation.')
+  expect(screen.getAllByRole('link', { name: 'Deletion pending' })).toHaveLength(2)
+  expect(screen.queryByRole('alert')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Close details' }))
+  expect(screen.queryByText('Waiting for deletion confirmation.')).toBeNull()
+  expect(screen.queryByRole('alert')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'first.txt' }))
+  expect(screen.getByText('Waiting for deletion confirmation.')).toBeTruthy()
+  mocks.receipt.mockResolvedValue({ status: 'success' })
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Continue deletion' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(mocks.submit).toHaveBeenCalledTimes(2)
+  expect(mocks.receipt).toHaveBeenCalledTimes(4)
+})
+
+it.each([
+  [{ '1': { transactionHash: hash, confirmed: false } }, ['1'], 'Deletion pending'],
+  [
+    { '1': { transactionHash: hash, confirmed: true }, '2': { transactionHash: hash, confirmed: false } },
+    ['1', '2'],
+    'Deletion pending',
+  ],
+  [{ '1': { transactionHash: hash, confirmed: false } }, ['1', '2'], 'Deletion incomplete'],
+  [{ '1': { transactionHash: hash, confirmed: true, remaining: true } }, ['1'], 'Deletion incomplete'],
+  [{}, ['1'], 'Deletion incomplete'],
+] as const)('distinguishes pending receipts from unfinished deletion work %#', (deletion, datasetIds, status) => {
+  expect(fileStatus({ ...file, deletion, datasetIds: [...datasetIds] })).toBe(status)
+})
+
+it('keeps manual continuation disabled throughout automatic checking without changing pending status', async () => {
+  setCachedPieces(scope, [{ ...file, deletion: { '1': { transactionHash: hash, confirmed: false } } }])
+  mocks.autoChecking = new Set([file.pieceCid])
+  const view = () => (
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  const { rerender } = render(view())
+  fireEvent.click(await screen.findByRole('button', { name: 'first.txt' }))
+  const button = screen.getByRole('button', { name: 'Checking deletion status…' })
+  expect(button).toHaveProperty('disabled', true)
+  fireEvent.click(button)
+  expect(mocks.submit).not.toHaveBeenCalled()
+  expect(
+    within(screen.getByRole('button', { name: 'first.txt', hidden: true }).closest('tr') as HTMLElement).getByText(
+      'Deletion pending',
+      { exact: true }
+    )
+  ).toBeTruthy()
+  mocks.autoChecking = new Set()
+  rerender(view())
+  expect(
+    within(screen.getByRole('button', { name: 'first.txt', hidden: true }).closest('tr') as HTMLElement).getByText(
+      'Deletion pending',
+      { exact: true }
+    )
+  ).toBeTruthy()
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
+  expect(screen.getByRole('button', { name: 'Continue deletion' })).toHaveProperty('disabled', false)
 })

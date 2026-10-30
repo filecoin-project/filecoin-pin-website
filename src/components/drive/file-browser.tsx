@@ -25,7 +25,7 @@ import { IPFS_CHECK_LIMIT, resetIndexingChecks } from '../../hooks/use-ipfs-inde
 import { displayFileName } from '../../lib/filecoin-pin/drive-api.ts'
 import { canPreviewFile } from '../../lib/filecoin-pin/file-links.ts'
 import { directoryFolders } from '../../lib/local-storage/drive-directory.ts'
-import { hasRemovalProgress, isDeletionScheduled } from '../../utils/file-deletion.ts'
+import { hasRemovalProgress, isCopyRemovalScheduled, isDeletionScheduled } from '../../utils/file-deletion.ts'
 import {
   getDatasetExplorerLink,
   getIpfsGatewayPreviewLink,
@@ -79,9 +79,8 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
   }
   const [error, setError] = useState('')
   const [isEditing, setIsEditing] = useState(false)
-  const { deleteFile, isDeleting, deletingPieceCid, deletionError, clearDeletionError } = useFileDeletion()
-  const working = isEditing || isDeleting
-  const displayStatus = (file: DatasetPiece) => (deletingPieceCid === file.pieceCid ? 'Deleting…' : fileStatus(file))
+  const { deleteFile, deletingPieceCids, autoCheckingPieceCids, deletionErrors } = useFileDeletion()
+  const displayStatus = (file: DatasetPiece) => (deletingPieceCids.has(file.pieceCid) ? 'Deleting…' : fileStatus(file))
   const { download, queuedDownloads, downloadError, enqueueDownload, cancelQueuedDownload } = useDownloadQueue(
     synapse,
     storageScope
@@ -141,12 +140,25 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
     </>
   )
   const selected = history.find((file) => file.id === selectedId)
+  const working = isEditing || Boolean(selected && deletingPieceCids.has(selected.pieceCid))
+  const deletionError = selected
+    ? (deletionErrors[selected.pieceCid] ?? '')
+    : Object.entries(deletionErrors)
+        .map(([cid, message]) => `${history.find((file) => file.pieceCid === cid)?.fileName ?? cid}: ${message}`)
+        .join('\n')
   const selectedAliases = selected ? history.filter((file) => file.pieceCid === selected.pieceCid) : []
   const allAliasesScheduled =
     selectedAliases.length > 0 && selectedAliases.every((file) => fileStatus(file) === 'Deletion scheduled')
   const affectedAliases = selectedAliases.filter((file) => !isDeletionScheduled(file))
   const hasDeletionProgress = affectedAliases.some(hasRemovalProgress)
-  const disabled = working || Boolean(download) || connection.busy || connection.deleting
+  const waitingForDeletion = Boolean(
+    selected &&
+      Object.entries(selected.deletion ?? {}).some(
+        ([id, checkpoint]) => !checkpoint.confirmed && !isCopyRemovalScheduled(selected, id)
+      )
+  )
+  const autoCheckingDeletion = Boolean(selected && autoCheckingPieceCids.has(selected.pieceCid))
+  const disabled = working || autoCheckingDeletion || Boolean(download) || connection.busy
   const isQueued = (id: string) => queuedDownloads.some((file) => file.id === id)
   const files = visibleHistory
     .filter((file) =>
@@ -161,14 +173,12 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
   const choose = (file: DatasetPiece) => {
     setSelectedId(file.id)
     setDeleteConsent(false)
-    clearDeletionError()
     setError('')
   }
   const act = async (action: () => Promise<void>) => {
     if (disabled) return
     setIsEditing(true)
     setError('')
-    clearDeletionError()
     try {
       await action()
     } catch (cause) {
@@ -180,7 +190,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
   const downloadBlocked = (file: DatasetPiece) =>
     !isQueued(file.id) &&
     (isEditing ||
-      deletingPieceCid === file.pieceCid ||
+      deletingPieceCids.has(file.pieceCid) ||
       download?.id === file.id ||
       !synapse ||
       !file.cid ||
@@ -193,16 +203,13 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
       return
     }
     setError('')
-    clearDeletionError()
     enqueueDownload(file)
   }
   const deleteSelectedFile = async () => {
     if (!selected || disabled) return
     setError('')
-    clearDeletionError()
     if (!(await deleteFile(selected))) return
-    setDeleteConsent(false)
-    setSelectedId(null)
+    setSelectedId((current) => (current === selected.id ? null : current))
   }
 
   return (
@@ -502,7 +509,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                           </button>
                           <ShareFileButton
                             disabled={
-                              deletingPieceCid === file.pieceCid ||
+                              deletingPieceCids.has(file.pieceCid) ||
                               Boolean(file.upload && file.upload.phase !== 'complete')
                             }
                             file={file}
@@ -731,60 +738,68 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                 <FileUploadDetails file={selected} />
                 <section className="space-y-3">
                   <h3 className="font-medium">Storage copies</h3>
-                  {(selected.datasetIds ?? [selected.datasetId]).map((datasetId, index) => (
-                    <div className="rounded-lg border border-border p-3 text-sm space-y-2" key={datasetId}>
-                      <p>{selected.providerNames?.[index] || selected.providerName || 'Storage provider'}</p>
-                      <div className="flex flex-wrap gap-3">
-                        <a
-                          className="underline"
-                          href={getDatasetExplorerLink(datasetId, selected.network)}
-                          rel="noopener noreferrer"
-                          target="_blank"
-                        >
-                          Dataset {datasetId}
-                        </a>
-                        {(selected.providerIds?.[index] || selected.providerId) && (
-                          <ProviderLink
-                            network={selected.network === 'mainnet' ? 'mainnet' : 'calibration'}
-                            providerId={selected.providerIds?.[index] ?? selected.providerId}
-                          />
-                        )}
-                        {(selected.transactionHashes?.[index] || selected.transactionHash) && (
+                  {(selected.datasetIds ?? [selected.datasetId]).map((datasetId, index) => {
+                    const checkpoint = selected.deletion?.[datasetId]
+                    const removalStatus = selected.removedCopies?.includes(datasetId)
+                      ? 'Removed'
+                      : isCopyRemovalScheduled(selected, datasetId)
+                        ? 'Removal scheduled'
+                        : checkpoint?.confirmed
+                          ? 'More removals needed'
+                          : checkpoint
+                            ? 'Deletion pending'
+                            : null
+                    return (
+                      <div className="rounded-lg border border-border p-3 text-sm space-y-2" key={datasetId}>
+                        <p>{selected.providerNames?.[index] || selected.providerName || 'Storage provider'}</p>
+                        <div className="flex flex-wrap gap-3">
                           <a
                             className="underline"
-                            href={getTxExplorerLink(
-                              selected.transactionHashes?.[index] ?? selected.transactionHash,
-                              selected.network
-                            )}
+                            href={getDatasetExplorerLink(datasetId, selected.network)}
                             rel="noopener noreferrer"
                             target="_blank"
                           >
-                            Upload transaction
+                            Dataset {datasetId}
                           </a>
-                        )}
-                        {selected.removedCopies?.includes(datasetId) ? (
-                          <span className="text-muted">Removed</span>
-                        ) : selected.removalQueuedCopies?.includes(datasetId) ? (
-                          <span className="text-warning">Removal scheduled</span>
-                        ) : null}
-                        {selected.deletion?.[datasetId] && (
-                          <a
-                            className="underline"
-                            href={getTxExplorerLink(selected.deletion[datasetId].transactionHash, selected.network)}
-                            rel="noopener noreferrer"
-                            target="_blank"
-                          >
-                            Deletion{' '}
-                            {selected.deletion[datasetId].confirmed
-                              ? selected.deletion[datasetId].remaining
-                                ? 'batch scheduled · more remain'
-                                : 'scheduled'
-                              : 'pending'}
-                          </a>
-                        )}
+                          {(selected.providerIds?.[index] || selected.providerId) && (
+                            <ProviderLink
+                              network={selected.network === 'mainnet' ? 'mainnet' : 'calibration'}
+                              providerId={selected.providerIds?.[index] ?? selected.providerId}
+                            />
+                          )}
+                          {(selected.transactionHashes?.[index] || selected.transactionHash) && (
+                            <a
+                              className="underline"
+                              href={getTxExplorerLink(
+                                selected.transactionHashes?.[index] ?? selected.transactionHash,
+                                selected.network
+                              )}
+                              rel="noopener noreferrer"
+                              target="_blank"
+                            >
+                              Upload transaction
+                            </a>
+                          )}
+                          {removalStatus &&
+                            (checkpoint?.transactionHash ? (
+                              <a
+                                className="underline"
+                                href={getTxExplorerLink(checkpoint.transactionHash, selected.network)}
+                                rel="noopener noreferrer"
+                                target="_blank"
+                                title="View deletion transaction"
+                              >
+                                {removalStatus}
+                              </a>
+                            ) : (
+                              <span className={removalStatus === 'Removed' ? 'text-muted' : 'text-warning'}>
+                                {removalStatus}
+                              </span>
+                            ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </section>
                 <section className="space-y-3 border-t border-border pt-5">
                   <h3 className="flex items-center gap-2 font-medium">
@@ -844,14 +859,21 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                     variant="danger"
                   >
                     <Trash2 aria-hidden="true" size={14} />
-                    {working && !download
-                      ? 'Processing…'
-                      : hasDeletionProgress
-                        ? 'Continue deletion'
-                        : 'Schedule deletion'}
+                    {autoCheckingDeletion
+                      ? 'Checking deletion status…'
+                      : working && !download
+                        ? 'Processing…'
+                        : hasDeletionProgress
+                          ? 'Continue deletion'
+                          : 'Schedule deletion'}
                   </Button>
                   {selected.upload && selected.upload.phase !== 'complete' && (
                     <p className="text-sm text-muted">Wait for the upload to finish before deleting this content.</p>
+                  )}
+                  {waitingForDeletion && !working && (
+                    <p className="text-sm text-muted" role="status">
+                      Waiting for deletion confirmation.
+                    </p>
                   )}
                   {!connection.session && (
                     <p

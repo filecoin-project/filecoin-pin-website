@@ -3,13 +3,20 @@ import { WaitForTransactionReceiptTimeoutError } from 'viem'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 
-const { receipt, matches } = vi.hoisted(() => ({ receipt: vi.fn(), matches: vi.fn() }))
+const { receipt, matches, getReceipt, rpc } = vi.hoisted(() => ({
+  receipt: vi.fn(),
+  matches: vi.fn(),
+  getReceipt: vi.fn(),
+  rpc: vi.fn(),
+}))
 vi.mock('@filoz/synapse-core/pdp-verifier', () => ({ findPieceIdsByCid: matches }))
-vi.mock('./browser-wallet.ts', () => ({ publicClient: () => ({ waitForTransactionReceipt: receipt }) }))
+vi.mock('./browser-wallet.ts', () => ({
+  publicClient: () => ({ waitForTransactionReceipt: receipt, getTransactionReceipt: getReceipt, request: rpc }),
+}))
 
 import { applyDeletionUpdate } from '../../utils/file-deletion.ts'
 import { getCachedPieces, mutateCachedPieces, setCachedPieces } from '../local-storage/piece-cache.ts'
-import { scheduleFileDeletion } from './delete.ts'
+import { DeletionConfirmationPendingError, scheduleFileDeletion } from './delete.ts'
 
 const file = {
   network: 'mainnet',
@@ -19,6 +26,8 @@ const file = {
 const hash = `0x${'a'.repeat(64)}`
 beforeEach(() => {
   vi.resetAllMocks()
+  getReceipt.mockResolvedValue(null)
+  rpc.mockResolvedValue(null)
   matches.mockResolvedValue({ items: [1n, 2n] })
 })
 describe('deletion across storage copies', () => {
@@ -119,9 +128,7 @@ describe('deletion across storage copies', () => {
     const persist = (next: DatasetPiece) => {
       checkpoint = next
     }
-    await expect(scheduleFileDeletion(synapse, checkpoint, persist)).rejects.toThrow(
-      'Use Continue deletion to check again'
-    )
+    await expect(scheduleFileDeletion(synapse, checkpoint, persist)).rejects.toThrow(DeletionConfirmationPendingError)
     expect(checkpoint.deletion?.['1']).toEqual({ transactionHash: hash, confirmed: false })
     receipt.mockResolvedValueOnce({ status: 'success' })
     await scheduleFileDeletion(synapse, checkpoint, persist)
@@ -273,4 +280,140 @@ it('skips indexed removals while continuing deletion of the remaining copy', asy
   expect(createContext).toHaveBeenCalledWith({ dataSetId: 2n })
   const newer = { ...file, id: 'newer' }
   expect(planDeletion([selected, newer], selected).file.removedCopies).toEqual([])
+})
+
+it('submits independent files sharing a dataset without waiting for earlier confirmations', async () => {
+  const submit = vi.fn().mockResolvedValue(hash)
+  const context = vi.fn().mockResolvedValue({ deletePieces: submit, getScheduledRemovals: async () => [] })
+  const synapse = { storage: { createContext: context } } as unknown as Synapse
+  const confirms: Array<(value: { status: string }) => void> = []
+  receipt.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        confirms.push(resolve)
+      })
+  )
+  const first = scheduleFileDeletion(synapse, { ...file, datasetIds: ['1'] }, vi.fn())
+  await vi.waitFor(() => expect(receipt).toHaveBeenCalledOnce())
+  const second = scheduleFileDeletion(synapse, { ...file, datasetIds: ['1'] }, vi.fn())
+  await vi.waitFor(() => expect(receipt).toHaveBeenCalledTimes(2))
+  expect(submit).toHaveBeenCalledTimes(2)
+  for (const confirm of confirms) confirm({ status: 'success' })
+  await Promise.all([first, second])
+})
+
+it('submits all copies before confirmation and waits for every copy after a failure', async () => {
+  const submit = vi.fn().mockResolvedValue(hash)
+  const synapse = {
+    storage: {
+      createContext: vi.fn().mockResolvedValue({ deletePieces: submit, getScheduledRemovals: async () => [] }),
+    },
+  } as unknown as Synapse
+  const confirms: Array<(value: { status: string }) => void> = []
+  receipt.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        confirms.push(resolve)
+      })
+  )
+  let checkpoint: DatasetPiece = { ...file }
+  const save = (next: DatasetPiece) => {
+    checkpoint = next
+  }
+  let settled = false
+  const deletion = scheduleFileDeletion(synapse, file, save).finally(() => {
+    settled = true
+  })
+  const result = expect(deletion).rejects.toThrow('Deletion transaction reverted for dataset 1')
+  await vi.waitFor(() => expect(receipt).toHaveBeenCalledTimes(2))
+  expect(checkpoint.deletion?.['1']?.confirmed).toBe(false)
+  expect(checkpoint.deletion?.['2']?.confirmed).toBe(false)
+  confirms[0]({ status: 'reverted' })
+  await vi.waitFor(() => expect(checkpoint.deletion?.['1']).toBeUndefined())
+  expect(settled).toBe(false)
+  confirms[1]({ status: 'success' })
+  await result
+  expect(checkpoint.deletion?.['2']?.confirmed).toBe(true)
+})
+
+const originalMessageCid = 'bafy2bzacebhdmbh4f7uviyalf3dsrwwonqaqwnomzkdxxtsik74ukjgtenjco'
+const replacementMessageCid = 'bafy2bzacea7xazu4w457k2r2imovbsjugluetppmswqfod6hh5w3gshfgv2nw'
+const replacementHash = '0x52246f79586301242fdda27635e2fe2bb4874c19def11899fc246e2754e2ad28'
+
+it.each([false, true])(
+  'confirms a repriced deletion and saves the executed hash (after timeout: %s)',
+  async (afterTimeout) => {
+    const createContext = vi.fn()
+    const synapse = { storage: { createContext } } as unknown as Synapse
+    let searches = 0
+    rpc.mockImplementation(async ({ method }) => {
+      if (method === 'Filecoin.EthGetMessageCidByTransactionHash') return { '/': originalMessageCid }
+      if (method === 'Filecoin.StateSearchMsg') {
+        if (afterTimeout && searches++ === 0) return null
+        return { Message: { '/': replacementMessageCid }, Receipt: { ExitCode: 0 } }
+      }
+      if (method === 'Filecoin.EthGetTransactionHashByCid') return replacementHash
+      throw new Error(`Unexpected RPC method ${method}`)
+    })
+    let checkpoint: DatasetPiece = {
+      ...file,
+      datasetIds: ['1'],
+      deletion: { '1': { transactionHash: hash, confirmed: false } },
+    }
+    receipt.mockImplementation(async () => {
+      expect(checkpoint.deletion?.['1']?.messageCid).toBe(originalMessageCid)
+      throw new WaitForTransactionReceiptTimeoutError({ hash: hash as `0x${string}` })
+    })
+    await scheduleFileDeletion(synapse, checkpoint, (_file, change) => {
+      checkpoint = applyDeletionUpdate(checkpoint, change)
+    })
+    expect(createContext).not.toHaveBeenCalled()
+    expect(receipt).toHaveBeenCalledTimes(afterTimeout ? 1 : 0)
+    expect(checkpoint.deletion?.['1']).toEqual({
+      transactionHash: replacementHash,
+      confirmed: true,
+      messageCid: originalMessageCid,
+    })
+    expect(rpc).toHaveBeenCalledWith(
+      { method: 'Filecoin.StateSearchMsg', params: [[], { '/': originalMessageCid }, 120, true] },
+      { retryCount: 0 }
+    )
+  }
+)
+
+it('retains an unresolved deletion CID across retries without resubmitting', async () => {
+  const createContext = vi.fn()
+  const synapse = { storage: { createContext } } as unknown as Synapse
+  rpc.mockImplementation(async ({ method }) =>
+    method === 'Filecoin.EthGetMessageCidByTransactionHash' ? { '/': originalMessageCid } : null
+  )
+  receipt.mockRejectedValue(new WaitForTransactionReceiptTimeoutError({ hash: hash as `0x${string}` }))
+  let checkpoint: DatasetPiece = {
+    ...file,
+    datasetIds: ['1'],
+    deletion: { '1': { transactionHash: hash, confirmed: false } },
+  }
+  const persist = (_file: DatasetPiece, change: Parameters<typeof applyDeletionUpdate>[1]) => {
+    checkpoint = applyDeletionUpdate(checkpoint, change)
+  }
+  await expect(scheduleFileDeletion(synapse, checkpoint, persist)).rejects.toBeInstanceOf(
+    DeletionConfirmationPendingError
+  )
+  expect(checkpoint.deletion?.['1']).toEqual({
+    transactionHash: hash,
+    confirmed: false,
+    messageCid: originalMessageCid,
+  })
+  rpc.mockClear()
+  rpc.mockImplementation(async ({ method }) => {
+    if (method === 'Filecoin.StateSearchMsg')
+      return { Message: { '/': replacementMessageCid }, Receipt: { ExitCode: 0 } }
+    if (method === 'Filecoin.EthGetTransactionHashByCid') return replacementHash
+    throw new Error('A saved message CID must not need another original-hash mapping')
+  })
+  await scheduleFileDeletion(synapse, checkpoint, persist)
+  expect(rpc).toHaveBeenCalledTimes(2)
+  expect(createContext).not.toHaveBeenCalled()
+  expect(receipt).toHaveBeenCalledOnce()
+  expect(checkpoint.deletion?.['1']?.confirmed).toBe(true)
 })
