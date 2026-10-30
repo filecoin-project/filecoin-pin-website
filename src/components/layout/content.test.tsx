@@ -18,9 +18,7 @@ vi.mock('../../hooks/use-filecoin-pin-context.ts', () => ({
     refreshWallet: vi.fn(),
   }),
 }))
-vi.mock('../../hooks/use-upload-orchestration.ts', () => ({
-  useUploadOrchestration: () => ({ activeUpload: { stepStates: [], isUploading: false } }),
-}))
+vi.mock('../../context/upload-tasks-context.tsx', () => ({ useUploadTasks: () => ({ transferring: false }) }))
 vi.mock('../drive/file-browser.tsx', () => ({
   FileBrowser: ({ uploadDisabled }: { uploadDisabled: boolean }) => (
     <button disabled={uploadDisabled} type="button">

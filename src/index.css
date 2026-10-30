@@ -166,6 +166,28 @@
   background-color: var(--color-surface);
 }
 
+@utility drive-file-workspace {
+  height: clamp(28rem, 65dvh, 48rem);
+  overflow: hidden;
+}
+
+@utility drive-file-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: 1rem;
+  scrollbar-gutter: stable;
+  isolation: isolate;
+
+  & thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: var(--color-surface);
+    box-shadow: 0 1px 0 var(--color-border);
+  }
+}
+
 @utility drive-summary {
   list-style: none;
   &::-webkit-details-marker {
@@ -181,4 +203,16 @@
 .copy-feedback { animation: copy-confirmed 220ms ease-out; }
 @media (prefers-reduced-motion: reduce) {
   .copy-feedback { animation: none; }
+}
+
+@keyframes session-hint {
+  30%, 65% {
+    background-color: color-mix(in srgb, var(--color-warning) 15%, transparent);
+    color: var(--color-warning);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-warning) 15%, transparent);
+  }
+}
+
+@utility animate-session-hint {
+  animation: session-hint 800ms ease-out;
 }

@@ -230,3 +230,51 @@ it('does not resurrect archived files by combining them with a later upload to n
   expect(result[1].datasetIds).toEqual(['2', '3'])
   expect(isDeletionScheduled(result[1])).toBe(false)
 })
+
+it('reconciles a unique parked task with an indexed upload without losing its name or creating a duplicate', () => {
+  const indexed = { ...record('1', 8), uploadedAt: 2000 }
+  const local = {
+    ...record('', 0),
+    id: 'task',
+    datasetIds: [],
+    copyCount: 0,
+    uploadedAt: 1000,
+    upload: {
+      phase: 'pending' as const,
+      error: 'old confirmation error',
+      expectedCopies: 1,
+      steps: [],
+      checks: 0,
+      nextCheckAt: 0,
+      providers: [{ providerId: '1', serviceURL: 'https://sp.example', stored: true }],
+    },
+  }
+  const merged = mergeIndexedFiles([local], [indexed])
+  expect(merged).toHaveLength(1)
+  expect(merged[0].id).toBe('task')
+  expect(merged[0].datasetId).toBe('1')
+  expect(merged[0].copyCount).toBe(1)
+  expect(merged[0].upload?.phase).toBe('complete')
+  expect(merged[0].upload?.error).toBeUndefined()
+})
+
+it('does not use an older indexed upload to confirm a new parked task', () => {
+  const indexed = { ...record('1', 8), uploadedAt: 500 }
+  const local = {
+    ...record('', 0),
+    id: 'task',
+    datasetIds: [],
+    uploadedAt: 1000,
+    upload: {
+      phase: 'pending' as const,
+      expectedCopies: 1,
+      steps: [],
+      checks: 0,
+      nextCheckAt: 0,
+      providers: [{ providerId: '1', serviceURL: 'https://sp.example', stored: true }],
+    },
+  }
+  const merged = mergeIndexedFiles([local], [indexed])
+  expect(merged).toHaveLength(2)
+  expect(merged[0].upload?.phase).toBe('pending')
+})

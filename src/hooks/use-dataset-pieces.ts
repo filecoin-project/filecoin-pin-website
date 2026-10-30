@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBrowserWallet } from '../context/browser-wallet-provider.tsx'
 import { loadDriveFiles, mergeIndexedFiles } from '../lib/filecoin-pin/drive-api.ts'
 import { recoverMissingFileSizes } from '../lib/filecoin-pin/file-size.ts'
+import type { UploadCheckpoint } from '../lib/filecoin-pin/upload-checkpoint.ts'
 import { addStoredDataSetId } from '../lib/local-storage/data-set.ts'
 import { DIRECTORY_SAVE_ERROR } from '../lib/local-storage/directory-store.ts'
 import {
@@ -33,16 +34,20 @@ export interface DatasetPiece {
   network: string
   uploadedAt: number // Local upload start, or indexed storage-confirmation time.
   indexedAtBlock?: string
-  pieceId: number
+  pieceId?: number
+  upload?: UploadCheckpoint
   removedCopies?: string[]
   removalQueuedCopies?: string[]
   /** Original CAR bytes are downloaded directly instead of unpacking a UnixFS file. */
+  isDirectory?: boolean
+  /** Transient child selection; never an independent storage/deletion record. */
+  directoryEntry?: { rootCid: string; path: string }
   importedCar?: boolean
   folderPath?: string
   ipfsIndexed?: boolean
   ipfsCheckAttempts?: number
   pieceIds?: string[]
-  deletion?: Record<string, { transactionHash: string; confirmed: boolean; remaining?: boolean }>
+  deletion?: Record<string, { transactionHash: string; confirmed: boolean; remaining?: boolean; messageCid?: string }>
   /** Total copies (1 for un-replicated). */
   copyCount?: number
   /** Datasets that hold a copy of this piece (primary first). */
@@ -161,12 +166,12 @@ export const useDatasetPieces = () => {
         addStoredDataSetId(walletAddress, Number(id))
         addDataSetId?.(BigInt(id))
       }
-      void recoverMissingFileSizes(getLatestPieces(), controller.signal, async (file, fileSize) => {
+      void recoverMissingFileSizes(getLatestPieces(), controller.signal, async (file, fileSize, isDirectory) => {
         if (controller.signal.aborted || !mounted.current || currentScope.current !== walletAddress) return
         await mutatePieces((current) =>
           current.map((record) =>
             record.cid === file.cid && !record.importedCar && record.fileSize === 'Unknown'
-              ? { ...record, fileSize }
+              ? { ...record, fileSize, isDirectory: isDirectory || record.isDirectory }
               : record
           )
         )

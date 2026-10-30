@@ -1,30 +1,25 @@
-import { AlertTriangle, Folder, Loader2, ShieldCheck, Wallet } from 'lucide-react'
+import { File, Folder, Loader2, ShieldCheck, Wallet } from 'lucide-react'
 import { useState } from 'react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
+import { useUploadTasks } from '../../context/upload-tasks-context.tsx'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
-import { useUploadOrchestration } from '../../hooks/use-upload-orchestration.ts'
-import { formatFileSize } from '../../utils/format-file-size.ts'
-import { getStepLabel } from '../../utils/upload/step-utils.ts'
 import { DeveloperFooter } from '../drive/developer-footer.tsx'
 import { FileBrowser } from '../drive/file-browser.tsx'
+import { FolderPicker } from '../drive/folder-picker.tsx'
 import { SidePanel } from '../drive/side-panel.tsx'
 import { WalletSetup } from '../drive/wallet-controls.tsx'
 import { Alert } from '../ui/alert.tsx'
 import { ButtonBase as Button } from '../ui/button/button-base.tsx'
 import DragNDrop from '../upload/drag-n-drop.tsx'
-import { UploadError } from '../upload/upload-error.tsx'
-import { UploadStatus } from '../upload/upload-status.tsx'
 
 export default function Content() {
   const connection = useBrowserWallet()
-  const { wallet, synapse, storageSetup, refreshWallet } = useFilecoinPinContext()
-  // Keep the operation mounted here: closing a panel only changes its visibility.
-  const orchestration = useUploadOrchestration()
-  const { activeUpload, uploadedFile, startUpload, dragDropKey, directorySaveError, isSavingDirectory } = orchestration
+  const { wallet, synapse, storageSetup } = useFilecoinPinContext()
+  const tasks = useUploadTasks()
   const [folder, setFolder] = useState('')
   const [uploadFolder, setUploadFolder] = useState('')
-  const [panel, setPanel] = useState<'wallet' | 'upload' | 'activity' | null>(null)
-  const [progressExpanded, setProgressExpanded] = useState(true)
+  const [uploadKind, setUploadKind] = useState<'file' | 'folder'>('file')
+  const [panel, setPanel] = useState<'wallet' | 'upload' | null>(null)
   const canUpload = Boolean(
     connection.sessionStatus === 'active' && synapse && wallet.status === 'ready' && storageSetup?.status === 'ready'
   )
@@ -33,20 +28,9 @@ export default function Content() {
     wallet.status === 'idle' ||
     wallet.status === 'loading' ||
     storageSetup?.status === 'checking'
-  const uploadStep = activeUpload.stepStates.find((step) => step.status === 'in-progress')
-  const completedSteps = activeUpload.stepStates.filter((step) => step.status === 'completed').length
-  const openUpload = () => {
-    setUploadFolder(folder)
+  const openUpload = (location: string) => {
+    setUploadFolder(location)
     setPanel(canUpload ? 'upload' : 'wallet')
-  }
-  const runUpload = async (upload: () => Promise<void> | undefined) => {
-    connection.setUploading(true)
-    try {
-      await upload()
-    } finally {
-      connection.setUploading(false)
-      void refreshWallet()
-    }
   }
 
   return (
@@ -59,7 +43,10 @@ export default function Content() {
         <Button
           aria-label="Wallet and storage"
           className="w-auto"
-          onClick={() => setPanel('wallet')}
+          onClick={() => {
+            setUploadFolder(folder)
+            setPanel('wallet')
+          }}
           size="sm"
           variant="secondary"
         >
@@ -94,57 +81,12 @@ export default function Content() {
       <span className="sr-only" role="status">
         {setupChecking ? 'Checking wallet setup…' : canUpload ? 'Session ready' : 'Setup required'}
       </span>
-      <div className={uploadedFile ? 'grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_280px]' : ''}>
-        <FileBrowser
-          folder={folder}
-          onFolderChange={setFolder}
-          onUpload={openUpload}
-          uploadDisabled={setupChecking || connection.busy || connection.uploading || Boolean(uploadedFile)}
-        />
-        {uploadedFile && (
-          <aside
-            aria-label="Upload activity"
-            className="order-first rounded-xl border border-border bg-surface p-4 xl:order-last"
-          >
-            <div className="flex items-center gap-2 text-sm font-medium">
-              {activeUpload.error || directorySaveError ? (
-                <AlertTriangle aria-hidden="true" className="text-danger" size={16} />
-              ) : (
-                <Loader2 aria-hidden="true" className="animate-spin text-accent" size={16} />
-              )}
-              {directorySaveError ? 'Directory not saved' : activeUpload.error ? 'Upload failed' : 'Current upload'}
-            </div>
-            <p className="mt-2 truncate text-sm" title={uploadedFile.file.name}>
-              {uploadedFile.file.name}
-            </p>
-            <p className="mt-1 text-xs text-muted" role="status">
-              {directorySaveError
-                ? 'Open details to retry saving the file directory.'
-                : activeUpload.error
-                  ? 'Open details to retry or dismiss.'
-                  : uploadStep
-                    ? getStepLabel(uploadStep.step)
-                    : isSavingDirectory
-                      ? 'Saving file directory…'
-                      : 'Finishing upload…'}
-            </p>
-            <p className="mt-2 text-xs text-muted">
-              {completedSteps} / {activeUpload.stepStates.length} stages completed
-            </p>
-            <Button
-              className="mt-3"
-              onClick={() => {
-                setProgressExpanded(true)
-                setPanel('activity')
-              }}
-              size="sm"
-              variant="secondary"
-            >
-              View upload details
-            </Button>
-          </aside>
-        )}
-      </div>
+      <FileBrowser
+        folder={folder}
+        onFolderChange={setFolder}
+        onUpload={openUpload}
+        uploadDisabled={setupChecking || connection.busy || Boolean(tasks?.transferring)}
+      />
       <div className="flex flex-wrap justify-between gap-2 text-xs text-muted">
         <span>
           File records sync from the Filecoin index. Recent changes may take time to appear on another browser.
@@ -181,9 +123,8 @@ export default function Content() {
           </p>
           {canUpload && (
             <Button
-              disabled={connection.busy || connection.uploading || Boolean(uploadedFile)}
+              disabled={connection.busy || Boolean(tasks?.transferring)}
               onClick={() => {
-                setUploadFolder(folder)
                 setPanel('upload')
               }}
               size="sm"
@@ -194,7 +135,7 @@ export default function Content() {
         </div>
       </SidePanel>
       <SidePanel
-        description="Choose a location, then select or drop a file to upload."
+        description="Choose a location, then upload a file or an entire folder."
         onOpenChange={(open) => {
           if (!open) setPanel(null)
         }}
@@ -213,7 +154,7 @@ export default function Content() {
                 <input
                   aria-describedby="upload-path-help"
                   className="h-11 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted"
-                  disabled={connection.busy || connection.uploading}
+                  disabled={connection.busy || Boolean(tasks?.transferring)}
                   id="upload-folder"
                   onChange={(event) => setUploadFolder(event.target.value)}
                   placeholder="Choose a folder (optional)"
@@ -231,14 +172,46 @@ export default function Content() {
                 </p>
               </details>
             </div>
-            <DragNDrop
-              isUploading={connection.busy || connection.uploading}
-              key={dragDropKey}
-              onUpload={(file) => {
-                void runUpload(() => startUpload(file, uploadFolder))
-                setPanel(null)
-              }}
-            />
+            <fieldset
+              aria-label="Upload type"
+              className="mb-4 grid grid-cols-2 gap-1 rounded-xl border border-border bg-surface p-1"
+            >
+              {(['file', 'folder'] as const).map((kind) => {
+                const Icon = kind === 'file' ? File : Folder
+                return (
+                  <button
+                    aria-pressed={uploadKind === kind}
+                    className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${uploadKind === kind ? 'bg-surface-raised text-foreground shadow-sm' : 'text-muted hover:text-foreground'}`}
+                    key={kind}
+                    onClick={() => setUploadKind(kind)}
+                    type="button"
+                  >
+                    <Icon aria-hidden="true" size={16} />
+                    {kind === 'file' ? 'File' : 'Folder'}
+                  </button>
+                )
+              })}
+            </fieldset>
+            {uploadKind === 'folder' ? (
+              <FolderPicker
+                disabled={connection.busy || Boolean(tasks?.transferring)}
+                onUpload={(source) => {
+                  void tasks?.start(source, uploadFolder).then((started) => {
+                    if (started) setPanel(null)
+                  })
+                }}
+              />
+            ) : (
+              <DragNDrop
+                isUploading={connection.busy || Boolean(tasks?.transferring)}
+                key={panel === 'upload' ? 'picker' : 'closed'}
+                onUpload={(file) => {
+                  void tasks?.start(file, uploadFolder).then((started) => {
+                    if (started) setPanel(null)
+                  })
+                }}
+              />
+            )}
           </>
         ) : (
           <>
@@ -247,49 +220,6 @@ export default function Content() {
               Set up wallet
             </Button>
           </>
-        )}
-      </SidePanel>
-      <SidePanel
-        description="You can close this panel. Keep this browser tab open until the upload finishes."
-        onOpenChange={(open) => {
-          if (!open) setPanel(null)
-        }}
-        open={panel === 'activity'}
-        title="Upload details"
-      >
-        {uploadedFile ? (
-          <>
-            <p className="text-xs text-muted">Uploading to {uploadedFile.folderPath || 'Files'}</p>
-            <UploadError
-              orchestration={{
-                ...orchestration,
-                retryUpload: () => runUpload(orchestration.retryUpload),
-                cancelUpload: () => {
-                  orchestration.cancelUpload()
-                  setPanel(null)
-                },
-              }}
-            />
-            <UploadStatus
-              cid={activeUpload.currentCid}
-              confirmedCopies={activeUpload.confirmedCopies}
-              expectedCopies={activeUpload.expectedCopies}
-              fileName={uploadedFile.file.name}
-              fileSize={formatFileSize(uploadedFile.file.size)}
-              importedCar={activeUpload.importedCar}
-              isExpanded={progressExpanded}
-              onToggleExpanded={() => setProgressExpanded((expanded) => !expanded)}
-              pieceCid={activeUpload.pieceCid}
-              stepStates={activeUpload.stepStates}
-              transactionHash={activeUpload.transactionHash ?? ''}
-              transactionHashes={activeUpload.transactionHashes}
-              uploadNetwork={activeUpload.network}
-            />
-          </>
-        ) : (
-          <p className="text-sm text-success" role="status">
-            Upload finished. Your file is in the directory.
-          </p>
         )}
       </SidePanel>
     </main>

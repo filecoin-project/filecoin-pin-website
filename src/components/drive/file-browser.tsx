@@ -6,6 +6,7 @@ import {
   Eye,
   Folder,
   FolderOpen,
+  FolderUp,
   Loader2,
   MoreHorizontal,
   Search,
@@ -13,7 +14,7 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { useState } from 'react'
+import { Fragment, type ReactNode, useState } from 'react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useUploadHistory } from '../../context/upload-history-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
@@ -24,37 +25,32 @@ import { IPFS_CHECK_LIMIT, resetIndexingChecks } from '../../hooks/use-ipfs-inde
 import { displayFileName } from '../../lib/filecoin-pin/drive-api.ts'
 import { canPreviewFile } from '../../lib/filecoin-pin/file-links.ts'
 import { directoryFolders } from '../../lib/local-storage/drive-directory.ts'
-import { hasRemovalProgress, isDeletionScheduled } from '../../utils/file-deletion.ts'
+import { hasRemovalProgress, isCopyRemovalScheduled, isDeletionScheduled } from '../../utils/file-deletion.ts'
 import {
   getDatasetExplorerLink,
   getIpfsGatewayPreviewLink,
   getPieceExplorerLink,
   getTxExplorerLink,
 } from '../../utils/links.ts'
+import { copyProgress, fileStatus, fileStatusColors } from '../../utils/upload/file-status.ts'
 import { ButtonBase as Button, buttonVariants } from '../ui/button/button-base.tsx'
 import { CopyButton } from '../ui/copy-button.tsx'
+import { DirectoryBrowser } from './directory-browser.tsx'
 import { FileTypeIcon } from './file-type-icon.tsx'
+import { FileUploadDetails } from './file-upload-details.tsx'
+import { FolderInfo } from './folder-info.tsx'
 import { ProviderLink } from './provider-link.tsx'
 import { ShareFileButton } from './share-file-button.tsx'
 
-export function fileStatus(file: DatasetPiece) {
-  if (isDeletionScheduled(file)) return 'Deletion scheduled'
-  if (hasRemovalProgress(file)) return 'Deletion incomplete'
-  if (!file.cid) return 'Metadata missing'
-  if (file.ipfsIndexed === false)
-    return (file.ipfsCheckAttempts ?? 0) >= IPFS_CHECK_LIMIT
-      ? 'Stored · IPFS indexing unconfirmed'
-      : 'Stored · IPFS indexing pending'
-  return 'Stored'
-}
+export { fileStatus } from '../../utils/upload/file-status.ts'
 
 interface Props {
   folder: string
   onFolderChange: (folder: string) => void
-  onUpload?: () => void
+  onUpload?: (location: string) => void
   uploadDisabled?: boolean
 }
-export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled = false }: Props) {
+export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, uploadDisabled }: Props) {
   const {
     history,
     updateUpload,
@@ -67,12 +63,24 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
   const { synapse, storageScope } = useFilecoinPinContext()
   const connection = useBrowserWallet()
   const [search, setSearch] = useState('')
+  const [sessionHintAttempt, setSessionHintAttempt] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [directoryId, setDirectoryId] = useState<string | null>(null)
+  const openDirectory = (id: string) => {
+    setShowFolders(false)
+    setDirectoryId(id)
+    setSearch('')
+  }
+  const onFolderChange = (path: string) => {
+    setShowFolders(false)
+    setSearch('')
+    setDirectoryId(null)
+    setFolderPath(path)
+  }
   const [error, setError] = useState('')
   const [isEditing, setIsEditing] = useState(false)
-  const { deleteFile, isDeleting, deletingPieceCid, deletionError, clearDeletionError } = useFileDeletion()
-  const working = isEditing || isDeleting
-  const displayStatus = (file: DatasetPiece) => (deletingPieceCid === file.pieceCid ? 'Deleting…' : fileStatus(file))
+  const { deleteFile, deletingPieceCids, autoCheckingPieceCids, deletionErrors } = useFileDeletion()
+  const displayStatus = (file: DatasetPiece) => (deletingPieceCids.has(file.pieceCid) ? 'Deleting…' : fileStatus(file))
   const { download, queuedDownloads, downloadError, enqueueDownload, cancelQueuedDownload } = useDownloadQueue(
     synapse,
     storageScope
@@ -83,13 +91,74 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
   const visibleHistory = history.filter((file) => !isDeletionScheduled(file))
   const waitingForIndex = isLoading || (!hasLoaded && !directoryError)
   const allFolders = directoryFolders(visibleHistory, [])
+  const openedDirectory = visibleHistory.find((file) => file.id === directoryId && file.isDirectory)
+  const uploadedFolders = visibleHistory.filter((file) => file.isDirectory)
+  const renderFolderTree = (parent: string, depth: number): ReactNode => (
+    <>
+      {allFolders
+        .filter((path) => path.split('/').slice(0, -1).join('/') === parent)
+        .map((path) => (
+          <Fragment key={path}>
+            <button
+              aria-current={!directoryId && folder === path ? 'page' : undefined}
+              className={`flex w-full items-center gap-2.5 rounded-lg py-2.5 pr-2 text-left text-sm transition-colors ${!directoryId && folder === path ? 'bg-brand-800/15 text-accent' : 'text-muted hover:bg-surface-raised hover:text-foreground'}`}
+              onClick={() => onFolderChange(path)}
+              style={{ paddingLeft: 12 + depth * 16 }}
+              title={path}
+              type="button"
+            >
+              <Folder aria-hidden="true" className="shrink-0" size={16} />
+              <span className="truncate">{path.split('/').at(-1)}</span>
+            </button>
+            {renderFolderTree(path, depth + 1)}
+          </Fragment>
+        ))}
+      {uploadedFolders
+        .filter((file) => (file.folderPath ?? '') === parent)
+        .map((file) => (
+          <button
+            aria-current={directoryId === file.id ? 'page' : undefined}
+            className={`flex w-full items-center gap-2.5 rounded-lg py-2.5 pr-2 text-left text-sm transition-colors ${directoryId === file.id ? 'bg-brand-800/15 text-accent' : 'text-muted hover:bg-surface-raised hover:text-foreground'}`}
+            disabled={!file.cid}
+            key={file.id}
+            onClick={() => openDirectory(file.id)}
+            style={{ paddingLeft: 12 + depth * 16 }}
+            title={[file.folderPath, displayFileName(file)].filter(Boolean).join('/')}
+            type="button"
+          >
+            <FolderUp aria-hidden="true" className="shrink-0" size={16} />
+            <span className="truncate">{displayFileName(file)}</span>
+            {uploadedFolders.some(
+              (other) => other.id !== file.id && other.fileName === file.fileName && (other.folderPath ?? '') === parent
+            ) && (
+              <span className="ml-auto shrink-0 text-[10px]">
+                {file.uploadedAt ? new Date(file.uploadedAt).toLocaleTimeString() : 'Unknown'}
+              </span>
+            )}
+          </button>
+        ))}
+    </>
+  )
   const selected = history.find((file) => file.id === selectedId)
+  const working = isEditing || Boolean(selected && deletingPieceCids.has(selected.pieceCid))
+  const deletionError = selected
+    ? (deletionErrors[selected.pieceCid] ?? '')
+    : Object.entries(deletionErrors)
+        .map(([cid, message]) => `${history.find((file) => file.pieceCid === cid)?.fileName ?? cid}: ${message}`)
+        .join('\n')
   const selectedAliases = selected ? history.filter((file) => file.pieceCid === selected.pieceCid) : []
   const allAliasesScheduled =
     selectedAliases.length > 0 && selectedAliases.every((file) => fileStatus(file) === 'Deletion scheduled')
   const affectedAliases = selectedAliases.filter((file) => !isDeletionScheduled(file))
   const hasDeletionProgress = affectedAliases.some(hasRemovalProgress)
-  const disabled = working || Boolean(download) || connection.busy || connection.deleting
+  const waitingForDeletion = Boolean(
+    selected &&
+      Object.entries(selected.deletion ?? {}).some(
+        ([id, checkpoint]) => !checkpoint.confirmed && !isCopyRemovalScheduled(selected, id)
+      )
+  )
+  const autoCheckingDeletion = Boolean(selected && autoCheckingPieceCids.has(selected.pieceCid))
+  const disabled = working || autoCheckingDeletion || Boolean(download) || connection.busy
   const isQueued = (id: string) => queuedDownloads.some((file) => file.id === id)
   const files = visibleHistory
     .filter((file) =>
@@ -104,14 +173,12 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
   const choose = (file: DatasetPiece) => {
     setSelectedId(file.id)
     setDeleteConsent(false)
-    clearDeletionError()
     setError('')
   }
   const act = async (action: () => Promise<void>) => {
     if (disabled) return
     setIsEditing(true)
     setError('')
-    clearDeletionError()
     try {
       await action()
     } catch (cause) {
@@ -123,10 +190,11 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
   const downloadBlocked = (file: DatasetPiece) =>
     !isQueued(file.id) &&
     (isEditing ||
-      deletingPieceCid === file.pieceCid ||
+      deletingPieceCids.has(file.pieceCid) ||
       download?.id === file.id ||
       !synapse ||
       !file.cid ||
+      !file.pieceCid ||
       isDeletionScheduled(file))
   const downloadOriginal = (file: DatasetPiece) => {
     if (downloadBlocked(file)) return
@@ -135,16 +203,13 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
       return
     }
     setError('')
-    clearDeletionError()
     enqueueDownload(file)
   }
   const deleteSelectedFile = async () => {
     if (!selected || disabled) return
     setError('')
-    clearDeletionError()
     if (!(await deleteFile(selected))) return
-    setDeleteConsent(false)
-    setSelectedId(null)
+    setSelectedId((current) => (current === selected.id ? null : current))
   }
 
   return (
@@ -158,7 +223,22 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
             </span>
           </h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 md:w-auto">
+          <label className="relative w-full md:w-64">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+              size={15}
+            />
+            <span className="sr-only">{openedDirectory ? 'Search this folder' : 'Search file list'}</span>
+            <input
+              className="drive-field h-10 w-full pl-9 pr-3 text-xs"
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={openedDirectory ? 'Search this folder' : 'Search file list'}
+              type="search"
+              value={search}
+            />
+          </label>
           <Button
             className="w-auto"
             disabled={isLoading || isEditing}
@@ -173,8 +253,8 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
             <Button
               aria-label="Upload files"
               className="w-auto"
-              disabled={isEditing || connection.busy || connection.uploading || uploadDisabled}
-              onClick={onUpload}
+              disabled={isEditing || connection.busy || (uploadDisabled ?? connection.uploading)}
+              onClick={() => onUpload?.(openedDirectory ? '' : folder)}
               size="sm"
             >
               <Upload aria-hidden="true" size={14} />
@@ -236,12 +316,14 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
           {error || deletionError}
         </p>
       )}
-      <div className="grid md:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="drive-file-workspace grid grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[220px_minmax(0,1fr)] md:grid-rows-1">
         <nav
           aria-label="File folders"
-          className="space-y-1 border-b border-border bg-canvas/30 p-4 md:border-b-0 md:border-r md:p-5"
+          className="min-h-0 space-y-1 border-b border-border bg-canvas/30 p-4 md:border-b-0 md:border-r md:p-5"
         >
-          <p className="px-2 pb-3 text-[10px] font-medium tracking-[0.14em] text-muted">FOLDERS</p>
+          <p className="flex items-center gap-1 px-2 pb-3 text-[10px] font-medium tracking-[0.14em] text-muted">
+            FOLDERS <FolderInfo />
+          </p>
           <button
             aria-expanded={showFolders}
             className="mb-2 flex w-full items-center justify-between rounded-lg border border-border px-3 py-2.5 text-sm md:hidden"
@@ -258,11 +340,13 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
               size={15}
             />
           </button>
-          <div className={`${showFolders ? 'block' : 'hidden'} md:block`}>
+          <div
+            className={`${showFolders ? 'block' : 'hidden'} max-h-40 overflow-y-auto md:block md:max-h-none md:overflow-visible`}
+          >
             <button
-              aria-current={folder === '' ? 'page' : undefined}
+              aria-current={!directoryId && folder === '' ? 'page' : undefined}
               aria-label="Files (root)"
-              className={`flex w-full items-center gap-2.5 rounded-lg p-2.5 text-left text-sm transition-colors ${folder === '' ? 'bg-brand-800/15 text-accent' : 'text-muted hover:bg-surface-raised hover:text-foreground'}`}
+              className={`flex w-full items-center gap-2.5 rounded-lg p-2.5 text-left text-sm transition-colors ${!directoryId && folder === '' ? 'bg-brand-800/15 text-accent' : 'text-muted hover:bg-surface-raised hover:text-foreground'}`}
               onClick={() => onFolderChange('')}
               type="button"
             >
@@ -271,204 +355,222 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
               Files
             </button>
             <div className="ml-8 max-h-52 overflow-y-auto border-l border-border pl-2 md:max-h-80">
-              {allFolders.map((path) => (
-                <button
-                  aria-current={folder === path ? 'page' : undefined}
-                  className={`flex w-full items-center gap-2.5 rounded-lg py-2.5 pr-2 text-left text-sm transition-colors ${folder === path ? 'bg-brand-800/15 text-accent' : 'text-muted hover:bg-surface-raised hover:text-foreground'}`}
-                  key={path}
-                  onClick={() => onFolderChange(path)}
-                  style={{ paddingLeft: `${12 + (path.split('/').length - 1) * 16}px` }}
-                  title={path}
-                  type="button"
-                >
-                  <Folder className="shrink-0" size={15} />
-                  <span className="truncate">{path.split('/').at(-1)}</span>
-                </button>
-              ))}
+              {renderFolderTree('', 0)}
             </div>
           </div>
         </nav>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
-            <div className="flex min-w-0 flex-wrap items-center gap-3">
-              <nav aria-label="Current folder" className="flex flex-wrap items-center gap-2 text-sm">
-                <button className="text-muted hover:text-accent" onClick={() => onFolderChange('')} type="button">
-                  Files
-                </button>
-                {folder
-                  .split('/')
-                  .filter(Boolean)
-                  .map((part, index, parts) => (
-                    <span className="flex gap-2" key={parts.slice(0, index + 1).join('/')}>
-                      <ChevronRight aria-hidden="true" className="self-center text-muted" size={13} />
-                      <button
-                        className="hover:text-accent"
-                        onClick={() => onFolderChange(parts.slice(0, index + 1).join('/'))}
-                        type="button"
-                      >
-                        {part}
-                      </button>
-                    </span>
-                  ))}
-              </nav>
-            </div>
-            <div className="relative w-full sm:w-56">
-              <Search
-                aria-hidden="true"
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
-                size={15}
-              />
-              <input
-                aria-label="Search all files"
-                className="drive-field h-9 w-full pl-9 pr-3 text-xs"
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search all files"
-                type="search"
-                value={search}
-              />
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className={`${files.length || children.length ? 'min-w-[760px]' : ''} w-full text-left text-sm`}>
-              <thead className="bg-canvas/30 text-[11px] font-normal text-muted">
-                <tr>
-                  <th className="p-4">Name</th>
-                  <th className="p-4">Size</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4">Copies</th>
-                  <th className="p-4">Uploaded</th>
-                  <th className="p-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {!search &&
-                  children.map((path) => (
-                    <tr className="border-t border-border" key={path}>
-                      <td className="p-4" colSpan={6}>
+        {openedDirectory ? (
+          <DirectoryBrowser
+            activeDownloadId={download?.id}
+            downloadBlocked={downloadBlocked}
+            file={openedDirectory}
+            isQueued={isQueued}
+            key={openedDirectory.id}
+            onDownload={downloadOriginal}
+            onFolderChange={onFolderChange}
+            onSearchChange={setSearch}
+            search={search}
+          />
+        ) : (
+          <div className="flex min-h-0 min-w-0 flex-col">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
+                <nav aria-label="Current folder" className="flex flex-wrap items-center gap-2 text-sm">
+                  <button className="text-muted hover:text-accent" onClick={() => onFolderChange('')} type="button">
+                    Files
+                  </button>
+                  {folder
+                    .split('/')
+                    .filter(Boolean)
+                    .map((part, index, parts) => (
+                      <span className="flex gap-2" key={parts.slice(0, index + 1).join('/')}>
+                        <ChevronRight aria-hidden="true" className="self-center text-muted" size={13} />
                         <button
-                          className="flex items-center gap-2 hover:underline"
-                          onClick={() => onFolderChange(path)}
+                          className="hover:text-accent"
+                          onClick={() => onFolderChange(parts.slice(0, index + 1).join('/'))}
                           type="button"
                         >
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-800/10 text-accent">
-                            <Folder aria-hidden="true" size={16} />
-                          </span>
-                          {path.split('/').at(-1)}
+                          {part}
                         </button>
+                      </span>
+                    ))}
+                </nav>
+              </div>
+            </div>
+            <section aria-label="Files list" className="drive-file-list" key={`${folder}:${search}`}>
+              <table className={`${files.length || children.length ? 'min-w-[760px]' : ''} w-full text-left text-sm`}>
+                <thead className="text-[11px] font-normal text-muted">
+                  <tr>
+                    <th className="p-4">Name</th>
+                    <th className="p-4">Size</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4">Copies</th>
+                    <th className="p-4">Uploaded</th>
+                    <th className="p-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {!search &&
+                    children.map((path) => (
+                      <tr className="border-t border-border" key={path}>
+                        <td className="p-4 whitespace-nowrap" colSpan={6}>
+                          <button
+                            className="inline-flex items-center gap-2 align-middle text-left hover:underline"
+                            onClick={() => onFolderChange(path)}
+                            type="button"
+                          >
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-800/10 text-accent">
+                              <Folder aria-hidden="true" size={16} />
+                            </span>
+                            {path.split('/').at(-1)}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  {files.map((file) => (
+                    <tr className="border-t border-border hover:bg-surface" key={file.id}>
+                      <td className="p-4 whitespace-nowrap">
+                        <button
+                          aria-label={displayFileName(file)}
+                          className="inline-flex items-center gap-2 align-middle text-left hover:underline"
+                          onClick={() => (file.isDirectory && file.cid ? openDirectory(file.id) : choose(file))}
+                          type="button"
+                        >
+                          {file.isDirectory ? (
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-800/10 text-accent">
+                              <FolderUp aria-hidden="true" size={16} />
+                            </span>
+                          ) : (
+                            <FileTypeIcon fileName={file.fileName} importedCar={file.importedCar} />
+                          )}
+                          <span className="max-w-[260px] truncate">
+                            {search && file.folderPath ? `${file.folderPath}/` : ''}
+                            {displayFileName(file)}
+                          </span>
+                        </button>
+                      </td>
+                      <td className="p-4 whitespace-nowrap">{file.fileSize}</td>
+                      <td className="p-4">
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] ${fileStatusColors(displayStatus(file))}`}
+                        >
+                          <span className="h-1 w-1 shrink-0 rounded-full bg-current" />
+                          {displayStatus(file)}
+                        </span>
+                      </td>
+                      <td className="p-4 tabular-nums text-muted">
+                        <span className="whitespace-nowrap">
+                          {file.upload
+                            ? `${file.copyCount ?? 0} / ${file.upload.expectedCopies} confirmed`
+                            : (file.copyCount ?? 1)}
+                        </span>
+                        {copyProgress(file) && (
+                          <span className="mt-1 block text-[11px] text-warning">{copyProgress(file)}</span>
+                        )}
+                      </td>
+                      <td className="p-4 whitespace-nowrap text-xs text-muted">
+                        {file.uploadedAt
+                          ? file.isDirectory &&
+                            uploadedFolders.some(
+                              (other) =>
+                                other.id !== file.id &&
+                                other.fileName === file.fileName &&
+                                other.folderPath === file.folderPath
+                            )
+                            ? new Date(file.uploadedAt).toLocaleString()
+                            : new Date(file.uploadedAt).toLocaleDateString()
+                          : 'Unknown'}
+                      </td>
+                      <td className="p-4">
+                        <div className="flex gap-3">
+                          <button
+                            aria-label={
+                              isQueued(file.id) ? `Cancel queued download for ${displayFileName(file)}` : undefined
+                            }
+                            className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent disabled:opacity-40"
+                            disabled={downloadBlocked(file)}
+                            onClick={() => downloadOriginal(file)}
+                            type="button"
+                          >
+                            {download?.id === file.id ? (
+                              <Loader2 aria-hidden="true" className="animate-spin" size={14} />
+                            ) : isQueued(file.id) ? (
+                              <X aria-hidden="true" size={14} />
+                            ) : (
+                              <Download aria-hidden="true" size={14} />
+                            )}
+                            {download?.id === file.id
+                              ? 'Downloading…'
+                              : isQueued(file.id)
+                                ? 'Queued · Cancel'
+                                : file.isDirectory
+                                  ? 'Download ZIP'
+                                  : 'Download'}
+                          </button>
+                          <ShareFileButton
+                            disabled={
+                              deletingPieceCids.has(file.pieceCid) ||
+                              Boolean(file.upload && file.upload.phase !== 'complete')
+                            }
+                            file={file}
+                          />
+                          <button
+                            className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent"
+                            onClick={() => choose(file)}
+                            type="button"
+                          >
+                            <MoreHorizontal aria-hidden="true" size={14} />
+                            Details
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
-                {files.map((file) => (
-                  <tr className="border-t border-border hover:bg-surface" key={file.id}>
-                    <td className="p-4">
-                      <button
-                        className="flex items-center gap-2 text-left hover:underline"
-                        onClick={() => choose(file)}
-                        type="button"
-                      >
-                        <FileTypeIcon fileName={file.fileName} importedCar={file.importedCar} />
-                        <span className="max-w-[260px] truncate">
-                          {search && file.folderPath ? `${file.folderPath}/` : ''}
-                          {displayFileName(file)}
+                  {files.length === 0 && (search || children.length === 0) && (
+                    <tr>
+                      <td className="px-5 py-16 text-center text-muted" colSpan={6}>
+                        <span
+                          aria-hidden="true"
+                          className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-canvas/40 text-accent"
+                        >
+                          <FolderOpen size={24} />
                         </span>
-                      </button>
-                    </td>
-                    <td className="p-4 whitespace-nowrap">{file.fileSize}</td>
-                    <td className="p-4">
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] ${deletingPieceCid === file.pieceCid || fileStatus(file) === 'Deletion incomplete' ? 'bg-amber-500/10 text-warning' : file.cid ? (file.ipfsIndexed === false ? 'bg-brand-800/15 text-accent' : 'bg-emerald-500/10 text-success') : 'bg-surface-raised text-muted'}`}
-                        title={
-                          file.ipfsIndexed === false && !file.deletion
-                            ? (file.ipfsCheckAttempts ?? 0) >= IPFS_CHECK_LIMIT
-                              ? 'Automatic checks stopped after 5 attempts. The file is stored and can still be downloaded.'
-                              : `Checking IPFS indexing up to 5 times, every 2 minutes (${file.ipfsCheckAttempts ?? 0}/5 completed).`
-                            : undefined
-                        }
-                      >
-                        <span className="h-1 w-1 shrink-0 rounded-full bg-current" />
-                        {displayStatus(file)}
-                      </span>
-                    </td>
-                    <td className="p-4 tabular-nums text-muted">{file.copyCount ?? 1}</td>
-                    <td className="p-4 whitespace-nowrap text-xs text-muted">
-                      {file.uploadedAt ? new Date(file.uploadedAt).toLocaleDateString() : 'Unknown'}
-                    </td>
-                    <td className="p-4">
-                      <div className="flex gap-3">
-                        <button
-                          aria-label={
-                            isQueued(file.id) ? `Cancel queued download for ${displayFileName(file)}` : undefined
-                          }
-                          className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent disabled:opacity-40"
-                          disabled={downloadBlocked(file)}
-                          onClick={() => downloadOriginal(file)}
-                          type="button"
-                        >
-                          {download?.id === file.id ? (
-                            <Loader2 aria-hidden="true" className="animate-spin" size={14} />
-                          ) : isQueued(file.id) ? (
-                            <X aria-hidden="true" size={14} />
-                          ) : (
-                            <Download aria-hidden="true" size={14} />
-                          )}
-                          {download?.id === file.id
-                            ? 'Downloading…'
-                            : isQueued(file.id)
-                              ? 'Queued · Cancel'
-                              : 'Download'}
-                        </button>
-                        <ShareFileButton disabled={deletingPieceCid === file.pieceCid} file={file} />
-                        <button
-                          className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent"
-                          onClick={() => choose(file)}
-                          type="button"
-                        >
-                          <MoreHorizontal aria-hidden="true" size={14} />
-                          Details
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {files.length === 0 && (search || children.length === 0) && (
-                  <tr>
-                    <td className="px-5 py-16 text-center text-muted" colSpan={6}>
-                      <span
-                        aria-hidden="true"
-                        className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-canvas/40 text-accent"
-                      >
-                        <FolderOpen size={24} />
-                      </span>
-                      <p className="mb-2 text-sm font-medium text-foreground">
-                        {waitingForIndex
-                          ? 'Loading files from Filecoin…'
-                          : directoryError && !visibleHistory.length
-                            ? 'Unable to load files from Filecoin'
-                            : search
-                              ? 'No matching files.'
-                              : 'A little space for something new'}
-                      </p>
-                      <p className="text-xs">
-                        {waitingForIndex
-                          ? 'Checking the Filecoin index for your files.'
-                          : directoryError && !visibleHistory.length
-                            ? 'Your files may still be stored on Filecoin. Retry loading the file list.'
-                            : search
-                              ? 'Try a different file name or folder.'
-                              : 'No files here yet. Upload to this folder.'}
-                      </p>
-                      {directoryError && !visibleHistory.length && !isLoading && (
-                        <Button className="mt-4 w-auto" onClick={() => refreshHistory()} size="sm" variant="secondary">
-                          Retry loading
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                        <p className="mb-2 text-sm font-medium text-foreground">
+                          {waitingForIndex
+                            ? 'Loading files from Filecoin…'
+                            : directoryError && !visibleHistory.length
+                              ? 'Unable to load files from Filecoin'
+                              : search
+                                ? 'No matching files.'
+                                : 'A little space for something new'}
+                        </p>
+                        <p className="text-xs">
+                          {waitingForIndex
+                            ? 'Checking the Filecoin index for your files.'
+                            : directoryError && !visibleHistory.length
+                              ? 'Your files may still be stored on Filecoin. Retry loading the file list.'
+                              : search
+                                ? 'Try a different file name or folder.'
+                                : 'No files here yet. Upload to this folder.'}
+                        </p>
+                        {directoryError && !visibleHistory.length && !isLoading && (
+                          <Button
+                            className="mt-4 w-auto"
+                            onClick={() => refreshHistory()}
+                            size="sm"
+                            variant="secondary"
+                          >
+                            Retry loading
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </section>
           </div>
-        </div>
+        )}
       </div>
       <Dialog.Root
         onOpenChange={(open) => {
@@ -505,12 +607,15 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
               <>
                 <div className="text-sm space-y-2">
                   <p>
-                    {selected.fileSize} · {displayStatus(selected)}
+                    {selected.fileSize}
+                    {!selected.upload && ` · ${displayStatus(selected)}`}
                   </p>
                   {selected.ipfsIndexed === false &&
                     !selected.deletion &&
+                    (!selected.upload || selected.upload.phase === 'complete') &&
                     (selected.ipfsCheckAttempts ?? 0) >= IPFS_CHECK_LIMIT && (
-                      <div className="mt-2 space-y-2">
+                      <details className="mt-2 space-y-2">
+                        <summary className="cursor-pointer text-xs text-muted">IPFS indexing</summary>
                         <p className="text-xs text-muted">
                           Automatic indexing checks stopped after 5 attempts. Your stored file can still be downloaded.
                         </p>
@@ -527,7 +632,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                         >
                           Retry indexing checks
                         </Button>
-                      </div>
+                      </details>
                     )}
                   <p>
                     {selected.id.startsWith('indexed-') ? 'Storage confirmed' : 'Uploaded'}{' '}
@@ -561,10 +666,15 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                           ? 'Queued · Cancel'
                           : 'Download'}
                     </Button>
-                    {canPreviewFile(selected) && fileStatus(selected) !== 'Deletion scheduled' ? (
+                    {(selected.isDirectory || canPreviewFile(selected)) &&
+                    (!selected.upload || selected.upload.phase === 'complete') &&
+                    fileStatus(selected) !== 'Deletion scheduled' ? (
                       <a
                         className={buttonVariants({ variant: 'secondary', size: 'sm' })}
-                        href={getIpfsGatewayPreviewLink(selected.cid, displayFileName(selected))}
+                        href={getIpfsGatewayPreviewLink(
+                          selected.cid,
+                          selected.isDirectory ? '' : displayFileName(selected)
+                        )}
                         rel="noopener noreferrer"
                         target="_blank"
                         title="Open via IPFS gateway in a new tab. Media support depends on your browser and file encoding."
@@ -609,7 +719,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                         className="mt-1 w-full rounded border border-border p-2 font-mono text-xs"
                         id={label.replaceAll(' ', '-')}
                         readOnly
-                        value={value || 'Missing from this browser directory'}
+                        value={value || (selected.upload ? 'Not available yet' : 'Missing from this browser directory')}
                       />
                       {value && <CopyButton className="mt-1" label={`Copy ${label}`} value={value} />}
                     </div>
@@ -625,62 +735,71 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                     </a>
                   )}
                 </section>
+                <FileUploadDetails file={selected} />
                 <section className="space-y-3">
                   <h3 className="font-medium">Storage copies</h3>
-                  {(selected.datasetIds ?? [selected.datasetId]).map((datasetId, index) => (
-                    <div className="rounded-lg border border-border p-3 text-sm space-y-2" key={datasetId}>
-                      <p>{selected.providerNames?.[index] || selected.providerName || 'Storage provider'}</p>
-                      <div className="flex flex-wrap gap-3">
-                        <a
-                          className="underline"
-                          href={getDatasetExplorerLink(datasetId, selected.network)}
-                          rel="noopener noreferrer"
-                          target="_blank"
-                        >
-                          Dataset {datasetId}
-                        </a>
-                        {(selected.providerIds?.[index] || selected.providerId) && (
-                          <ProviderLink
-                            network={selected.network === 'mainnet' ? 'mainnet' : 'calibration'}
-                            providerId={selected.providerIds?.[index] ?? selected.providerId}
-                          />
-                        )}
-                        {(selected.transactionHashes?.[index] || selected.transactionHash) && (
+                  {(selected.datasetIds ?? [selected.datasetId]).map((datasetId, index) => {
+                    const checkpoint = selected.deletion?.[datasetId]
+                    const removalStatus = selected.removedCopies?.includes(datasetId)
+                      ? 'Removed'
+                      : isCopyRemovalScheduled(selected, datasetId)
+                        ? 'Removal scheduled'
+                        : checkpoint?.confirmed
+                          ? 'More removals needed'
+                          : checkpoint
+                            ? 'Deletion pending'
+                            : null
+                    return (
+                      <div className="rounded-lg border border-border p-3 text-sm space-y-2" key={datasetId}>
+                        <p>{selected.providerNames?.[index] || selected.providerName || 'Storage provider'}</p>
+                        <div className="flex flex-wrap gap-3">
                           <a
                             className="underline"
-                            href={getTxExplorerLink(
-                              selected.transactionHashes?.[index] ?? selected.transactionHash,
-                              selected.network
-                            )}
+                            href={getDatasetExplorerLink(datasetId, selected.network)}
                             rel="noopener noreferrer"
                             target="_blank"
                           >
-                            Upload transaction
+                            Dataset {datasetId}
                           </a>
-                        )}
-                        {selected.removedCopies?.includes(datasetId) ? (
-                          <span className="text-muted">Removed</span>
-                        ) : selected.removalQueuedCopies?.includes(datasetId) ? (
-                          <span className="text-warning">Removal scheduled</span>
-                        ) : null}
-                        {selected.deletion?.[datasetId] && (
-                          <a
-                            className="underline"
-                            href={getTxExplorerLink(selected.deletion[datasetId].transactionHash, selected.network)}
-                            rel="noopener noreferrer"
-                            target="_blank"
-                          >
-                            Deletion{' '}
-                            {selected.deletion[datasetId].confirmed
-                              ? selected.deletion[datasetId].remaining
-                                ? 'batch scheduled · more remain'
-                                : 'scheduled'
-                              : 'pending'}
-                          </a>
-                        )}
+                          {(selected.providerIds?.[index] || selected.providerId) && (
+                            <ProviderLink
+                              network={selected.network === 'mainnet' ? 'mainnet' : 'calibration'}
+                              providerId={selected.providerIds?.[index] ?? selected.providerId}
+                            />
+                          )}
+                          {(selected.transactionHashes?.[index] || selected.transactionHash) && (
+                            <a
+                              className="underline"
+                              href={getTxExplorerLink(
+                                selected.transactionHashes?.[index] ?? selected.transactionHash,
+                                selected.network
+                              )}
+                              rel="noopener noreferrer"
+                              target="_blank"
+                            >
+                              Upload transaction
+                            </a>
+                          )}
+                          {removalStatus &&
+                            (checkpoint?.transactionHash ? (
+                              <a
+                                className="underline"
+                                href={getTxExplorerLink(checkpoint.transactionHash, selected.network)}
+                                rel="noopener noreferrer"
+                                target="_blank"
+                                title="View deletion transaction"
+                              >
+                                {removalStatus}
+                              </a>
+                            ) : (
+                              <span className={removalStatus === 'Removed' ? 'text-muted' : 'text-warning'}>
+                                {removalStatus}
+                              </span>
+                            ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </section>
                 <section className="space-y-3 border-t border-border pt-5">
                   <h3 className="flex items-center gap-2 font-medium">
@@ -720,20 +839,51 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                     Delete all recorded copies of this content.
                   </label>
                   <Button
-                    disabled={disabled || !deleteConsent || !connection.session || allAliasesScheduled}
-                    onClick={() => void deleteSelectedFile()}
+                    aria-describedby={connection.session ? undefined : 'delete-session-hint'}
+                    aria-disabled={!connection.session || undefined}
+                    className={connection.session ? undefined : 'opacity-50 cursor-not-allowed'}
+                    disabled={
+                      disabled ||
+                      (Boolean(connection.session) && !deleteConsent) ||
+                      allAliasesScheduled ||
+                      Boolean(selected.upload && selected.upload.phase !== 'complete')
+                    }
+                    onClick={() => {
+                      if (connection.session) {
+                        void deleteSelectedFile()
+                      } else {
+                        setSessionHintAttempt((attempt) => attempt + 1)
+                      }
+                    }}
                     size="sm"
                     variant="danger"
                   >
                     <Trash2 aria-hidden="true" size={14} />
-                    {working && !download
-                      ? 'Processing…'
-                      : hasDeletionProgress
-                        ? 'Continue deletion'
-                        : 'Schedule deletion'}
+                    {autoCheckingDeletion
+                      ? 'Checking deletion status…'
+                      : working && !download
+                        ? 'Processing…'
+                        : hasDeletionProgress
+                          ? 'Continue deletion'
+                          : 'Schedule deletion'}
                   </Button>
+                  {selected.upload && selected.upload.phase !== 'complete' && (
+                    <p className="text-sm text-muted">Wait for the upload to finish before deleting this content.</p>
+                  )}
+                  {waitingForDeletion && !working && (
+                    <p className="text-sm text-muted" role="status">
+                      Waiting for deletion confirmation.
+                    </p>
+                  )}
                   {!connection.session && (
-                    <p className="text-sm text-muted">Authorize a browser session in Wallet setup first.</p>
+                    <p
+                      className={`rounded-md text-sm text-muted ${sessionHintAttempt ? 'animate-session-hint' : ''}`}
+                      id="delete-session-hint"
+                      key={sessionHintAttempt}
+                      role={sessionHintAttempt ? 'alert' : undefined}
+                    >
+                      Authorize a browser session in Wallet setup first.
+                    </p>
                   )}
                 </section>
                 {(error || deletionError) && (

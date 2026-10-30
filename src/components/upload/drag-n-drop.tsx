@@ -2,6 +2,7 @@ import { Root } from '@radix-ui/react-form'
 import { useState } from 'react'
 import { MAX_FILE_SIZE } from '@/constants/files.ts'
 import { FilePicker } from '../file-picker/index.tsx'
+import { UploadNotes } from '../file-picker/upload-instructions.tsx'
 import { ButtonBase as Button } from '../ui/button/button-base.tsx'
 
 interface DragNDropProps {
@@ -20,7 +21,6 @@ export default function DragNDrop({ onFileSelected, onUpload, isUploading }: Dra
     e.preventDefault() // Prevent form submission
     if (file) {
       onUpload(file)
-      setFile(null)
     }
   }
 
@@ -30,8 +30,9 @@ export default function DragNDrop({ onFileSelected, onUpload, isUploading }: Dra
   }
 
   return (
-    <Root className="space-y-6" onSubmit={(e) => e.preventDefault()}>
+    <Root className="space-y-4" onSubmit={(e) => e.preventDefault()}>
       <FilePicker
+        disabled={isUploading}
         file={file}
         maxSize={MAX_FILE_SIZE}
         onChange={(file) => {
@@ -42,12 +43,14 @@ export default function DragNDrop({ onFileSelected, onUpload, isUploading }: Dra
         }}
       />
 
+      <UploadNotes />
       <div className="flex justify-end">
-        <div className="flex gap-4 items-center">
+        <div className="flex items-center gap-2">
           <Button
             className="w-auto min-w-24"
             disabled={buttonIsDisabled}
             onClick={clearFile}
+            size="sm"
             type="button"
             variant="secondary"
           >
@@ -58,6 +61,7 @@ export default function DragNDrop({ onFileSelected, onUpload, isUploading }: Dra
             disabled={buttonIsDisabled}
             loading={isUploading}
             onClick={uploadFile}
+            size="sm"
             type="button"
             variant="primary"
           >

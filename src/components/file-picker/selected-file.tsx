@@ -1,29 +1,45 @@
 'use client'
 
-import { XIcon } from 'lucide-react'
+import { File, FolderUp, XIcon } from 'lucide-react'
+import { formatFileSize } from '../../utils/format-file-size.ts'
 import { DashedContainer } from './dashed-container.tsx'
 
 type SelectedFileProps = {
-  file: File
+  file: Pick<File, 'name' | 'size'>
   onReset: () => void
+  kind?: 'file' | 'folder'
+  count?: number
+  disabled?: boolean
 }
 
-export function SelectedFile({ file, onReset }: SelectedFileProps) {
+export function SelectedFile({ file, onReset, kind = 'file', count, disabled }: SelectedFileProps) {
+  const Icon = kind === 'folder' ? FolderUp : File
   return (
-    <DashedContainer>
-      <div className="flex items-center gap-1 min-w-0">
-        <p className="font-medium text-foreground break-words min-w-0">{file.name}</p>
-        <button
-          className="group/button cursor-pointer rounded-full p-2 focus:outline-none"
-          onClick={onReset}
-          type="button"
+    <DashedContainer className="relative">
+      <div className="flex min-w-0 flex-col items-center gap-4 text-center text-sm">
+        <span
+          aria-hidden="true"
+          className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-800/15 text-accent"
         >
-          <div className="group-focus/button:brand-outline rounded-full bg-surface-raised p-2 text-foreground group-hover/button:bg-surface-hover">
-            <span className="sr-only">Remove selected file</span>
-            <XIcon size={16} />
-          </div>
-        </button>
+          <Icon size={22} />
+        </span>
+        <div className="min-w-0 space-y-1">
+          <p className="break-all font-medium text-foreground">{file.name}</p>
+          <p className="text-xs text-muted">
+            {kind === 'folder' && `${count ?? 0} files · `}
+            {formatFileSize(file.size)}
+          </p>
+        </div>
       </div>
+      <button
+        aria-label={`Remove selected ${kind}`}
+        className="absolute right-3 top-3 rounded-lg p-2 text-muted hover:bg-surface-raised hover:text-foreground focus:brand-outline disabled:opacity-40"
+        disabled={disabled}
+        onClick={onReset}
+        type="button"
+      >
+        <XIcon aria-hidden="true" size={16} />
+      </button>
     </DashedContainer>
   )
 }

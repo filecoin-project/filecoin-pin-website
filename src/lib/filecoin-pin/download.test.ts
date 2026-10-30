@@ -80,3 +80,61 @@ it('downloads an imported archive as the original CAR bytes rather than its inne
     vi.unstubAllGlobals()
   }
 })
+
+it.each([false, true])(
+  'downloads and validates a parked piece without resolving a dataset (CAR: %s)',
+  async (importedCar) => {
+    const { calculate } = await import('@filoz/synapse-core/piece')
+    const { downloadFile } = await import('./download.ts')
+    const original = new File(['already on the SP'], 'sample.txt')
+    const car = await createCarFromFile(original)
+    const pieceCid = (await calculate(car.carBytes)).toString()
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(new Uint8Array(car.carBytes)))
+    vi.stubGlobal('fetch', fetchMock)
+    const blobs: Blob[] = []
+    const createUrl = vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+      blobs.push(blob as Blob)
+      return 'blob:parked'
+    })
+    const anchor = { href: '', download: '', click: vi.fn(), remove: vi.fn() }
+    vi.stubGlobal('document', { createElement: () => anchor, body: { append: vi.fn() } })
+    const createContext = vi.fn()
+    vi.useFakeTimers()
+    try {
+      await downloadFile({ storage: { createContext } } as unknown as import('@filoz/synapse-sdk').Synapse, {
+        id: 'parked',
+        importedCar,
+        fileName: importedCar ? 'sample.car' : original.name,
+        fileSize: '1 KB',
+        cid: car.rootCid.toString(),
+        pieceCid,
+        datasetId: '',
+        datasetIds: [],
+        providerId: '4',
+        providerName: 'SP',
+        serviceURL: 'https://sp.example',
+        transactionHash: '',
+        network: 'mainnet',
+        uploadedAt: 1,
+        upload: {
+          phase: 'confirming',
+          expectedCopies: 2,
+          steps: [],
+          checks: 0,
+          nextCheckAt: 0,
+          providers: [{ providerId: '4', serviceURL: 'https://sp.example', stored: true }],
+        },
+      })
+      expect(createContext).not.toHaveBeenCalled()
+      expect((fetchMock.mock.calls[0][0] as Request).url).toContain(`/piece/${pieceCid}`)
+      expect(new Uint8Array(await blobs[0].arrayBuffer())).toEqual(
+        importedCar ? car.carBytes : new Uint8Array(await original.arrayBuffer())
+      )
+    } finally {
+      vi.clearAllTimers()
+      vi.useRealTimers()
+      createUrl.mockRestore()
+      vi.unstubAllGlobals()
+    }
+  }
+)

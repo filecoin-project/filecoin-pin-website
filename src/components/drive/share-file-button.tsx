@@ -4,17 +4,34 @@ import { QRCodeSVG } from 'qrcode.react'
 import { useState } from 'react'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { displayFileName } from '../../lib/filecoin-pin/drive-api.ts'
-import { canPreviewFile, fileShareLink } from '../../lib/filecoin-pin/file-links.ts'
+import { fileShareLink } from '../../lib/filecoin-pin/file-links.ts'
+import { cn } from '../../utils/cn.ts'
+import { buttonVariants } from '../ui/button/button-base.tsx'
 import { CopyButton } from '../ui/copy-button.tsx'
 
-export function ShareFileButton({ file, disabled = false }: { file: DatasetPiece; disabled?: boolean }) {
+export function ShareFileButton({
+  file,
+  disabled = false,
+  variant = 'inline',
+}: {
+  file: DatasetPiece
+  disabled?: boolean
+  variant?: 'inline' | 'button'
+}) {
   const [open, setOpen] = useState(false)
   const link = fileShareLink(file)
   return (
     <Dialog.Root onOpenChange={setOpen} open={open}>
       <Dialog.Trigger asChild>
         <button
-          className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent disabled:opacity-40"
+          className={
+            variant === 'button'
+              ? cn(
+                  buttonVariants({ variant: 'secondary', size: 'sm', disabled: disabled || !link }),
+                  'min-h-9 w-full min-w-0 gap-1.5 px-3 py-1.5 text-xs'
+                )
+              : 'inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent disabled:opacity-40'
+          }
           disabled={disabled || !link}
           title={link ? 'Show the share link and QR code' : 'A share link is unavailable for this record.'}
           type="button"
@@ -27,7 +44,9 @@ export function ShareFileButton({ file, disabled = false }: { file: DatasetPiece
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
           <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border bg-surface p-6 text-foreground shadow-xl focus:outline-none">
-            <Dialog.Title className="pr-8 text-lg font-semibold">Share file</Dialog.Title>
+            <Dialog.Title className="pr-8 text-lg font-semibold">
+              Share {file.isDirectory ? 'folder' : 'file'}
+            </Dialog.Title>
             <Dialog.Description className="mt-2 break-words text-sm text-muted">
               {displayFileName(file)}
             </Dialog.Description>
@@ -41,11 +60,11 @@ export function ShareFileButton({ file, disabled = false }: { file: DatasetPiece
               <QRCodeSVG level="M" marginSize={4} size={224} title="Share link QR code" value={link} />
             </div>
             <p className="mb-3 text-center text-sm text-muted">
-              {file.importedCar
-                ? 'Scan to download the original CAR archive from its storage provider.'
-                : canPreviewFile(file)
-                  ? 'Scan to open this file in your browser.'
-                  : 'Scan to download this file.'}
+              {file.isDirectory
+                ? 'Scan to browse this folder.'
+                : file.importedCar
+                  ? 'Scan to download the original CAR archive from its storage provider.'
+                  : 'Scan to open this file. Your browser may display or download it.'}
             </p>
             <label className="text-xs text-muted" htmlFor={`share-link-${file.id}`}>
               Share link

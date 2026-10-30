@@ -2,13 +2,17 @@ import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { checkDirectoryTabs } from './check-drive-directory-tabs.mjs'
 import { checkSessionTabs } from './check-drive-session-tabs.mjs'
+import { checkUploadTasks } from './check-drive-upload-tasks.mjs'
 import { checkWalletSelection } from './check-drive-wallet-selection.mjs'
 import { prepareBrowserPage } from './drive-browser-fixtures.mjs'
 
 // Run against npm run dev. All wallet requests and external RPCs are mocked.
 const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || undefined })
 try {
-  if (!process.env.DRIVE_TEST_WALLETCONNECT) await checkWalletSelection(browser)
+  if (!process.env.DRIVE_TEST_WALLETCONNECT) {
+    await checkWalletSelection(browser)
+    await checkUploadTasks(browser)
+  }
   const context = await browser.newContext({ viewport: { width: 1440, height: 1080 } })
   const page = await context.newPage()
   const errors = []
@@ -103,7 +107,7 @@ try {
   await page.getByRole('button', { name: 'Upload files', exact: true }).click()
   await page.getByRole('textbox', { name: 'Upload location', exact: true }).waitFor()
   assert.equal(await page.getByRole('textbox', { name: 'Upload location', exact: true }).inputValue(), 'reports/2026')
-  await page.getByText('Click to upload', { exact: true }).waitFor()
+  await page.getByText('Choose a file', { exact: true }).waitFor()
   const uploadPanel = page.getByRole('dialog', { name: 'Upload files', exact: true })
   await uploadPanel.locator('input[type="file"]').evaluate((input) => {
     const file = new File(['size fixture'], 'oversize.bin')
@@ -236,7 +240,7 @@ try {
     await blockedPage.getByText('Wallet setup · Session authorized', { exact: true }).waitFor()
     await blockedPage.getByText('Setup required', { exact: true }).waitFor()
     assert.equal(
-      await blockedPage.getByText('Click to upload', { exact: true }).count(),
+      await blockedPage.getByText('Choose a file', { exact: true }).count(),
       0,
       'An authorized session must not bypass missing storage funds or payment approval'
     )

@@ -4,6 +4,7 @@ import Content from './components/layout/content.tsx'
 import { useBrowserWallet } from './context/browser-wallet-provider.tsx'
 import { FilecoinPinProvider } from './context/filecoin-pin-provider.tsx'
 import { UploadHistoryProvider } from './context/upload-history-context.tsx'
+import { UploadTasksProvider } from './context/upload-tasks-context.tsx'
 
 const isSecureContext = typeof globalThis.crypto?.subtle !== 'undefined'
 
@@ -17,7 +18,9 @@ function App() {
         connection.address ? (
           <FilecoinPinProvider key={identity}>
             <UploadHistoryProvider>
-              <Content />
+              <UploadTasksProvider>
+                <Content />
+              </UploadTasksProvider>
             </UploadHistoryProvider>
           </FilecoinPinProvider>
         ) : connection.restoring ? (
