@@ -55,7 +55,15 @@ interface Props {
   uploadDisabled?: boolean
 }
 export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled = false }: Props) {
-  const { history, updateUpload, refreshHistory, isLoading, error: directoryError } = useUploadHistory()
+  const {
+    history,
+    updateUpload,
+    refreshHistory,
+    isLoading,
+    hasLoaded,
+    indexError,
+    error: saveError,
+  } = useUploadHistory()
   const { synapse, storageScope } = useFilecoinPinContext()
   const connection = useBrowserWallet()
   const [search, setSearch] = useState('')
@@ -72,7 +80,9 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
   )
   const [deleteConsent, setDeleteConsent] = useState(false)
   const [showFolders, setShowFolders] = useState(false)
+  const directoryError = saveError ?? indexError
   const visibleHistory = history.filter((file) => !isDeletionScheduled(file))
+  const waitingForIndex = isLoading || (!hasLoaded && !directoryError)
   const allFolders = directoryFolders(visibleHistory, [])
   const selected = history.find((file) => file.id === selectedId)
   const selectedAliases = selected ? history.filter((file) => file.pieceCid === selected.pieceCid) : []
@@ -149,7 +159,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
           <h2 className="flex items-center gap-2.5 text-base font-semibold">
             Files{' '}
             <span className="rounded-md bg-surface-raised px-2 py-0.5 text-xs font-normal tabular-nums text-muted">
-              {visibleHistory.length}
+              {!visibleHistory.length && (!hasLoaded || directoryError) ? '—' : visibleHistory.length}
             </span>
           </h2>
         </div>
@@ -162,7 +172,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
             variant="secondary"
           >
             {isLoading && <Loader2 aria-hidden="true" className="animate-spin" size={14} />}
-            Refresh files
+            Load from Filecoin
           </Button>
           {onUpload && (
             <Button
@@ -184,8 +194,12 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
         </p>
       )}
       {directoryError && (
-        <p className="text-sm text-warning break-words" role="alert">
-          {directoryError}
+        <p className="px-5 py-3 text-sm text-warning break-words sm:px-6" role="alert" title={directoryError}>
+          {!saveError && indexError
+            ? visibleHistory.length
+              ? 'Unable to load the latest file list. Your existing list is still available.'
+              : 'Unable to load your file list. Please try again.'
+            : directoryError}
         </p>
       )}
       {download && (
@@ -228,7 +242,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
         </p>
       )}
       {(error || deletionError) && (
-        <p className="text-sm text-warning break-words" role="alert">
+        <p className="px-5 py-3 text-sm text-warning break-words sm:px-6" role="alert">
           {error || deletionError}
         </p>
       )}
@@ -436,23 +450,28 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                         <FolderOpen size={24} />
                       </span>
                       <p className="mb-2 text-sm font-medium text-foreground">
-                        {isLoading
-                          ? 'Loading file index…'
+                        {waitingForIndex
+                          ? 'Loading files from Filecoin…'
                           : directoryError && !visibleHistory.length
-                            ? 'File index unavailable'
+                            ? 'Unable to load files from Filecoin'
                             : search
                               ? 'No matching files.'
                               : 'A little space for something new'}
                       </p>
                       <p className="text-xs">
-                        {isLoading
-                          ? 'Your cached files are kept while the index refreshes.'
+                        {waitingForIndex
+                          ? 'Checking the Filecoin index for your files.'
                           : directoryError && !visibleHistory.length
-                            ? 'Use Refresh files to retry.'
+                            ? 'Your files may still be stored on Filecoin. Retry loading the file list.'
                             : search
                               ? 'Try a different file name or folder.'
                               : 'No files here yet. Upload to this folder.'}
                       </p>
+                      {directoryError && !visibleHistory.length && !isLoading && (
+                        <Button className="mt-4 w-auto" onClick={() => refreshHistory()} size="sm" variant="secondary">
+                          Retry loading
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -738,7 +757,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                   )}
                 </section>
                 {(error || deletionError) && (
-                  <p className="text-sm text-warning break-words" role="alert">
+                  <p className="px-5 py-3 text-sm text-warning break-words sm:px-6" role="alert">
                     {error || deletionError}
                   </p>
                 )}

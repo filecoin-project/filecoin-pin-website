@@ -566,7 +566,7 @@ it.each([false, true])(
     expect(rowDownload('alias.txt')).toHaveProperty('disabled', true)
     expect(rowDownload('other.txt')).toHaveProperty('disabled', false)
     expect(screen.getByRole('button', { name: 'Upload files' })).toHaveProperty('disabled', uploadActive)
-    const refresh = screen.getByRole('button', { name: 'Refresh files' })
+    const refresh = screen.getByRole('button', { name: 'Load from Filecoin' })
     expect(refresh).toHaveProperty('disabled', false)
     fireEvent.click(refresh)
     await waitFor(() => expect(mocks.index).toHaveBeenCalledTimes(2))
@@ -625,4 +625,91 @@ it('keeps original CAR downloads without offering a gateway export', async () =>
   expect(screen.getByRole('button', { name: 'Download original file' })).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Preview' })).toHaveProperty('disabled', true)
   expect(screen.queryByText(/The gateway exports a new CAR/)).toBeNull()
+})
+
+it('keeps the empty cache in a loading state, then offers retry after index failure', async () => {
+  setCachedPieces(scope, [])
+  let fail!: (error: Error) => void
+  mocks.index.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, reject) => {
+        fail = reject
+      })
+  )
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  expect(screen.queryByText('No files here yet. Upload to this folder.')).toBeNull()
+  expect(screen.getByText('Loading files from Filecoin…')).toBeTruthy()
+  await act(async () => fail(new Error('Index temporarily unavailable')))
+  expect(screen.getByText('Unable to load files from Filecoin')).toBeTruthy()
+  expect(screen.getByRole('alert').textContent).toBe('Unable to load your file list. Please try again.')
+  expect(screen.queryByText('No files here yet. Upload to this folder.')).toBeNull()
+  mocks.index.mockResolvedValueOnce([file])
+  fireEvent.click(screen.getByRole('button', { name: 'Retry loading' }))
+  await screen.findByRole('button', { name: 'first.txt' })
+  expect(screen.queryByRole('button', { name: 'Retry loading' })).toBeNull()
+})
+
+it('shows a confirmed empty directory only after a successful index response', async () => {
+  setCachedPieces(scope, [])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  await screen.findByText('No files here yet. Upload to this folder.')
+  expect(screen.queryByText('Loading files from Filecoin…')).toBeNull()
+})
+
+it('retains files and upload access when the index is unavailable', async () => {
+  mocks.index.mockRejectedValueOnce(new Error('Filecoin index unavailable (503)'))
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} onUpload={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  await waitFor(() =>
+    expect(screen.getByRole('alert').textContent).toBe(
+      'Unable to load the latest file list. Your existing list is still available.'
+    )
+  )
+  expect(screen.getByRole('button', { name: 'first.txt' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Upload files' })).toHaveProperty('disabled', false)
+  await act(async () => {
+    await addCachedPiece(scope, { ...file, id: 'new-upload', fileName: 'new.txt' })
+  })
+  expect(screen.getByRole('button', { name: 'new.txt' })).toBeTruthy()
+  expect(screen.getByRole('alert').textContent).toBe(
+    'Unable to load the latest file list. Your existing list is still available.'
+  )
+})
+
+it('shows the save error when index retrieval succeeds but writing the cache fails', async () => {
+  mocks.index.mockResolvedValueOnce([
+    { ...file, id: 'indexed-new', fileName: 'recovered.txt', datasetId: '3', datasetIds: ['3'] },
+  ])
+  const original = localStorage.setItem.bind(localStorage)
+  const write = vi.spyOn(localStorage, 'setItem').mockImplementation((key, value) => {
+    if (key.startsWith('filecoin-pin-piece-cache-v1-')) throw new DOMException('Quota exceeded', 'QuotaExceededError')
+    return original(key, value)
+  })
+  try {
+    render(
+      <UploadHistoryProvider>
+        <FileBrowser folder="" onFolderChange={vi.fn()} />
+      </UploadHistoryProvider>
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain('Unable to save the browser directory.')
+    )
+    expect(screen.getByRole('alert').textContent).toContain('free browser storage and retry saving')
+    write.mockRestore()
+    fireEvent.click(screen.getByRole('button', { name: 'Load from Filecoin' }))
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+  } finally {
+    write.mockRestore()
+  }
 })

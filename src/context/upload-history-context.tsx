@@ -28,12 +28,13 @@ export interface UploadHistoryContextValue {
   isLoading: boolean
 
   /**
-   * Error state for history fetching
+   * Local directory persistence errors; index requests report indexError separately
    */
   error: string | null
+  indexError: string | null
 
   /**
-   * Indicates whether we've completed at least one history load attempt.
+   * Indicates whether a Filecoin index load attempt has completed; cache reads do not count.
    */
   hasLoaded: boolean
 }
@@ -84,6 +85,7 @@ export function UploadHistoryProvider({ children }: { children: ReactNode }) {
     hasUnsavedChanges,
     isLoading,
     error,
+    indexError,
     hasLoaded,
   } = useDatasetPieces()
 
@@ -98,6 +100,7 @@ export function UploadHistoryProvider({ children }: { children: ReactNode }) {
       addUpload: addPiece,
       isLoading,
       error,
+      indexError,
       hasLoaded,
     }),
     [
@@ -110,6 +113,7 @@ export function UploadHistoryProvider({ children }: { children: ReactNode }) {
       addPiece,
       isLoading,
       error,
+      indexError,
       hasLoaded,
     ]
   )

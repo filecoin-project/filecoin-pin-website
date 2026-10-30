@@ -41,7 +41,7 @@ export async function downloadFile(
   onStage?: (stage: 'downloading' | 'preparing') => void
 ) {
   if (!file.cid)
-    throw new Error('The IPFS root CID is missing from this record. Refresh files after the index catches up.')
+    throw new Error('The IPFS root CID is missing from this record. Use Load from Filecoin after the index catches up.')
   let failure: unknown
   for (const datasetId of file.datasetIds ?? [file.datasetId]) {
     try {

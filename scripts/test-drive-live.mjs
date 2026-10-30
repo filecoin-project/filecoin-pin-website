@@ -209,7 +209,7 @@ try {
     }
     console.log('Real provider upload and original-file retrieval verified')
     const restoredPage = await newWalletPage()
-    await restoredPage.getByRole('button', { name: 'Refresh files', exact: true }).click()
+    await restoredPage.getByRole('button', { name: 'Load from Filecoin', exact: true }).click()
     await restoredPage.getByRole('button', { name: fileName, exact: true }).waitFor()
     const [restoredDownload] = await Promise.all([
       restoredPage.waitForEvent('download', { timeout: 300_000 }),

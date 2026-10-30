@@ -2,6 +2,9 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 
 const { load, context } = vi.hoisted(() => ({ load: vi.fn(), context: vi.fn() }))
+vi.mock('../context/browser-wallet-provider.tsx', () => ({
+  useBrowserWallet: () => ({ address: context().storageScope?.split(':')[1] ?? null, network: 'mainnet' }),
+}))
 vi.mock('../lib/filecoin-pin/drive-api.ts', async (original) => ({
   ...(await original<object>()),
   loadDriveFiles: load,
@@ -51,7 +54,8 @@ it('keeps local records when the index lags or fails, and supports manual retry'
   load.mockRejectedValueOnce(new Error('index unavailable'))
   await act(async () => result.current.refreshPieces())
   expect(result.current.pieces).toEqual([file])
-  expect(result.current.error).toBe('index unavailable')
+  expect(result.current.indexError).toBe('index unavailable')
+  expect(result.current.error).toBeNull()
   expect(getCachedPieces(scope)).toEqual([file])
 })
 it('merges a late index response against uploads saved while fetching', async () => {
@@ -89,4 +93,27 @@ it('ignores an aborted response after switching wallets', async () => {
   await waitFor(() => expect(result.current.isLoading).toBe(false))
   expect(result.current.pieces).toEqual([])
   expect(getCachedPieces('314:0xdef')).toEqual([])
+})
+
+it('discovers files while balances are unavailable, without marking an unfinished request loaded', async () => {
+  context.mockReturnValue({
+    wallet: { status: 'error', error: 'balances unavailable' },
+    storageScope: scope,
+    synapse,
+    addDataSetId,
+  })
+  let finish!: (files: DatasetPiece[]) => void
+  load.mockImplementation(
+    () =>
+      new Promise<DatasetPiece[]>((resolve) => {
+        finish = resolve
+      })
+  )
+  const { result } = renderHook(useDatasetPieces)
+  expect(load).toHaveBeenCalledWith(synapse, '0xabc', 'mainnet', expect.any(AbortSignal))
+  expect(result.current.hasLoaded).toBe(false)
+  expect(result.current.isLoading).toBe(true)
+  await act(async () => finish([]))
+  expect(result.current.hasLoaded).toBe(true)
+  expect(result.current.isLoading).toBe(false)
 })
