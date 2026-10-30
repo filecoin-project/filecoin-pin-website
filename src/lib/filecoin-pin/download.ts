@@ -63,7 +63,7 @@ export async function downloadFile(
   throw new Error(
     file.importedCar
       ? 'Unable to download the CAR archive from its storage providers. Try again later.'
-      : 'Unable to download the file from its storage providers. Try the IPFS gateway link in Details.',
+      : 'Unable to download the file from its storage providers. Try again later.',
     {
       cause: failure,
     }

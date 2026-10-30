@@ -22,7 +22,7 @@ import { useFileDeletion } from '../../hooks/use-file-deletion.ts'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { IPFS_CHECK_LIMIT, resetIndexingChecks } from '../../hooks/use-ipfs-indexing.ts'
 import { displayFileName } from '../../lib/filecoin-pin/drive-api.ts'
-import { canPreviewFile, fileGatewayLink } from '../../lib/filecoin-pin/file-links.ts'
+import { canPreviewFile } from '../../lib/filecoin-pin/file-links.ts'
 import { directoryFolders } from '../../lib/local-storage/drive-directory.ts'
 import { hasRemovalProgress, isDeletionScheduled } from '../../utils/file-deletion.ts'
 import {
@@ -61,7 +61,6 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const { deleteFile, isDeleting, deletingPieceCid, deletionError, clearDeletionError } = useFileDeletion()
   const working = isEditing || isDeleting
@@ -103,7 +102,6 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
     setIsEditing(true)
     setError('')
     clearDeletionError()
-    setNotice('')
     try {
       await action()
     } catch (cause) {
@@ -128,18 +126,15 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
     }
     setError('')
     clearDeletionError()
-    setNotice('')
     enqueueDownload(file)
   }
   const deleteSelectedFile = async () => {
     if (!selected || disabled) return
     setError('')
     clearDeletionError()
-    setNotice('')
     if (!(await deleteFile(selected))) return
     setDeleteConsent(false)
     setSelectedId(null)
-    setNotice('Removed from the file list. Storage providers will process removal in a subsequent proving period.')
   }
 
   return (
@@ -178,11 +173,6 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
           )}
         </div>
       </div>
-      {notice && (
-        <p className="px-5 py-3 text-sm text-success" role="status">
-          {notice}
-        </p>
-      )}
       {directoryError && (
         <p className="text-sm text-warning break-words" role="alert">
           {directoryError}
@@ -605,16 +595,6 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                       {value && <CopyButton className="mt-1" label={`Copy ${label}`} value={value} />}
                     </div>
                   ))}
-                  {selected.cid && !selected.importedCar && (
-                    <a
-                      className="block text-sm underline"
-                      href={fileGatewayLink(selected)}
-                      rel="noopener noreferrer"
-                      target="_blank"
-                    >
-                      Download through IPFS gateway
-                    </a>
-                  )}
                   {selected.pieceCid && (
                     <a
                       className="block text-sm underline"

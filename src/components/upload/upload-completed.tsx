@@ -1,7 +1,6 @@
 import { INPI_ERROR_MESSAGE } from '@/hooks/use-filecoin-upload.ts'
 import {
   getDatasetExplorerLink,
-  getIpfsGatewayDownloadLink,
   getIpfsGatewayRenderLink,
   getPieceExplorerLink,
   getSpCarDownloadLink,
@@ -19,7 +18,6 @@ import type { UploadStatusProps } from './upload-status.tsx'
 
 interface UploadCompletedProps {
   cid: string
-  importedCar?: boolean
   fileName: UploadStatusProps['fileName']
   pieceCid?: UploadStatusProps['pieceCid']
   datasetId?: UploadStatusProps['datasetId']
@@ -40,7 +38,6 @@ function resolveDatasetIds(datasetIds: string[] | undefined, fallback: string): 
 function UploadCompleted({
   cid,
   fileName,
-  importedCar,
   pieceCid,
   datasetId,
   datasetIds,
@@ -78,11 +75,7 @@ function UploadCompleted({
             )
           }
           title="IPFS Root CID"
-        >
-          {!hasIpniAnnounceFailure && !importedCar && (
-            <DownloadButton href={getIpfsGatewayDownloadLink(cid, fileName)} />
-          )}
-        </Card.InfoRow>
+        />
       </Card.Wrapper>
 
       {pieceCid && (

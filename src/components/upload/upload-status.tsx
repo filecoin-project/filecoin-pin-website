@@ -32,7 +32,6 @@ export interface UploadStatusProps {
 function UploadStatus({
   fileName,
   fileSize,
-  importedCar,
   stepStates,
   isExpanded = true,
   onToggleExpanded,
@@ -90,7 +89,6 @@ function UploadStatus({
               datasetIds={datasetIds}
               fileName={fileName}
               hasIpniAnnounceFailure={hasIpniAnnounceFailure}
-              importedCar={importedCar}
               pieceCid={pieceCid}
               providerIds={providerIds}
               providerNames={providerNames}

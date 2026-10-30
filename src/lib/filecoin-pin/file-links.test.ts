@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
-import { canPreviewFile, fileGatewayLink, fileShareLink } from './file-links.ts'
+import { canPreviewFile, fileShareLink } from './file-links.ts'
 
 const cid = 'bafkreig4nl6nqu64xpwqfimx5bwhcntmpbgbjnly7dzs6u6zkeqfkimtfe'
 const file = {
@@ -18,28 +18,23 @@ it('shares previewable files on an isolated inbrowser origin without the IPLD in
   expect(url.searchParams.has('download')).toBe(false)
 })
 
-it('shares unsupported formats as downloads and always offers an ordinary-file gateway download', () => {
+it('shares unsupported formats through a gateway download link', () => {
   const archive = { ...file, fileName: 'installer.dmg' }
   expect(canPreviewFile(archive)).toBe(false)
-  expect(fileShareLink(archive)).toBe(fileGatewayLink(archive))
-  for (const item of [file, archive]) {
-    const url = new URL(fileGatewayLink(item) as string)
-    expect(url.hostname).toBe('inbrowser.link')
-    expect(url.searchParams.get('download')).toBe('true')
-    expect(url.searchParams.get('filename')).toBe(item.fileName)
-  }
+  const url = new URL(fileShareLink(archive) as string)
+  expect(url.hostname).toBe('inbrowser.link')
+  expect(url.searchParams.get('download')).toBe('true')
+  expect(url.searchParams.get('filename')).toBe(archive.fileName)
 })
 
 it('shares the exact CAR piece rather than reconstructing its first IPFS root', () => {
   const car = { ...file, importedCar: true, serviceURLs: ['', 'bad url', 'https://sp.example/piece/old'] }
   expect(canPreviewFile(car)).toBe(false)
   expect(fileShareLink(car)).toBe('https://sp.example/piece/bafk-piece')
-  expect(fileGatewayLink(car)).toBeUndefined()
 })
 
 it('does not invent links for missing roots or provider URLs, and keeps removed files unshareable', () => {
   expect(fileShareLink({ ...file, cid: '' })).toBeUndefined()
-  expect(fileGatewayLink({ ...file, cid: '' })).toBeUndefined()
   expect(fileShareLink({ ...file, importedCar: true, serviceURL: 'javascript:alert(1)' })).toBeUndefined()
   expect(fileShareLink({ ...file, importedCar: true, cid: '' })).toBe('https://sp.example/piece/bafk-piece')
   expect(fileShareLink({ ...file, removedCopies: ['1'] })).toBeUndefined()
