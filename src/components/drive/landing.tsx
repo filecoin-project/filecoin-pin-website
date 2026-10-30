@@ -1,4 +1,4 @@
-import { Check, FileText, Folder, HardDrive, KeyRound, Layers, ShieldCheck, Wallet } from 'lucide-react'
+import { ArrowUpRight, Check, FileText, Folder, HardDrive, KeyRound, Layers, ShieldCheck, Wallet } from 'lucide-react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { ConnectWalletButton } from './connect-wallet-button.tsx'
 import { DeveloperFooter } from './developer-footer.tsx'
@@ -93,18 +93,33 @@ export function Landing() {
             A familiar place for your files, with decentralized storage underneath. Connect your wallet, authorize once,
             and make it yours.
           </p>
-          <div className="flex flex-wrap items-center gap-4 pt-2">
-            <ConnectWalletButton label="Connect a wallet" />
-            {connection.walletConnectAvailable && (
-              <button
-                className="text-sm text-muted hover:text-foreground disabled:opacity-50"
-                disabled={connection.busy}
-                onClick={() => void connection.connectWalletConnect()}
-                type="button"
+          <div className="space-y-3 pt-2">
+            <div className="flex flex-wrap items-center gap-4">
+              <ConnectWalletButton label="Connect a wallet" />
+              {connection.walletConnectAvailable && (
+                <button
+                  className="text-sm text-muted hover:text-foreground disabled:opacity-50"
+                  disabled={connection.busy}
+                  onClick={() => void connection.connectWalletConnect()}
+                  type="button"
+                >
+                  Use a mobile wallet
+                </button>
+              )}
+            </div>
+            <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-muted">
+              No wallet?
+              <a
+                className="inline-flex items-center gap-1 text-accent underline underline-offset-4 hover:text-foreground"
+                href="https://demopin.filecoin.cloud/"
+                rel="noopener noreferrer"
+                target="_blank"
+                title="Try uploading on Calibration without connecting a wallet"
               >
-                Use a mobile wallet
-              </button>
-            )}
+                Try the testnet demo
+                <ArrowUpRight aria-hidden="true" size={14} />
+              </a>
+            </p>
           </div>
           <p className="flex items-center gap-2 text-xs text-muted">
             <ShieldCheck size={14} />
