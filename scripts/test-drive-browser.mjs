@@ -107,7 +107,7 @@ try {
   await page.getByRole('button', { name: 'Upload files', exact: true }).click()
   await page.getByRole('textbox', { name: 'Upload location', exact: true }).waitFor()
   assert.equal(await page.getByRole('textbox', { name: 'Upload location', exact: true }).inputValue(), 'reports/2026')
-  await page.getByText('Click to upload', { exact: true }).waitFor()
+  await page.getByText('Choose a file', { exact: true }).waitFor()
   const uploadPanel = page.getByRole('dialog', { name: 'Upload files', exact: true })
   await uploadPanel.locator('input[type="file"]').evaluate((input) => {
     const file = new File(['size fixture'], 'oversize.bin')
@@ -240,7 +240,7 @@ try {
     await blockedPage.getByText('Wallet setup · Session authorized', { exact: true }).waitFor()
     await blockedPage.getByText('Setup required', { exact: true }).waitFor()
     assert.equal(
-      await blockedPage.getByText('Click to upload', { exact: true }).count(),
+      await blockedPage.getByText('Choose a file', { exact: true }).count(),
       0,
       'An authorized session must not bypass missing storage funds or payment approval'
     )

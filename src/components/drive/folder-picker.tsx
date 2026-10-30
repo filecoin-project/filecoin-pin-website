@@ -1,7 +1,8 @@
-import { FolderUp } from 'lucide-react'
 import { useRef, useState } from 'react'
+import { MAX_FILE_SIZE } from '../../constants/files.ts'
 import { type DirectoryUpload, directoryUpload } from '../../lib/filecoin-pin/upload-source.ts'
-import { formatFileSize } from '../../utils/format-file-size.ts'
+import { SelectedFile } from '../file-picker/selected-file.tsx'
+import { UploadInstructions, UploadNotes } from '../file-picker/upload-instructions.tsx'
 import { ButtonBase as Button } from '../ui/button/button-base.tsx'
 
 export function FolderPicker({
@@ -14,6 +15,10 @@ export function FolderPicker({
   const picker = useRef<HTMLInputElement>(null)
   const [selected, setSelected] = useState<DirectoryUpload | null>(null)
   const [error, setError] = useState('')
+  const reset = () => {
+    setSelected(null)
+    setError('')
+  }
   return (
     <div className="space-y-4">
       <input
@@ -35,45 +40,56 @@ export function FolderPicker({
         type="file"
         {...{ webkitdirectory: '' }}
       />
-      <button
-        className="flex min-h-40 w-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-canvas/30 p-5 text-sm hover:bg-surface-raised focus:brand-outline"
-        disabled={disabled}
-        onClick={() => picker.current?.click()}
-        type="button"
-      >
-        <FolderUp aria-hidden="true" className="text-accent" size={28} />
+      <div className="group/container relative h-60 w-full md:h-52">
         {selected ? (
-          <>
-            <span className="break-all font-medium">{selected.name}</span>
-            <span className="text-xs text-muted">
-              {selected.files.length} files · {formatFileSize(selected.size)}
-            </span>
-          </>
+          <SelectedFile
+            count={selected.files.length}
+            disabled={disabled}
+            file={selected}
+            kind="folder"
+            onReset={reset}
+          />
         ) : (
-          <>
-            <span>Choose a folder</span>
-            <span className="text-xs text-muted">Up to 200 MB in total</span>
-          </>
+          <button
+            aria-label="Choose a folder"
+            className="h-full w-full rounded-xl focus:brand-outline disabled:cursor-not-allowed"
+            disabled={disabled}
+            onClick={() => picker.current?.click()}
+            type="button"
+          >
+            <UploadInstructions kind="folder" maxSize={MAX_FILE_SIZE} />
+          </button>
         )}
-      </button>
-      <p className="text-xs text-muted">
-        The folder is stored as one upload. Empty subfolders are not included by the browser picker.
-      </p>
+      </div>
       {error && (
         <p className="text-sm text-danger" role="alert">
           {error}
         </p>
       )}
-      <Button
-        className="w-auto"
-        disabled={!selected || disabled}
-        onClick={() => {
-          if (selected) onUpload(selected)
-        }}
-        size="sm"
-      >
-        Upload folder
-      </Button>
+      <UploadNotes kind="folder" />
+      <div className="flex justify-end gap-2">
+        <Button
+          className="w-auto min-w-24"
+          disabled={!selected || disabled}
+          onClick={reset}
+          size="sm"
+          type="button"
+          variant="secondary"
+        >
+          Cancel
+        </Button>
+        <Button
+          className="w-auto min-w-24"
+          disabled={!selected || disabled}
+          onClick={() => {
+            if (selected) onUpload(selected)
+          }}
+          size="sm"
+          type="button"
+        >
+          Upload
+        </Button>
+      </div>
     </div>
   )
 }

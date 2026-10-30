@@ -47,7 +47,7 @@ export { fileStatus } from '../../utils/upload/file-status.ts'
 interface Props {
   folder: string
   onFolderChange: (folder: string) => void
-  onUpload?: () => void
+  onUpload?: (location: string) => void
   uploadDisabled?: boolean
 }
 export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, uploadDisabled }: Props) {
@@ -65,7 +65,12 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [directoryId, setDirectoryId] = useState<string | null>(null)
+  const openDirectory = (id: string) => {
+    setDirectoryId(id)
+    setSearch('')
+  }
   const onFolderChange = (path: string) => {
+    setSearch('')
     setDirectoryId(null)
     setFolderPath(path)
   }
@@ -114,7 +119,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
             className={`flex w-full items-center gap-2.5 rounded-lg py-2.5 pr-2 text-left text-sm transition-colors ${directoryId === file.id ? 'bg-brand-800/15 text-accent' : 'text-muted hover:bg-surface-raised hover:text-foreground'}`}
             disabled={!file.cid}
             key={file.id}
-            onClick={() => setDirectoryId(file.id)}
+            onClick={() => openDirectory(file.id)}
             style={{ paddingLeft: 12 + depth * 16 }}
             title={[file.folderPath, displayFileName(file)].filter(Boolean).join('/')}
             type="button"
@@ -208,7 +213,22 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
             </span>
           </h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 md:w-auto">
+          <label className="relative w-full md:w-64">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+              size={15}
+            />
+            <span className="sr-only">{openedDirectory ? 'Search this folder' : 'Search file list'}</span>
+            <input
+              className="drive-field h-10 w-full pl-9 pr-3 text-xs"
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={openedDirectory ? 'Search this folder' : 'Search file list'}
+              type="search"
+              value={search}
+            />
+          </label>
           <Button
             className="w-auto"
             disabled={isLoading || isEditing}
@@ -224,7 +244,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
               aria-label="Upload files"
               className="w-auto"
               disabled={isEditing || connection.busy || (uploadDisabled ?? connection.uploading)}
-              onClick={onUpload}
+              onClick={() => onUpload?.(openedDirectory ? '' : folder)}
               size="sm"
             >
               <Upload aria-hidden="true" size={14} />
@@ -334,8 +354,13 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
             file={openedDirectory}
             isQueued={isQueued}
             key={openedDirectory.id}
-            onBack={() => setDirectoryId(null)}
+            onBack={() => {
+              setDirectoryId(null)
+              setSearch('')
+            }}
             onDownload={downloadOriginal}
+            onSearchChange={setSearch}
+            search={search}
           />
         ) : (
           <div className="min-w-0">
@@ -361,21 +386,6 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                       </span>
                     ))}
                 </nav>
-              </div>
-              <div className="relative w-full sm:w-56">
-                <Search
-                  aria-hidden="true"
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
-                  size={15}
-                />
-                <input
-                  aria-label="Search all files"
-                  className="drive-field h-9 w-full pl-9 pr-3 text-xs"
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search all files"
-                  type="search"
-                  value={search}
-                />
               </div>
             </div>
             <div className="overflow-x-auto">
@@ -414,7 +424,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                         <button
                           aria-label={displayFileName(file)}
                           className="inline-flex items-center gap-2 align-middle text-left hover:underline"
-                          onClick={() => (file.isDirectory && file.cid ? setDirectoryId(file.id) : choose(file))}
+                          onClick={() => (file.isDirectory && file.cid ? openDirectory(file.id) : choose(file))}
                           type="button"
                         >
                           {file.isDirectory ? (

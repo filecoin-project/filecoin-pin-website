@@ -9,18 +9,19 @@ import { UploadInstructions } from '../file-picker/upload-instructions.tsx'
 export type FormFileInputProps = {
   file: File | null
   maxSize: number
+  disabled?: boolean
   onChange: (file: File | null) => void
   accept?: Array<string> | ReadonlyArray<string>
 }
 
-export function FilePicker({ file, onChange, maxSize, accept = ['*'], ...rest }: FormFileInputProps) {
+export function FilePicker({ file, onChange, maxSize, disabled, accept = ['*'], ...rest }: FormFileInputProps) {
   const [error, setError] = useState('')
   const errorId = useId()
   return (
     <FormField name="file">
       <div className="group/container relative h-60 w-full md:h-52">
         {file ? (
-          <SelectedFile file={file} onReset={resetFile} />
+          <SelectedFile disabled={disabled} file={file} onReset={resetFile} />
         ) : (
           <>
             <FormControl asChild>
@@ -30,6 +31,7 @@ export function FilePicker({ file, onChange, maxSize, accept = ['*'], ...rest }:
                 aria-describedby={error ? errorId : undefined}
                 aria-invalid={Boolean(error)}
                 className="peer absolute inset-0 z-10 opacity-0 not-disabled:cursor-pointer disabled:cursor-not-allowed"
+                disabled={disabled}
                 multiple={false}
                 onChange={loadFile}
                 type="file"

@@ -131,6 +131,33 @@ export async function listDirectory(reader: ContentReader, path: string, offset:
   return page
 }
 
+/** Match entry names across all pages of the current directory, not text inside files. */
+export async function searchDirectory(
+  reader: ContentReader,
+  path: string,
+  query: string,
+  offset: number,
+  signal: AbortSignal
+) {
+  const matches: DirectoryItem[] = []
+  const term = query.trim().toLocaleLowerCase()
+  let cid = ''
+  for (let start = 0; ; start += DIRECTORY_PAGE_SIZE) {
+    const page = await listDirectory(reader, path, start, signal)
+    cid = page.cid
+    matches.push(...page.items.filter((item) => item.name.toLocaleLowerCase().includes(term)))
+    if (!page.hasMore) break
+    if (start + DIRECTORY_PAGE_SIZE >= MAX_CACHED_ENTRIES)
+      throw new Error('This folder is too large to search in the browser. Browse its subfolders instead.')
+  }
+  signal.throwIfAborted()
+  return {
+    items: matches.slice(offset, offset + DIRECTORY_PAGE_SIZE),
+    hasMore: offset + DIRECTORY_PAGE_SIZE < matches.length,
+    cid,
+  }
+}
+
 /** Stream file chunks into an uncompressed ZIP; preserve names and empty subdirectories. */
 export async function zipDirectory(
   root: Awaited<ReturnType<typeof exporter>>,

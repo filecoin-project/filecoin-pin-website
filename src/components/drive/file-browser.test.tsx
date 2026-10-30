@@ -267,7 +267,7 @@ it('keeps removed files hidden after restore and reload, but shows a new identic
   expect(screen.queryByRole('button', { name: 'first.txt' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'old' })).toBeNull()
   expect(screen.getByRole('heading', { name: 'Files 0' })).toBeTruthy()
-  fireEvent.change(screen.getByRole('searchbox', { name: 'Search all files' }), { target: { value: 'first' } })
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search file list' }), { target: { value: 'first' } })
   expect(screen.getByText('No matching files.')).toBeTruthy()
   expect(getCachedPieces(scope)?.[0].deletion).toEqual(archived.deletion)
   view.unmount()

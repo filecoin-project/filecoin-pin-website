@@ -9,7 +9,7 @@ vi.mock(
 )
 
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
-import { cacheDirectoryUpload, listDirectory } from './directory.ts'
+import { cacheDirectoryUpload, listDirectory, searchDirectory } from './directory.ts'
 import { downloadFile, unpackFile } from './download.ts'
 import { fileShareLink } from './file-links.ts'
 import { recoverContentInfo } from './file-size.ts'
@@ -144,4 +144,26 @@ it('browses freshly packed directories without provider access, retaining only l
   const controller = new AbortController()
   controller.abort()
   await expect(listDirectory(reader, '', 0, controller.signal)).rejects.toThrow()
+})
+
+it('searches names across directory pages and paginates the matching results', async () => {
+  const source = directoryUpload(
+    Array.from({ length: 105 }, (_, i) => selectedFile(`search/entry-${String(i).padStart(3, '0')}.txt`, 'text'))
+  )
+  const packed = await prepareUploadInput(source)
+  const rootCid = packed.rootCid.toString()
+  await cacheDirectoryUpload(packed.carBytes, rootCid)
+  const signal = new AbortController().signal
+  const reader = contentReader({ cid: rootCid, serviceURL: '' } as DatasetPiece, signal)
+  const matched = await searchDirectory(reader, '', 'ENTRY-10', 0, signal)
+  expect(matched.items.map((item) => item.name)).toEqual([
+    'entry-100.txt',
+    'entry-101.txt',
+    'entry-102.txt',
+    'entry-103.txt',
+    'entry-104.txt',
+  ])
+  expect(matched.hasMore).toBe(false)
+  expect((await searchDirectory(reader, '', 'entry-', 100, signal)).items).toHaveLength(5)
+  expect((await searchDirectory(reader, '', 'missing', 0, signal)).items).toEqual([])
 })

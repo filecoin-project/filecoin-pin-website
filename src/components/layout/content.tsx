@@ -28,8 +28,8 @@ export default function Content() {
     wallet.status === 'idle' ||
     wallet.status === 'loading' ||
     storageSetup?.status === 'checking'
-  const openUpload = () => {
-    setUploadFolder(folder)
+  const openUpload = (location: string) => {
+    setUploadFolder(location)
     setPanel(canUpload ? 'upload' : 'wallet')
   }
 
@@ -43,7 +43,10 @@ export default function Content() {
         <Button
           aria-label="Wallet and storage"
           className="w-auto"
-          onClick={() => setPanel('wallet')}
+          onClick={() => {
+            setUploadFolder(folder)
+            setPanel('wallet')
+          }}
           size="sm"
           variant="secondary"
         >
@@ -122,7 +125,6 @@ export default function Content() {
             <Button
               disabled={connection.busy || Boolean(tasks?.transferring)}
               onClick={() => {
-                setUploadFolder(folder)
                 setPanel('upload')
               }}
               size="sm"

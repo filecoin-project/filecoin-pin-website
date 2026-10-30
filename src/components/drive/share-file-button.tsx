@@ -5,16 +5,33 @@ import { useState } from 'react'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { displayFileName } from '../../lib/filecoin-pin/drive-api.ts'
 import { fileShareLink } from '../../lib/filecoin-pin/file-links.ts'
+import { cn } from '../../utils/cn.ts'
+import { buttonVariants } from '../ui/button/button-base.tsx'
 import { CopyButton } from '../ui/copy-button.tsx'
 
-export function ShareFileButton({ file, disabled = false }: { file: DatasetPiece; disabled?: boolean }) {
+export function ShareFileButton({
+  file,
+  disabled = false,
+  variant = 'inline',
+}: {
+  file: DatasetPiece
+  disabled?: boolean
+  variant?: 'inline' | 'button'
+}) {
   const [open, setOpen] = useState(false)
   const link = fileShareLink(file)
   return (
     <Dialog.Root onOpenChange={setOpen} open={open}>
       <Dialog.Trigger asChild>
         <button
-          className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent disabled:opacity-40"
+          className={
+            variant === 'button'
+              ? cn(
+                  buttonVariants({ variant: 'secondary', size: 'sm', disabled: disabled || !link }),
+                  'min-h-9 w-full min-w-0 gap-1.5 px-3 py-1.5 text-xs'
+                )
+              : 'inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent disabled:opacity-40'
+          }
           disabled={disabled || !link}
           title={link ? 'Show the share link and QR code' : 'A share link is unavailable for this record.'}
           type="button"

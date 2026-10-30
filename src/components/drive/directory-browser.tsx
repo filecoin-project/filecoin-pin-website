@@ -1,7 +1,12 @@
 import { ArrowLeft, ChevronRight, Download, Eye, Folder, FolderUp, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
-import { DIRECTORY_PAGE_SIZE, type DirectoryItem, listDirectory } from '../../lib/filecoin-pin/directory.ts'
+import {
+  DIRECTORY_PAGE_SIZE,
+  type DirectoryItem,
+  listDirectory,
+  searchDirectory,
+} from '../../lib/filecoin-pin/directory.ts'
 import { displayFileName } from '../../lib/filecoin-pin/drive-api.ts'
 import { canPreviewFile } from '../../lib/filecoin-pin/file-links.ts'
 import { type ContentReader, contentReader } from '../../lib/filecoin-pin/ipfs-content.ts'
@@ -14,6 +19,8 @@ import { ShareFileButton } from './share-file-button.tsx'
 
 type Props = {
   file: DatasetPiece
+  search: string
+  onSearchChange: (value: string) => void
   onBack: () => void
   onDownload: (file: DatasetPiece) => void
   downloadBlocked: (file: DatasetPiece) => boolean
@@ -21,7 +28,16 @@ type Props = {
   activeDownloadId?: string
 }
 
-export function DirectoryBrowser({ file, onBack, onDownload, downloadBlocked, isQueued, activeDownloadId }: Props) {
+export function DirectoryBrowser({
+  file,
+  search,
+  onSearchChange,
+  onBack,
+  onDownload,
+  downloadBlocked,
+  isQueued,
+  activeDownloadId,
+}: Props) {
   const [path, setPath] = useState('')
   const [offset, setOffset] = useState(0)
   const [attempt, setAttempt] = useState(0)
@@ -40,26 +56,43 @@ export function DirectoryBrowser({ file, onBack, onDownload, downloadBlocked, is
     return () => controller.abort()
   }, [sources])
   useEffect(() => {
+    void search
+    setOffset(0)
+  }, [search])
+  useEffect(() => {
     if (!session) return
     let current = true
     setPage(null)
     setError('')
     void attempt
-    void listDirectory(session.reader, path, offset, session.controller.signal)
-      .then((result) => {
-        if (current) setPage(result)
-      })
-      .catch((cause) => {
-        if (current && !session.controller.signal.aborted)
-          setError(cause instanceof Error ? cause.message : 'Unable to load folder.')
-      })
+    const controller = new AbortController()
+    const signal = AbortSignal.any([controller.signal, session.controller.signal])
+    const timer = setTimeout(
+      () => {
+        void (
+          search.trim()
+            ? searchDirectory(session.reader, path, search, offset, signal)
+            : listDirectory(session.reader, path, offset, signal)
+        )
+          .then((result) => {
+            if (current) setPage(result)
+          })
+          .catch((cause) => {
+            if (current && !signal.aborted) setError(cause instanceof Error ? cause.message : 'Unable to load folder.')
+          })
+      },
+      search.trim() ? 250 : 0
+    )
     return () => {
       current = false
+      clearTimeout(timer)
+      controller.abort()
     }
-  }, [path, offset, attempt, session])
+  }, [path, offset, search, attempt, session])
   const navigate = (next: string) => {
     setPath(next)
     setOffset(0)
+    onSearchChange('')
   }
   const selection = (item: DirectoryItem): DatasetPiece => ({
     ...file,
@@ -74,7 +107,7 @@ export function DirectoryBrowser({ file, onBack, onDownload, downloadBlocked, is
     path && page ? selection({ name: path.split('/').at(-1) ?? '', path, cid: page.cid, isDirectory: true }) : file
   return (
     <div className="min-w-0">
-      <div className="space-y-3 border-b border-border px-5 py-4">
+      <div className="space-y-2 border-b border-border px-5 py-4 sm:px-6">
         <button
           className="inline-flex items-center gap-2 text-xs text-muted hover:text-accent"
           onClick={onBack}
@@ -82,52 +115,53 @@ export function DirectoryBrowser({ file, onBack, onDownload, downloadBlocked, is
         >
           <ArrowLeft size={14} /> Back to files
         </button>
-        <div className="flex flex-wrap items-center gap-2">
-          <FolderUp className="text-accent" size={18} />
-          <button className="text-sm font-medium hover:underline" onClick={() => navigate('')} type="button">
-            {displayFileName(file)}
-          </button>
-          {path
-            .split('/')
-            .filter(Boolean)
-            .map((name, i, parts) => (
-              <span className="inline-flex items-center gap-2 text-sm" key={parts.slice(0, i + 1).join('/')}>
-                <ChevronRight className="text-muted" size={13} />
-                <button onClick={() => navigate(parts.slice(0, i + 1).join('/'))} type="button">
-                  {name}
-                </button>
-              </span>
-            ))}
-        </div>
-        <p className="text-xs text-muted">
-          {fileStatus(file)} · {file.copyCount ?? 0} confirmed copies · Uploaded with folder:{' '}
-          {file.uploadedAt ? new Date(file.uploadedAt).toLocaleString() : 'Unknown'}
-        </p>
-        <p className="text-xs text-muted">
-          Files in this upload are stored together. To remove their storage, delete the uploaded folder from its
-          details.
-        </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            className="w-auto"
-            disabled={(Boolean(path) && !page) || downloadBlocked(currentFolder)}
-            onClick={() => onDownload(currentFolder)}
-            size="sm"
-            variant="secondary"
-          >
-            <Download size={14} />
-            {isQueued(currentFolder.id)
-              ? 'Cancel queued ZIP'
-              : activeDownloadId === currentFolder.id
-                ? 'Downloading…'
-                : 'Download ZIP'}
-          </Button>
-          <ShareFileButton disabled={Boolean(path) && !page} file={currentFolder} />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <FolderUp className="text-accent" size={18} />
+              <button className="text-sm font-medium hover:underline" onClick={() => navigate('')} type="button">
+                {displayFileName(file)}
+              </button>
+              {path
+                .split('/')
+                .filter(Boolean)
+                .map((name, i, parts) => (
+                  <span className="inline-flex items-center gap-2 text-sm" key={parts.slice(0, i + 1).join('/')}>
+                    <ChevronRight className="text-muted" size={13} />
+                    <button onClick={() => navigate(parts.slice(0, i + 1).join('/'))} type="button">
+                      {name}
+                    </button>
+                  </span>
+                ))}
+            </div>
+            <p className="text-xs text-muted">
+              {fileStatus(file)} · {file.copyCount ?? 0} confirmed copies · Uploaded:{' '}
+              {file.uploadedAt ? new Date(file.uploadedAt).toLocaleString() : 'Unknown'}
+            </p>
+          </div>
+          <div className="grid w-full grid-cols-2 gap-2 sm:w-64">
+            <Button
+              className="min-h-9 w-full min-w-0 gap-1.5 px-3 py-1.5 text-xs"
+              disabled={(Boolean(path) && !page) || downloadBlocked(currentFolder)}
+              onClick={() => onDownload(currentFolder)}
+              size="sm"
+              type="button"
+              variant="secondary"
+            >
+              <Download size={14} />
+              {isQueued(currentFolder.id)
+                ? 'Cancel queued'
+                : activeDownloadId === currentFolder.id
+                  ? 'Downloading…'
+                  : 'Download ZIP'}
+            </Button>
+            <ShareFileButton disabled={Boolean(path) && !page} file={currentFolder} variant="button" />
+          </div>
         </div>
       </div>
       {!page && !error && (
         <p className="flex items-center gap-2 p-6 text-sm text-muted" role="status">
-          <Loader2 className="animate-spin" size={16} /> Loading folder…
+          <Loader2 className="animate-spin" size={16} /> {search.trim() ? 'Searching folder…' : 'Loading folder…'}
         </p>
       )}
       {error && (
@@ -214,7 +248,7 @@ export function DirectoryBrowser({ file, onBack, onDownload, downloadBlocked, is
                 {!page.items.length && (
                   <tr>
                     <td className="p-8 text-center text-sm text-muted" colSpan={3}>
-                      This folder is empty.
+                      {search.trim() ? 'No matching files in this folder.' : 'This folder is empty.'}
                     </td>
                   </tr>
                 )}

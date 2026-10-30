@@ -26,8 +26,8 @@ vi.mock('../../lib/filecoin-pin/drive-api.ts', async (original) => ({
 }))
 vi.mock('../../lib/filecoin-pin/upload-input.ts', () => ({ prepareUploadInput: mocks.createCar }))
 vi.mock('../drive/file-browser.tsx', () => ({
-  FileBrowser: ({ onUpload, uploadDisabled }: { onUpload: () => void; uploadDisabled: boolean }) => (
-    <button disabled={uploadDisabled} onClick={onUpload} type="button">
+  FileBrowser: ({ onUpload, uploadDisabled }: { onUpload: (location: string) => void; uploadDisabled: boolean }) => (
+    <button disabled={uploadDisabled} onClick={() => onUpload('')} type="button">
       Upload files
     </button>
   ),
