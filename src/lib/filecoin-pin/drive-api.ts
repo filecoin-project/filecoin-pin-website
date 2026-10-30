@@ -26,8 +26,7 @@ type Provider = { name: string | null; serviceUrl: string | null }
 
 async function request(path: string, signal: AbortSignal) {
   const response = await fetch(`${API}${path}`, { signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]) })
-  if (!response.ok)
-    throw new Error(`File index unavailable (${response.status}). Your cached files are kept. Try refreshing later.`)
+  if (!response.ok) throw new Error(`Filecoin index unavailable (${response.status}). Please try loading again.`)
   return response.json()
 }
 

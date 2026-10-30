@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useBrowserWallet } from '../context/browser-wallet-provider.tsx'
 import { loadDriveFiles, mergeIndexedFiles } from '../lib/filecoin-pin/drive-api.ts'
 import { recoverMissingFileSizes } from '../lib/filecoin-pin/file-size.ts'
 import { addStoredDataSetId } from '../lib/local-storage/data-set.ts'
@@ -64,13 +65,15 @@ export const useDatasetPieces = () => {
   const [pieces, setPieces] = useState<DatasetPiece[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [indexError, setIndexError] = useState<string | null>(null)
   const [hasLoaded, setHasLoaded] = useState(false)
 
-  const { wallet, synapse, storageScope, addDataSetId } = useFilecoinPinContext()
+  const { synapse, storageScope, addDataSetId } = useFilecoinPinContext()
+  const connection = useBrowserWallet()
 
-  const walletAddress = storageScope ?? (wallet.status === 'ready' ? wallet.data.address : null)
-  const owner = wallet.status === 'ready' ? wallet.data.address : null
-  const network = wallet.status === 'ready' ? wallet.data.network : 'calibration'
+  const walletAddress = storageScope ?? null
+  const owner = connection.address
+  const network = connection.network
   const currentScope = useRef(walletAddress)
   const autoLoadedRef = useRef(false)
   currentScope.current = walletAddress
@@ -91,7 +94,6 @@ export const useDatasetPieces = () => {
         await operation()
         if (mounted.current && currentScope.current === walletAddress) {
           setPieces(getCachedPieces(walletAddress) ?? [])
-          setHasLoaded(true)
           setError(null)
         }
       } catch (cause) {
@@ -121,6 +123,7 @@ export const useDatasetPieces = () => {
     autoLoadedRef.current = false
     setHasLoaded(false)
     setError(null)
+    setIndexError(null)
     if (!walletAddress) {
       setPieces([])
       return
@@ -141,8 +144,16 @@ export const useDatasetPieces = () => {
     recovery.current = controller
     setIsLoading(true)
     setError(null)
+    setIndexError(null)
     try {
-      const indexed = await loadDriveFiles(synapse, owner, network, controller.signal)
+      let indexed: DatasetPiece[]
+      try {
+        indexed = await loadDriveFiles(synapse, owner, network, controller.signal)
+      } catch (cause) {
+        if (!controller.signal.aborted && mounted.current && currentScope.current === walletAddress)
+          setIndexError(cause instanceof Error ? cause.message : 'Unable to load the Filecoin index.')
+        return
+      }
       controller.signal.throwIfAborted()
       if (!mounted.current || currentScope.current !== walletAddress) return
       await mutatePieces((current) => mergeIndexedFiles(current, indexed))
@@ -162,7 +173,7 @@ export const useDatasetPieces = () => {
       })
     } catch (cause) {
       if (!controller.signal.aborted && mounted.current && currentScope.current === walletAddress)
-        setError(cause instanceof Error ? cause.message : 'Unable to refresh the file index. Cached files are kept.')
+        setError(cause instanceof Error ? cause.message : 'Unable to update the browser directory.')
     } finally {
       if (!controller.signal.aborted && mounted.current && currentScope.current === walletAddress) {
         setIsLoading(false)
@@ -172,12 +183,11 @@ export const useDatasetPieces = () => {
   }, [synapse, owner, network, walletAddress, mutatePieces, addDataSetId, getLatestPieces])
 
   useEffect(() => {
-    if (!walletAddress || !synapse || wallet.status !== 'ready' || autoLoadedRef.current) return
+    if (!walletAddress || !synapse || !owner || autoLoadedRef.current) return
     autoLoadedRef.current = true
     setPieces(getCachedPieces(walletAddress) ?? [])
-    setHasLoaded(true)
     void loadPieces()
-  }, [walletAddress, synapse, wallet.status, loadPieces])
+  }, [walletAddress, synapse, owner, loadPieces])
 
   const updateIndexing = useCallback(
     (cid: string, indexed: boolean, attempts: number) => {
@@ -223,6 +233,7 @@ export const useDatasetPieces = () => {
     hasUnsavedChanges: walletAddress ? hasUnsavedPieces(walletAddress) : false,
     isLoading,
     error,
+    indexError,
     refreshPieces,
     addPiece,
     hasLoaded,

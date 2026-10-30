@@ -25,6 +25,9 @@ vi.mock('../lib/filecoin-pin/fresh-contexts.ts', () => ({
     .mockResolvedValue([{ provider: { id: 4n, name: 'Primary' } }, { provider: { id: 5n, name: 'Secondary' } }]),
 }))
 vi.mock('./use-filecoin-pin-context.ts', () => ({ useFilecoinPinContext: () => context }))
+vi.mock('../context/browser-wallet-provider.tsx', () => ({
+  useBrowserWallet: () => ({ address: scope.slice(4), network: 'mainnet' }),
+}))
 
 import { UploadError } from '../components/upload/upload-error.tsx'
 import type { FilecoinPinContextValue } from '../context/filecoin-pin-provider.tsx'
