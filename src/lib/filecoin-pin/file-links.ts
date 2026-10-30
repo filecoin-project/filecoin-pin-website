@@ -10,7 +10,7 @@ export const canPreviewFile = (file: DatasetPiece) =>
   /\.(avif|bmp|gif|ico|jpe?g|png|svg|webp|pdf|txt|json|html?|mp3|wav|ogg|mp4|webm)$/i.test(displayFileName(file))
 
 export function fileShareLink(file: DatasetPiece): string | undefined {
-  if (isDeletionScheduled(file)) return undefined
+  if (isDeletionScheduled(file) || (file.upload && file.upload.phase !== 'complete')) return undefined
   if (!file.importedCar) {
     if (!file.cid) return undefined
     return canPreviewFile(file)

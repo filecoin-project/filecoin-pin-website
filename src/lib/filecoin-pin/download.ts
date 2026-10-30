@@ -1,3 +1,4 @@
+import { downloadAndValidate } from '@filoz/synapse-core/piece'
 import type { Synapse } from '@filoz/synapse-sdk'
 import { CarReader } from '@ipld/car'
 import { exporter } from 'ipfs-unixfs-exporter'
@@ -43,11 +44,27 @@ export async function downloadFile(
   if (!file.cid)
     throw new Error('The IPFS root CID is missing from this record. Use Load from Filecoin after the index catches up.')
   let failure: unknown
+  const attempts: (() => Promise<Uint8Array>)[] = []
   for (const datasetId of file.datasetIds ?? [file.datasetId]) {
-    try {
+    if (!datasetId) continue
+    attempts.push(async () => {
       const context = await synapse.storage.createContext({ dataSetId: BigInt(datasetId) })
+      return context.download({ pieceCid: file.pieceCid, withCDN: false })
+    })
+  }
+  for (const provider of file.upload?.providers ?? []) {
+    if (!provider.stored || !file.pieceCid) continue
+    attempts.push(() =>
+      downloadAndValidate({
+        url: new URL(`/piece/${encodeURIComponent(file.pieceCid)}`, provider.serviceURL).href,
+        expectedPieceCid: file.pieceCid,
+      })
+    )
+  }
+  for (const retrieve of attempts) {
+    try {
       onStage?.('downloading')
-      const bytes = await context.download({ pieceCid: file.pieceCid, withCDN: false })
+      const bytes = await retrieve()
       onStage?.('preparing')
       if (file.importedCar) {
         const reader = await CarReader.fromBytes(bytes)

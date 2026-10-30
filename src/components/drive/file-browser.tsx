@@ -31,22 +31,15 @@ import {
   getPieceExplorerLink,
   getTxExplorerLink,
 } from '../../utils/links.ts'
+import { copyProgress, fileStatus, fileStatusColors } from '../../utils/upload/file-status.ts'
 import { ButtonBase as Button, buttonVariants } from '../ui/button/button-base.tsx'
 import { CopyButton } from '../ui/copy-button.tsx'
 import { FileTypeIcon } from './file-type-icon.tsx'
+import { FileUploadDetails } from './file-upload-details.tsx'
 import { ProviderLink } from './provider-link.tsx'
 import { ShareFileButton } from './share-file-button.tsx'
 
-export function fileStatus(file: DatasetPiece) {
-  if (isDeletionScheduled(file)) return 'Deletion scheduled'
-  if (hasRemovalProgress(file)) return 'Deletion incomplete'
-  if (!file.cid) return 'Metadata missing'
-  if (file.ipfsIndexed === false)
-    return (file.ipfsCheckAttempts ?? 0) >= IPFS_CHECK_LIMIT
-      ? 'Stored · IPFS indexing unconfirmed'
-      : 'Stored · IPFS indexing pending'
-  return 'Stored'
-}
+export { fileStatus } from '../../utils/upload/file-status.ts'
 
 interface Props {
   folder: string
@@ -54,7 +47,7 @@ interface Props {
   onUpload?: () => void
   uploadDisabled?: boolean
 }
-export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled = false }: Props) {
+export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled }: Props) {
   const {
     history,
     updateUpload,
@@ -127,6 +120,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
       download?.id === file.id ||
       !synapse ||
       !file.cid ||
+      !file.pieceCid ||
       isDeletionScheduled(file))
   const downloadOriginal = (file: DatasetPiece) => {
     if (downloadBlocked(file)) return
@@ -173,7 +167,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
             <Button
               aria-label="Upload files"
               className="w-auto"
-              disabled={isEditing || connection.busy || connection.uploading || uploadDisabled}
+              disabled={isEditing || connection.busy || (uploadDisabled ?? connection.uploading)}
               onClick={onUpload}
               size="sm"
             >
@@ -376,20 +370,22 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                     <td className="p-4 whitespace-nowrap">{file.fileSize}</td>
                     <td className="p-4">
                       <span
-                        className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] ${deletingPieceCid === file.pieceCid || fileStatus(file) === 'Deletion incomplete' ? 'bg-amber-500/10 text-warning' : file.cid ? (file.ipfsIndexed === false ? 'bg-brand-800/15 text-accent' : 'bg-emerald-500/10 text-success') : 'bg-surface-raised text-muted'}`}
-                        title={
-                          file.ipfsIndexed === false && !file.deletion
-                            ? (file.ipfsCheckAttempts ?? 0) >= IPFS_CHECK_LIMIT
-                              ? 'Automatic checks stopped after 5 attempts. The file is stored and can still be downloaded.'
-                              : `Checking IPFS indexing up to 5 times, every 2 minutes (${file.ipfsCheckAttempts ?? 0}/5 completed).`
-                            : undefined
-                        }
+                        className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] ${fileStatusColors(displayStatus(file))}`}
                       >
                         <span className="h-1 w-1 shrink-0 rounded-full bg-current" />
                         {displayStatus(file)}
                       </span>
                     </td>
-                    <td className="p-4 tabular-nums text-muted">{file.copyCount ?? 1}</td>
+                    <td className="p-4 tabular-nums text-muted">
+                      <span className="whitespace-nowrap">
+                        {file.upload
+                          ? `${file.copyCount ?? 0} / ${file.upload.expectedCopies} confirmed`
+                          : (file.copyCount ?? 1)}
+                      </span>
+                      {copyProgress(file) && (
+                        <span className="mt-1 block text-[11px] text-warning">{copyProgress(file)}</span>
+                      )}
+                    </td>
                     <td className="p-4 whitespace-nowrap text-xs text-muted">
                       {file.uploadedAt ? new Date(file.uploadedAt).toLocaleDateString() : 'Unknown'}
                     </td>
@@ -417,7 +413,13 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                               ? 'Queued · Cancel'
                               : 'Download'}
                         </button>
-                        <ShareFileButton disabled={deletingPieceCid === file.pieceCid} file={file} />
+                        <ShareFileButton
+                          disabled={
+                            deletingPieceCid === file.pieceCid ||
+                            Boolean(file.upload && file.upload.phase !== 'complete')
+                          }
+                          file={file}
+                        />
                         <button
                           className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent"
                           onClick={() => choose(file)}
@@ -505,12 +507,15 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
               <>
                 <div className="text-sm space-y-2">
                   <p>
-                    {selected.fileSize} · {displayStatus(selected)}
+                    {selected.fileSize}
+                    {!selected.upload && ` · ${displayStatus(selected)}`}
                   </p>
                   {selected.ipfsIndexed === false &&
                     !selected.deletion &&
+                    (!selected.upload || selected.upload.phase === 'complete') &&
                     (selected.ipfsCheckAttempts ?? 0) >= IPFS_CHECK_LIMIT && (
-                      <div className="mt-2 space-y-2">
+                      <details className="mt-2 space-y-2">
+                        <summary className="cursor-pointer text-xs text-muted">IPFS indexing</summary>
                         <p className="text-xs text-muted">
                           Automatic indexing checks stopped after 5 attempts. Your stored file can still be downloaded.
                         </p>
@@ -527,7 +532,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                         >
                           Retry indexing checks
                         </Button>
-                      </div>
+                      </details>
                     )}
                   <p>
                     {selected.id.startsWith('indexed-') ? 'Storage confirmed' : 'Uploaded'}{' '}
@@ -561,7 +566,9 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                           ? 'Queued · Cancel'
                           : 'Download'}
                     </Button>
-                    {canPreviewFile(selected) && fileStatus(selected) !== 'Deletion scheduled' ? (
+                    {canPreviewFile(selected) &&
+                    (!selected.upload || selected.upload.phase === 'complete') &&
+                    fileStatus(selected) !== 'Deletion scheduled' ? (
                       <a
                         className={buttonVariants({ variant: 'secondary', size: 'sm' })}
                         href={getIpfsGatewayPreviewLink(selected.cid, displayFileName(selected))}
@@ -609,7 +616,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                         className="mt-1 w-full rounded border border-border p-2 font-mono text-xs"
                         id={label.replaceAll(' ', '-')}
                         readOnly
-                        value={value || 'Missing from this browser directory'}
+                        value={value || (selected.upload ? 'Not available yet' : 'Missing from this browser directory')}
                       />
                       {value && <CopyButton className="mt-1" label={`Copy ${label}`} value={value} />}
                     </div>
@@ -625,6 +632,7 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                     </a>
                   )}
                 </section>
+                <FileUploadDetails file={selected} />
                 <section className="space-y-3">
                   <h3 className="font-medium">Storage copies</h3>
                   {(selected.datasetIds ?? [selected.datasetId]).map((datasetId, index) => (
@@ -720,7 +728,13 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                     Delete all recorded copies of this content.
                   </label>
                   <Button
-                    disabled={disabled || !deleteConsent || !connection.session || allAliasesScheduled}
+                    disabled={
+                      disabled ||
+                      !deleteConsent ||
+                      !connection.session ||
+                      allAliasesScheduled ||
+                      Boolean(selected.upload && selected.upload.phase !== 'complete')
+                    }
                     onClick={() => void deleteSelectedFile()}
                     size="sm"
                     variant="danger"
@@ -732,6 +746,9 @@ export function FileBrowser({ folder, onFolderChange, onUpload, uploadDisabled =
                         ? 'Continue deletion'
                         : 'Schedule deletion'}
                   </Button>
+                  {selected.upload && selected.upload.phase !== 'complete' && (
+                    <p className="text-sm text-muted">Wait for the upload to finish before deleting this content.</p>
+                  )}
                   {!connection.session && (
                     <p className="text-sm text-muted">Authorize a browser session in Wallet setup first.</p>
                   )}

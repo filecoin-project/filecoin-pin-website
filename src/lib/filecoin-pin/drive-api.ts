@@ -147,6 +147,27 @@ function mergeFiles(local: DatasetPiece[], indexed: DatasetPiece[]): DatasetPiec
         : []
     )
     if (!matches.length) {
+      // A parked upload has no dataset/piece identity yet. Recover only a unique
+      // matching upload from this provider, added after the local task started.
+      const pending = result.flatMap((file, i) =>
+        file.upload &&
+        file.upload.phase !== 'complete' &&
+        file.cid === incoming.cid &&
+        file.fileName === incoming.fileName &&
+        (file.folderPath ?? '') === (incoming.folderPath ?? '') &&
+        Boolean(file.importedCar) === Boolean(incoming.importedCar) &&
+        incoming.uploadedAt >= file.uploadedAt &&
+        file.upload.providers.some(
+          (provider) =>
+            provider.providerId === incoming.providerId &&
+            (!provider.dataSetId || provider.dataSetId === incoming.datasetId)
+        )
+          ? [i]
+          : []
+      )
+      if (pending.length === 1) matches = pending
+    }
+    if (!matches.length) {
       // Pair replicas without collapsing repeated uploads in the same dataset.
       const i = result.findIndex(
         (file) =>
@@ -168,8 +189,38 @@ function mergeFiles(local: DatasetPiece[], indexed: DatasetPiece[]): DatasetPiec
       for (const i of matches) if (result[i].id.startsWith('indexed-')) superseded.add(result[i].id)
     for (const i of matches) {
       const previous = result[i]
+      const merged = mergeStorageCopies(previous, incoming)
+      const upload = previous.upload
+      const providers = upload?.providers.map((provider) => {
+        const index = (incoming.datasetIds ?? [incoming.datasetId]).findIndex(
+          (id, i) =>
+            (incoming.providerIds?.[i] ?? incoming.providerId) === provider.providerId &&
+            (!provider.dataSetId || provider.dataSetId === id)
+        )
+        if (index < 0) return provider
+        return {
+          ...provider,
+          confirmed: true,
+          dataSetId: (incoming.datasetIds ?? [incoming.datasetId])[index],
+          pieceId: incoming.pieceIds?.[index] ?? String(incoming.pieceId),
+        }
+      })
       result[i] = {
-        ...mergeStorageCopies(previous, incoming),
+        ...merged,
+        ...(upload && providers
+          ? {
+              upload: {
+                ...upload,
+                providers,
+                phase: providers.every((provider) => provider.confirmed || provider.rejected)
+                  ? ('complete' as const)
+                  : upload.phase,
+                error: providers.every((provider) => provider.confirmed || provider.rejected)
+                  ? undefined
+                  : upload.error,
+              },
+            }
+          : {}),
         fileName: previous.fileName && previous.fileName !== 'unknown' ? previous.fileName : incoming.fileName,
         cid: previous.cid || incoming.cid,
         fileSize: previous.fileSize === 'Unknown' ? incoming.fileSize : previous.fileSize,

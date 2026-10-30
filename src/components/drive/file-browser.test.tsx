@@ -243,9 +243,9 @@ it('schedules a later identical upload instead of reusing an older alias’s del
   expect(getCachedPieces(scope)?.find((file) => file.id === 'later')?.deletion?.['1'].transactionHash).toBe(hash)
 })
 
-it('distinguishes pending indexing from stopped checks without treating storage as failed', () => {
-  expect(fileStatus({ ...file, ipfsIndexed: false, ipfsCheckAttempts: 4 })).toBe('Stored · IPFS indexing pending')
-  expect(fileStatus({ ...file, ipfsIndexed: false, ipfsCheckAttempts: 5 })).toBe('Stored · IPFS indexing unconfirmed')
+it('keeps indexing progress out of the stored-file status', () => {
+  expect(fileStatus({ ...file, ipfsIndexed: false, ipfsCheckAttempts: 4 })).toBe('Stored')
+  expect(fileStatus({ ...file, ipfsIndexed: false, ipfsCheckAttempts: 5 })).toBe('Stored')
   expect(fileStatus({ ...file, ipfsIndexed: true, ipfsCheckAttempts: 5 })).toBe('Stored')
   expect(fileStatus({ ...file, cid: '', ipfsIndexed: false })).toBe('Metadata missing')
   expect(
@@ -713,3 +713,33 @@ it('shows the save error when index retrieval succeeds but writing the cache fai
     write.mockRestore()
   }
 })
+
+it.each([
+  ['pending', 2, 'Confirming'],
+  ['interrupted', 2, 'Interrupted'],
+  ['complete', 2, 'Partial'],
+  ['complete', 1, null],
+] as const)(
+  'separates stored-file success from %s copy progress with target %s',
+  async (phase, expectedCopies, label) => {
+    setCachedPieces(scope, [
+      {
+        ...file,
+        copyCount: 1,
+        upload: { phase, expectedCopies, providers: [], steps: [], checks: 0, nextCheckAt: 0 },
+      },
+    ])
+    render(
+      <UploadHistoryProvider>
+        <FileBrowser folder="" onFolderChange={vi.fn()} />
+      </UploadHistoryProvider>
+    )
+    const count = await screen.findByText(`1 / ${expectedCopies} confirmed`)
+    const row = count.closest('tr')
+    expect(row).toBeTruthy()
+    if (!row) return
+    expect(within(row).getByText('Stored', { exact: true }).className).toContain('text-success')
+    if (label) expect(within(row).getByText(label, { exact: true })).toBeTruthy()
+    else expect(within(row).queryByText('Confirming', { exact: true })).toBeNull()
+  }
+)

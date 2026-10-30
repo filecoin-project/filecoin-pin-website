@@ -507,3 +507,21 @@ it.each(['resolution', 'quote'] as const)(
     expect(getCachedPieces('0xabc')).toEqual([{ pieceCid: 'history' }])
   }
 )
+
+it('does not let a pre-transfer interrupted record block unrelated uploads', async () => {
+  const scope = '314159:0xabc'
+  useFilecoinPinContextMock.mockReturnValue({ ...baseContext, storageScope: scope })
+  setCachedPieces(scope, [
+    {
+      id: 'interrupted-before-packing',
+      cid: '',
+      pieceCid: '',
+      upload: { phase: 'interrupted', providers: [], expectedCopies: 2, steps: [], checks: 0, nextCheckAt: 0 },
+    } as never,
+  ])
+  const { result } = renderHook(useFilecoinUpload)
+  await act(async () => {
+    await result.current.uploadFile(testFile)
+  })
+  expect(executeUploadMock).toHaveBeenCalledOnce()
+})

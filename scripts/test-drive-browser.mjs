@@ -2,13 +2,17 @@ import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { checkDirectoryTabs } from './check-drive-directory-tabs.mjs'
 import { checkSessionTabs } from './check-drive-session-tabs.mjs'
+import { checkUploadTasks } from './check-drive-upload-tasks.mjs'
 import { checkWalletSelection } from './check-drive-wallet-selection.mjs'
 import { prepareBrowserPage } from './drive-browser-fixtures.mjs'
 
 // Run against npm run dev. All wallet requests and external RPCs are mocked.
 const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || undefined })
 try {
-  if (!process.env.DRIVE_TEST_WALLETCONNECT) await checkWalletSelection(browser)
+  if (!process.env.DRIVE_TEST_WALLETCONNECT) {
+    await checkWalletSelection(browser)
+    await checkUploadTasks(browser)
+  }
   const context = await browser.newContext({ viewport: { width: 1440, height: 1080 } })
   const page = await context.newPage()
   const errors = []

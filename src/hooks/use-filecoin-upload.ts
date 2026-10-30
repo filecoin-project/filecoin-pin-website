@@ -14,6 +14,7 @@ import { acquireContentLock } from '../lib/filecoin-pin/content-lock.ts'
 import { validateDriveMetadata } from '../lib/filecoin-pin/drive-metadata.ts'
 import { createFreshUploadContexts } from '../lib/filecoin-pin/fresh-contexts.ts'
 import { ensureSessionKeyPermissions } from '../lib/filecoin-pin/synapse.ts'
+import type { UploadProviderCheckpoint } from '../lib/filecoin-pin/upload-checkpoint.ts'
 import { prepareUploadContexts } from '../lib/filecoin-pin/upload-funding.ts'
 import { prepareUploadInput } from '../lib/filecoin-pin/upload-input.ts'
 import { getOrCreateClientId } from '../lib/local-storage/client-id.ts'
@@ -25,7 +26,8 @@ import { hasRemovalProgress, isDeletionScheduled } from '../utils/file-deletion.
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 import { useWaitableRef } from './use-waitable-ref.ts'
 
-interface UploadState {
+export interface UploadState {
+  uploadProviders?: UploadProviderCheckpoint[]
   importedCar?: boolean
   confirmedPieces?: { dataSetId: bigint; providerId: bigint; pieceId: bigint; transactionHash: string }[]
   isUploading: boolean
@@ -133,6 +135,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
         expectedCopies: 0,
         providersById: {},
         confirmedPieces: [],
+        uploadProviders: [],
       })
 
       let confirmed = false
@@ -172,10 +175,18 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
         if (
           storageScope &&
           getCachedPieces(storageScope)?.some(
-            (piece) => (!piece.cid || piece.cid === rootCid) && hasRemovalProgress(piece) && !isDeletionScheduled(piece)
+            (piece) =>
+              piece.id !== metadata?.taskId &&
+              (((!piece.cid || piece.cid === rootCid) && hasRemovalProgress(piece) && !isDeletionScheduled(piece)) ||
+                (piece.cid === rootCid &&
+                  piece.upload &&
+                  piece.upload.phase !== 'complete' &&
+                  piece.upload.phase !== 'failed'))
           )
         )
-          throw new Error('This content has an unfinished deletion. Continue its deletion before uploading it again.')
+          throw new Error(
+            'This content has an unfinished deletion or upload. Check its status before uploading it again.'
+          )
 
         updateStepState('checking-readiness', { status: 'in-progress', progress: 0 })
         logger.info('Waiting for synapse to be initialized')
@@ -218,6 +229,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
         // resume retry below leaves the stored dataset ids in place.
         let sawBytesStored = false
         const transactionsByProvider = new Map<string, string>()
+        let executionContexts: Awaited<ReturnType<typeof prepareUploadContexts>> = []
         const baseOptions: UploadExecutionOptions = {
           logger,
           contextId: `upload-${Date.now()}`,
@@ -252,6 +264,9 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
                 setUploadState((prev) => ({
                   ...prev,
                   pieceCid: event.data.pieceCid.toString(),
+                  uploadProviders: prev.uploadProviders?.map((provider) =>
+                    provider.providerId === String(event.data.providerId) ? { ...provider, stored: true } : provider
+                  ),
                 }))
                 updateStepState('uploading-car', { status: 'completed', progress: 100 })
                 updateStepState('replicating', { status: 'in-progress', progress: 0 })
@@ -274,6 +289,19 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
                 break
 
               case 'piecesAdded': {
+                const context = executionContexts.find((entry) => entry.provider.id === event.data.providerId)
+                setUploadState((prev) => ({
+                  ...prev,
+                  uploadProviders: prev.uploadProviders?.map((provider) =>
+                    provider.providerId === String(event.data.providerId)
+                      ? {
+                          ...provider,
+                          dataSetId: context?.dataSetId?.toString() ?? provider.dataSetId,
+                          transactionHash: event.data.txHash,
+                        }
+                      : provider
+                  ),
+                }))
                 const txHash = event.data.txHash
                 transactionsByProvider.set(String(event.data.providerId), txHash)
                 console.debug('[FilecoinUpload] Piece add transaction:', { txHash })
@@ -385,7 +413,20 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
         const executeFundedUpload = async (options: UploadExecutionOptions) => {
           uploadExecutionStarted = false
           const contexts = await prepareUploadContexts(synapse, BigInt(carResult.carBytes.length), options)
-          setUploadState((prev) => ({ ...prev, expectedCopies: contexts.length }))
+          executionContexts = contexts
+          setUploadState((prev) => ({
+            ...prev,
+            expectedCopies: contexts.length,
+            uploadProviders: contexts.map((context) => ({
+              providerId: String(context.provider.id),
+              serviceURL: context.provider.pdp?.serviceURL ?? '',
+              dataSetId: context.dataSetId?.toString(),
+            })),
+            providersById: {
+              ...prev.providersById,
+              ...Object.fromEntries(contexts.map((context) => [String(context.provider.id), context.provider])),
+            },
+          }))
           updateStepState('checking-readiness', { status: 'completed', progress: 100 })
           updateStepState('uploading-car', { status: 'in-progress', progress: 0 })
           const executionOptions = { ...options, contexts }

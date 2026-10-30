@@ -63,6 +63,26 @@ export const addCachedPiece = (walletAddress: string, piece: DatasetPiece): Prom
           ipfsIndexed: previous.ipfsIndexed === true || piece.ipfsIndexed === true,
         }
       : piece
+    if (piece.upload && next) {
+      Object.assign(next, {
+        cid: piece.cid || previous?.cid || '',
+        pieceCid: piece.pieceCid || previous?.pieceCid || '',
+        upload: {
+          ...piece.upload,
+          providers: piece.upload.providers.map((provider) => {
+            const known = previous?.upload?.providers.find(
+              (entry) =>
+                entry.providerId === provider.providerId &&
+                entry.confirmed &&
+                (!provider.dataSetId || entry.dataSetId === provider.dataSetId)
+            )
+            return known ? { ...provider, ...known } : provider
+          }),
+          ...(previous?.upload?.phase === 'complete' ? { phase: 'complete' as const, error: undefined } : {}),
+        },
+        ...(piece.datasetId ? { datasetId: piece.datasetId, pieceId: piece.pieceId } : {}),
+      })
+    }
     const complete = indexed.reduce((value, record) => mergeStorageCopies(value, record), next)
     return [complete, ...current.filter((record) => record.id !== piece.id && !indexed.includes(record))]
   })
@@ -90,6 +110,8 @@ export function mergeStorageCopies(recorded: DatasetPiece, incoming: DatasetPiec
   return {
     ...incoming,
     ...recorded,
+    datasetId: recorded.datasetId || incoming.datasetId,
+    pieceId: recorded.pieceId ?? incoming.pieceId,
     datasetIds,
     copyCount: datasetIds.length,
     providerIds,
@@ -97,10 +119,10 @@ export function mergeStorageCopies(recorded: DatasetPiece, incoming: DatasetPiec
     serviceURLs,
     transactionHashes,
     pieceIds: mergeField('pieceIds', 'pieceId'),
-    providerId: providerIds[0],
-    providerName: providerNames[0],
-    serviceURL: serviceURLs[0],
-    transactionHash: transactionHashes[0],
+    providerId: providerIds[0] || recorded.providerId || incoming.providerId,
+    providerName: providerNames[0] || recorded.providerName || incoming.providerName,
+    serviceURL: serviceURLs[0] || recorded.serviceURL || incoming.serviceURL,
+    transactionHash: transactionHashes[0] || recorded.transactionHash || incoming.transactionHash,
   }
 }
 

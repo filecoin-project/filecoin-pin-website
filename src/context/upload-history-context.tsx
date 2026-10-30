@@ -4,7 +4,7 @@ import { useDatasetPieces } from '../hooks/use-dataset-pieces.ts'
 
 export interface UploadHistoryContextValue {
   /**
-   * All completed uploads for the current dataset
+   * File records and durable operation checkpoints for the connected wallet/network
    */
   history: DatasetPiece[]
   updateUpload: (id: string, patch: DirectoryPiecePatch) => Promise<void>
@@ -44,10 +44,10 @@ const UploadHistoryContext = createContext<UploadHistoryContextValue | undefined
 /**
  * Provides upload history data access to all child components.
  *
- * Single Responsibility: Historical upload data CRUD operations
+ * Single Responsibility: File metadata and operation checkpoint persistence
  *
  * Does NOT:
- * - Handle active/in-progress uploads (that's useFilecoinUpload)
+ * - Execute uploads (that's useFilecoinUpload)
  * - Orchestrate upload lifecycle (that's useUploadOrchestration)
  * - Manage UI state (that's component state or UI hooks)
  *
@@ -57,7 +57,9 @@ const UploadHistoryContext = createContext<UploadHistoryContextValue | undefined
  *   return (
  *     <FilecoinPinProvider>
  *       <UploadHistoryProvider>
- *         <Content />
+ *         <UploadTasksProvider>
+ *           <Content />
+ *         </UploadTasksProvider>
  *       </UploadHistoryProvider>
  *     </FilecoinPinProvider>
  *   )

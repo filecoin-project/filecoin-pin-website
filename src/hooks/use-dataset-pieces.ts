@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBrowserWallet } from '../context/browser-wallet-provider.tsx'
 import { loadDriveFiles, mergeIndexedFiles } from '../lib/filecoin-pin/drive-api.ts'
 import { recoverMissingFileSizes } from '../lib/filecoin-pin/file-size.ts'
+import type { UploadCheckpoint } from '../lib/filecoin-pin/upload-checkpoint.ts'
 import { addStoredDataSetId } from '../lib/local-storage/data-set.ts'
 import { DIRECTORY_SAVE_ERROR } from '../lib/local-storage/directory-store.ts'
 import {
@@ -33,7 +34,8 @@ export interface DatasetPiece {
   network: string
   uploadedAt: number // Local upload start, or indexed storage-confirmation time.
   indexedAtBlock?: string
-  pieceId: number
+  pieceId?: number
+  upload?: UploadCheckpoint
   removedCopies?: string[]
   removalQueuedCopies?: string[]
   /** Original CAR bytes are downloaded directly instead of unpacking a UnixFS file. */

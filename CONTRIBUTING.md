@@ -74,6 +74,8 @@ The main logic demonstrating `filecoin-pin` usage:
 - [`src/lib/filecoin-pin/file-size.ts`](src/lib/filecoin-pin/file-size.ts) — optional bounded root-block reads for original-file sizes, with CID verification and two concurrent workers.
 - [`src/lib/filecoin-pin/drive-metadata.ts`](src/lib/filecoin-pin/drive-metadata.ts) — UTF-8 limits for immutable upload names and paths.
 - [`src/lib/filecoin-pin/browser-wallet.ts`](src/lib/filecoin-pin/browser-wallet.ts) — owner and session clients with chain permission validation.
+- [`src/context/upload-tasks-context.tsx`](src/context/upload-tasks-context.tsx) — independent upload workers, early stored-file checkpoints and per-file progress.
+- [`src/hooks/use-upload-recovery.ts`](src/hooks/use-upload-recovery.ts) — bounded read-only recovery of saved provider operations, with task locks to exclude live workers in other tabs.
 - [`src/hooks/use-file-deletion.ts`](src/hooks/use-file-deletion.ts) — deletion operation state, permission checks, content locks and durable directory checkpoints. `planDeletion` in [`delete.ts`](src/lib/filecoin-pin/delete.ts) computes active aliases and resumable checkpoints without side effects.
 - [`src/hooks/use-wallet-transaction.ts`](src/hooks/use-wallet-transaction.ts) — bounded confirmation recovery for owner-wallet transactions, with foreground/manual status refresh and wallet/network-scoped pending hashes.
 - [`src/lib/filecoin-pin/transaction-receipt.ts`](src/lib/filecoin-pin/transaction-receipt.ts) — receipt recovery using a persisted Filecoin message CID and Lotus `StateSearchMsg` with a 120-epoch lookback; ordinary Ethereum receipts and session-permission reconciliation remain available.

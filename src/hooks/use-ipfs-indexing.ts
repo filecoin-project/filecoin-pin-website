@@ -56,7 +56,8 @@ export function useIpfsIndexing(
       running = true
       try {
         const candidates = latest.current.pieces.filter(
-          (file) => file.cid && file.ipfsIndexed === false && !file.deletion
+          (file) =>
+            file.cid && file.ipfsIndexed === false && !file.deletion && (!file.upload || (file.copyCount ?? 0) > 0)
         )
         const seen = new Set<string>()
         for (const file of candidates) {

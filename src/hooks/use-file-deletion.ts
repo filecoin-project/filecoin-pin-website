@@ -27,6 +27,16 @@ export function useFileDeletion() {
       await withFileDeletionLock(storageScope, selected.cid, async () => {
         // Retry retained checkpoints before planning from the latest locked directory.
         await mutateHistory((current) => current)
+        if (
+          getLatestHistory().some(
+            (record) =>
+              record.pieceCid === selected.pieceCid &&
+              record.upload &&
+              record.upload.phase !== 'complete' &&
+              record.upload.phase !== 'failed'
+          )
+        )
+          throw new Error('This content has an unfinished upload. Check its status before deleting.')
         await ensurePermissions()
         const { aliasIds, file } = planDeletion(getLatestHistory(), selected)
         await mutateHistory((current) =>

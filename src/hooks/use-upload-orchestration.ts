@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useUploadHistory } from '../context/upload-history-context.tsx'
+import { DEFAULT_STORAGE_COPIES } from '../lib/filecoin-pin/config.ts'
+import type { UploadCheckpoint } from '../lib/filecoin-pin/upload-checkpoint.ts'
 import { DIRECTORY_SAVE_ERROR } from '../lib/local-storage/directory-store.ts'
 import { normalizeFolder } from '../lib/local-storage/drive-directory.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
@@ -27,7 +29,7 @@ interface UploadedFile {
  * - Store history (that's UploadHistoryContext's job)
  * - Perform uploads (that's useFilecoinUpload's job)
  */
-export function useUploadOrchestration() {
+export function useUploadOrchestration(taskId?: string) {
   const { uploadState, uploadFile, resetUpload, releaseUploadLock } = useFilecoinUpload(true)
   const { addUpload, history, hasUnsavedChanges } = useUploadHistory()
   const { uploadOutcome } = useUploadProgress({ stepStates: uploadState.stepStates, cid: uploadState.currentCid })
@@ -78,7 +80,7 @@ export function useUploadOrchestration() {
    * Build DatasetPiece from the primary copy result and add to history.
    */
   useEffect(() => {
-    if (!uploadState.pieceCid || !uploadedFile || !uploadState.network) {
+    if ((!uploadState.pieceCid && !taskId) || !uploadedFile || !uploadState.network) {
       return
     }
 
@@ -89,22 +91,50 @@ export function useUploadOrchestration() {
         role: index === 0 ? 'primary' : 'secondary',
         retrievalUrl: '',
       }))
-    if (!copies?.length) {
+    if (!copies?.length && !taskId) {
       return
     }
     // A partial upload may succeed only on a secondary provider.
-    const primary = copies.find((c) => c.role === 'primary') ?? copies[0]
+    const primary = copies?.find((c) => c.role === 'primary') ?? copies?.[0]
 
     console.debug('[UploadOrchestration] Saving upload checkpoint, retry:', saveAttempt)
 
     const providersById = uploadState.providersById
-    const orderedCopies = [primary, ...copies.filter((c) => c !== primary)]
+    const orderedCopies = primary ? [primary, ...(copies ?? []).filter((c) => c !== primary)] : []
     const providerNameFor = (providerId: bigint | string) => providersById[String(providerId)]?.name ?? ''
-    const serviceUrlFor = (c: (typeof copies)[number]) =>
+    const serviceUrlFor = (c: NonNullable<typeof copies>[number]) =>
       providersById[String(c.providerId)]?.pdp?.serviceURL ?? c.retrievalUrl ?? ''
     const transactionFor = (providerId: bigint) =>
       uploadState.confirmedPieces?.find((copy) => copy.providerId === providerId)?.transactionHash ?? ''
 
+    const providers = (uploadState.uploadProviders ?? []).map((provider) => {
+      const copy = orderedCopies.find((copy) => String(copy.providerId) === provider.providerId)
+      return copy
+        ? { ...provider, confirmed: true, dataSetId: String(copy.dataSetId), pieceId: String(copy.pieceId) }
+        : provider
+    })
+    const upload: UploadCheckpoint | undefined = taskId
+      ? {
+          phase: uploadState.isUploading
+            ? uploadState.pieceCid
+              ? 'confirming'
+              : 'uploading'
+            : uploadState.error
+              ? uploadState.pieceCid
+                ? 'pending'
+                : 'failed'
+              : (copies?.length ?? 0) < uploadState.expectedCopies
+                ? 'pending'
+                : 'complete',
+          expectedCopies: uploadState.expectedCopies || DEFAULT_STORAGE_COPIES,
+          providers,
+          steps: uploadState.stepStates,
+          error: uploadState.error,
+          checks: 0,
+          nextCheckAt: Date.now() + 30_000,
+        }
+      : undefined
+    const parked = providers.find((provider) => provider.stored)
     const newPiece = {
       id: uploadedFile.id ?? crypto.randomUUID(),
       folderPath: normalizeFolder(uploadedFile.folderPath ?? ''),
@@ -114,17 +144,21 @@ export function useUploadOrchestration() {
       importedCar: uploadState.importedCar || undefined,
       fileSize: formatFileSize(uploadedFile.file.size),
       cid: uploadState.currentCid || '',
-      pieceCid: uploadState.pieceCid,
-      providerName: providerNameFor(primary.providerId),
-      datasetId: String(primary.dataSetId),
-      providerId: String(primary.providerId),
-      serviceURL: serviceUrlFor(primary),
+      pieceCid: uploadState.pieceCid ?? '',
+      ...(upload ? { upload } : {}),
+      providerName: primary ? providerNameFor(primary.providerId) : '',
+      datasetId: primary ? String(primary.dataSetId) : '',
+      providerId: primary ? String(primary.providerId) : (parked?.providerId ?? ''),
+      serviceURL: primary ? serviceUrlFor(primary) : (parked?.serviceURL ?? ''),
       transactionHash:
-        transactionFor(primary.providerId) || uploadState.transactionHashes[0] || uploadState.transactionHash || '',
+        (primary ? transactionFor(primary.providerId) : '') ||
+        uploadState.transactionHashes[0] ||
+        uploadState.transactionHash ||
+        '',
       network: uploadState.network,
       uploadedAt: uploadedFile.startedAt ?? Date.now(),
-      pieceId: Number(primary.pieceId),
-      copyCount: copies.length,
+      pieceId: primary ? Number(primary.pieceId) : undefined,
+      copyCount: copies?.length ?? 0,
       datasetIds: orderedCopies.map((c) => String(c.dataSetId)),
       providerIds: orderedCopies.map((c) => String(c.providerId)),
       providerNames: orderedCopies.map((c) => providerNameFor(c.providerId)),
@@ -155,7 +189,10 @@ export function useUploadOrchestration() {
       current = false
     }
   }, [
+    taskId,
     isUploadSuccessful,
+    uploadState.expectedCopies,
+    uploadState.uploadProviders,
     uploadState.pieceCid,
     uploadState.importedCar,
     uploadState.currentCid,
@@ -179,14 +216,14 @@ export function useUploadOrchestration() {
     (file: File, folderPath = '') => {
       console.debug('[UploadOrchestration] Starting upload for file:', file.name)
 
-      const id = crypto.randomUUID()
+      const id = taskId ?? crypto.randomUUID()
       setDirectorySaveError(null)
       setIsSavingDirectory(false)
       setSaveAttempt(0)
       setUploadedFile({ file, cid: '', id, folderPath, startedAt: Date.now() })
 
       // Expose completion so callers can release their operation lock even on early failures.
-      return uploadFile(file, { path: folderPath })
+      return uploadFile(file, { path: folderPath, ...(taskId ? { taskId } : {}) })
         .then((cid) => {
           console.debug('[UploadOrchestration] Upload returned CID:', cid)
           setUploadedFile((current) => (current?.id === id ? { ...current, cid } : current))
@@ -196,7 +233,7 @@ export function useUploadOrchestration() {
           console.error('[UploadOrchestration] Upload failed:', error)
         })
     },
-    [uploadFile]
+    [uploadFile, taskId]
   )
 
   const cancelUpload = useCallback(() => {
