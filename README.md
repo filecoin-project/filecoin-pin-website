@@ -35,7 +35,7 @@ Disconnecting a WalletConnect wallet also ends its remote connection session. Wa
 - File table with search across file names and folder paths, dates, copy counts and storage status. File contents are not searched.
 - Folder tree and breadcrumbs derived from file paths recorded at upload. Names and paths are immutable in Drive; standalone empty folders are not supported.
 - File details with IPFS root CID, piece CID, providers, datasets and transaction links.
-- Original-file download: retrieve and validate the CAR from a recorded provider, then extract the UnixFS file in the browser. An IPFS gateway link is available as a fallback. File details also offer a new-tab gateway preview for common browser-supported formats; media playback depends on the browser and encoding.
+- Original-file download: retrieve and validate the CAR from a recorded provider, then extract the UnixFS file in the browser. File details also offer a new-tab gateway preview for common browser-supported formats; media playback depends on the browser and encoding.
 
 - Scheduling deletion across recorded copies, with persisted transaction checkpoints for partial failures and retries.
 
@@ -47,7 +47,7 @@ New datasets carry `source: filecoin-drive` metadata. Known datasets are reused 
 
 Each ordinary upload targets two storage copies on different providers. Matching datasets are reused, and missing copies are selected before the funding quote. A previous one-copy upload does not reduce the target for later uploads or trigger replication of existing files. An upload can still finish with fewer copies if another provider is unavailable or fails; the next upload tries for two again. Confirmed copies are saved, including when only a secondary provider succeeds, and the directory's copy count reflects the successful copies.
 
-**Share** copies a public link and displays its QR code. Previewable files open on inbrowser.link; other ordinary files download through that gateway. Imported CARs share the provider’s Piece URL to preserve the original archive. CAR records do not offer an IPFS gateway export.
+**Share** displays a public link and its QR code. **Copy link** copies the link and shows confirmation only after copying succeeds. Previewable files open on inbrowser.link; other ordinary files download through that gateway. Imported CARs share the provider’s Piece URL to preserve the original archive. CAR records do not offer an IPFS gateway export.
 
 Each new upload records its original filename as `label` and its normalized folder path as `path`. Both values must fit 96 UTF-8 bytes independently, including extensions and path separators; oversized values are rejected before packing or storage requests, never silently omitted. The IPFS root CID occupies the third piece metadata slot. Imported CARs use `carPath` instead of `path` to preserve both their folder and original-archive download mode within the three-key limit. Names, paths and content identifiers are publicly visible in upload events and the index. Repeated uploads can keep separate file records; deleting shared content affects all matching records, as explained before deletion.
 

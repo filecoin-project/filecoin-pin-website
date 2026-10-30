@@ -9,26 +9,14 @@ import { CopyButton } from '../ui/copy-button.tsx'
 
 export function ShareFileButton({ file, disabled = false }: { file: DatasetPiece; disabled?: boolean }) {
   const [open, setOpen] = useState(false)
-  const [copied, setCopied] = useState(false)
   const link = fileShareLink(file)
-  const share = () => {
-    if (!link) return
-    setCopied(false)
-    setOpen(true)
-    // Invoke while handling the click so mobile browsers retain clipboard activation.
-    void navigator.clipboard?.writeText(link).then(
-      () => setCopied(true),
-      () => setCopied(false)
-    )
-  }
   return (
     <Dialog.Root onOpenChange={setOpen} open={open}>
       <Dialog.Trigger asChild>
         <button
           className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent disabled:opacity-40"
           disabled={disabled || !link}
-          onClick={share}
-          title={link ? 'Copy a share link and show its QR code' : 'A share link is unavailable for this record.'}
+          title={link ? 'Show the share link and QR code' : 'A share link is unavailable for this record.'}
           type="button"
         >
           <Share2 aria-hidden="true" size={14} />
@@ -70,9 +58,7 @@ export function ShareFileButton({ file, disabled = false }: { file: DatasetPiece
               value={link}
             />
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs text-muted" role="status">
-                {copied ? 'Link copied.' : 'Copy the link below, or scan the QR code.'}
-              </span>
+              <span className="text-xs text-muted">Copy the link, or scan the QR code.</span>
               <CopyButton label="Copy link" value={link} />
             </div>
           </Dialog.Content>

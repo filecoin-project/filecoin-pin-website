@@ -9,15 +9,14 @@ export const canPreviewFile = (file: DatasetPiece) =>
   !file.importedCar &&
   /\.(avif|bmp|gif|ico|jpe?g|png|svg|webp|pdf|txt|json|html?|mp3|wav|ogg|mp4|webm)$/i.test(displayFileName(file))
 
-export function fileGatewayLink(file: DatasetPiece): string | undefined {
-  if (!file.cid || file.importedCar) return undefined
-  return getIpfsGatewayDownloadLink(file.cid, displayFileName(file))
-}
-
 export function fileShareLink(file: DatasetPiece): string | undefined {
   if (isDeletionScheduled(file)) return undefined
-  if (!file.importedCar)
-    return canPreviewFile(file) ? getIpfsGatewayPreviewLink(file.cid, displayFileName(file)) : fileGatewayLink(file)
+  if (!file.importedCar) {
+    if (!file.cid) return undefined
+    return canPreviewFile(file)
+      ? getIpfsGatewayPreviewLink(file.cid, displayFileName(file))
+      : getIpfsGatewayDownloadLink(file.cid, displayFileName(file))
+  }
   if (!file.pieceCid) return undefined
   const datasetIds = file.datasetIds ?? [file.datasetId]
   for (const [index, serviceURL] of (file.serviceURLs ?? [file.serviceURL]).entries()) {

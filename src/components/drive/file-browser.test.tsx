@@ -217,7 +217,7 @@ it('resumes deletion of shared content through details even when the selected re
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   expect(screen.queryByRole('button', { name: 'first.txt' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'second.txt' })).toBeNull()
-  expect(screen.getByRole('status').textContent).toContain('Removed from the file list')
+  expect(screen.queryByText(/Removed from the file list/)).toBeNull()
 })
 
 it('schedules a later identical upload instead of reusing an older alias’s deletion receipt', async () => {
@@ -311,9 +311,7 @@ it.each(['archived', 'partial'] as const)(
     fireEvent.click(await screen.findByRole('button', { name: 'later.txt' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
     fireEvent.click(screen.getByRole('button', { name: 'Continue deletion' }))
-    await screen.findByText(
-      'Removed from the file list. Storage providers will process removal in a subsequent proving period.'
-    )
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'later.txt' })).toBeNull())
     expect(mocks.receipt).toHaveBeenCalledWith({ hash, checkReplacement: false })
     expect(mocks.submit).not.toHaveBeenCalled()
     expect(getCachedPieces(scope)?.find((record) => record.id === 'later')?.deletion?.['1'].confirmed).toBe(true)
@@ -523,7 +521,7 @@ it.each([false, true])('keeps deletion running after closing details (failure: %
     await waitFor(() =>
       expect(getCachedPieces(scope)?.every((record) => record.deletion?.[record.datasetId]?.confirmed)).toBe(true)
     )
-    expect(screen.getByRole('status').textContent).toContain('Removed from the file list')
+    expect(screen.queryByText(/Removed from the file list/)).toBeNull()
   }
   expect(mocks.deleting).toHaveBeenLastCalledWith(false)
 })
@@ -613,17 +611,19 @@ it('shows a partially queued deletion per provider and offers continuing the rem
   expect(screen.getByText('Deletion incomplete', { exact: true })).toBeTruthy()
 })
 
-it('keeps original CAR downloads without offering a gateway export', async () => {
-  setCachedPieces(scope, [{ ...file, importedCar: true, fileName: 'archive.car' }])
+it.each([false, true])('keeps original downloads without a gateway download link (CAR: %s)', async (importedCar) => {
+  const fileName = importedCar ? 'archive.car' : 'image.png'
+  setCachedPieces(scope, [{ ...file, importedCar, fileName }])
   render(
     <UploadHistoryProvider>
       <FileBrowser folder="" onFolderChange={vi.fn()} />
     </UploadHistoryProvider>
   )
-  fireEvent.click(await screen.findByRole('button', { name: 'archive.car' }))
+  fireEvent.click(await screen.findByRole('button', { name: fileName }))
   expect(screen.queryByRole('link', { name: /IPFS gateway/ })).toBeNull()
   expect(screen.getByRole('button', { name: 'Download original file' })).toBeTruthy()
-  expect(screen.getByRole('button', { name: 'Preview' })).toHaveProperty('disabled', true)
+  if (importedCar) expect(screen.getByRole('button', { name: 'Preview' })).toHaveProperty('disabled', true)
+  else expect(screen.getByRole('link', { name: 'Preview' })).toBeTruthy()
   expect(screen.queryByText(/The gateway exports a new CAR/)).toBeNull()
 })
 
