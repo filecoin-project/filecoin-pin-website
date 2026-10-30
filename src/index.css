@@ -204,3 +204,15 @@
 @media (prefers-reduced-motion: reduce) {
   .copy-feedback { animation: none; }
 }
+
+@keyframes session-hint {
+  30%, 65% {
+    background-color: color-mix(in srgb, var(--color-warning) 15%, transparent);
+    color: var(--color-warning);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-warning) 15%, transparent);
+  }
+}
+
+@utility animate-session-hint {
+  animation: session-hint 800ms ease-out;
+}

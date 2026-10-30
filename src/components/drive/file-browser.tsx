@@ -63,6 +63,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
   const { synapse, storageScope } = useFilecoinPinContext()
   const connection = useBrowserWallet()
   const [search, setSearch] = useState('')
+  const [sessionHintAttempt, setSessionHintAttempt] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [directoryId, setDirectoryId] = useState<string | null>(null)
   const openDirectory = (id: string) => {
@@ -823,14 +824,22 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                     Delete all recorded copies of this content.
                   </label>
                   <Button
+                    aria-describedby={connection.session ? undefined : 'delete-session-hint'}
+                    aria-disabled={!connection.session || undefined}
+                    className={connection.session ? undefined : 'opacity-50 cursor-not-allowed'}
                     disabled={
                       disabled ||
-                      !deleteConsent ||
-                      !connection.session ||
+                      (Boolean(connection.session) && !deleteConsent) ||
                       allAliasesScheduled ||
                       Boolean(selected.upload && selected.upload.phase !== 'complete')
                     }
-                    onClick={() => void deleteSelectedFile()}
+                    onClick={() => {
+                      if (connection.session) {
+                        void deleteSelectedFile()
+                      } else {
+                        setSessionHintAttempt((attempt) => attempt + 1)
+                      }
+                    }}
                     size="sm"
                     variant="danger"
                   >
@@ -845,7 +854,14 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                     <p className="text-sm text-muted">Wait for the upload to finish before deleting this content.</p>
                   )}
                   {!connection.session && (
-                    <p className="text-sm text-muted">Authorize a browser session in Wallet setup first.</p>
+                    <p
+                      className={`rounded-md text-sm text-muted ${sessionHintAttempt ? 'animate-session-hint' : ''}`}
+                      id="delete-session-hint"
+                      key={sessionHintAttempt}
+                      role={sessionHintAttempt ? 'alert' : undefined}
+                    >
+                      Authorize a browser session in Wallet setup first.
+                    </p>
                   )}
                 </section>
                 {(error || deletionError) && (

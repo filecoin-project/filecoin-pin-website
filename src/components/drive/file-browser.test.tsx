@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   submit: vi.fn(),
   download: vi.fn(),
   uploadInProgress: false,
+  hasSession: true,
 }))
 const scope = '314:0x1111111111111111111111111111111111111111'
 vi.mock('../../lib/filecoin-pin/drive-api.ts', async (original) => ({
@@ -40,7 +41,7 @@ vi.mock('../../context/browser-wallet-provider.tsx', () => ({
   useBrowserWallet: () => ({
     address: scope.slice(4),
     network: 'mainnet',
-    session: {},
+    session: mocks.hasSession ? {} : null,
     busy: false,
     uploading: mocks.uploadInProgress,
     setUploading: mocks.uploading,
@@ -76,6 +77,7 @@ const file = {
 beforeEach(() => {
   vi.resetAllMocks()
   mocks.index.mockResolvedValue([])
+  mocks.hasSession = true
   mocks.uploadInProgress = false
   mocks.permissions.mockResolvedValue(undefined)
   mocks.receipt.mockResolvedValue({ status: 'success' })
@@ -743,3 +745,24 @@ it.each([
     else expect(within(row).queryByText('Confirming', { exact: true })).toBeNull()
   }
 )
+
+it('highlights the session requirement without deleting or closing details', async () => {
+  mocks.hasSession = false
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'first.txt' }))
+  const button = screen.getByRole('button', { name: 'Schedule deletion' })
+  expect(button.getAttribute('aria-disabled')).toBe('true')
+  expect(button.className).toContain('text-danger')
+  fireEvent.click(button)
+  const hint = screen.getByRole('alert')
+  expect(hint.textContent).toBe('Authorize a browser session in Wallet setup first.')
+  expect(hint.className).toContain('animate-session-hint')
+  fireEvent.click(button)
+  expect(screen.getByRole('alert')).not.toBe(hint)
+  expect(screen.getByRole('dialog')).toBeTruthy()
+  expect(mocks.submit).not.toHaveBeenCalled()
+})
