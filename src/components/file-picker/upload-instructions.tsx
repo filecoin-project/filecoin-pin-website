@@ -24,7 +24,7 @@ export function UploadInstructions({ maxSize, kind = 'file', ...rest }: UploadIn
         </span>
         <div className="space-y-1 text-center text-sm">
           <p>
-            <span className="font-medium text-accent">{kind === 'folder' ? 'Choose a folder' : 'Choose a file'}</span>
+            <span className="font-medium text-accent">{kind === 'folder' ? 'Choose a folder' : 'Choose files'}</span>
             {kind === 'file' && ' or drag and drop'}
           </p>
           <p className="text-xs text-muted">

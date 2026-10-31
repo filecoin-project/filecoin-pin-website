@@ -157,3 +157,9 @@ Organizing folders group independent uploads using path metadata. Uploaded folde
 [`ipfs-content.ts`](src/lib/filecoin-pin/ipfs-content.ts) verifies bounded provider block reads, [`directory.ts`](src/lib/filecoin-pin/directory.ts) traverses UnixFS through `ipfs-unixfs-exporter` and creates ZIPs with `fflate`. These are Drive integration helpers, not a second implementation of UnixFS packing. Directory browsing does not create independent child storage records or child deletion permissions.
 
 Folder listing pages use [directory-content-cache.ts](src/lib/local-storage/directory-content-cache.ts) and idb-keyval. Atomic updates retain immutable CID-addressed pages across reloads, bounded to 256 pages, 10,000 items and approximately 4 MiB of serialized metadata. IndexedDB failures fall back to provider reads; upload-time in-memory listings remain available in the current tab. Existing file records and operation checkpoints continue to use the localStorage directory store.
+
+### Batch operations
+
+Selecting multiple files creates independent uploads. Transfers run one at a time; after a provider acknowledges receipt and the checkpoint is saved, the next file can transfer while earlier files await confirmation. Users can add files during a transfer and cancel waiting uploads. Source bytes remain in memory: reloading interrupts uploads that have not started, and the original files must be selected again.
+
+File-list selection supports batch deletion of stored records, including whole uploaded folders. Organizing folders are not recursively deleted. Identical content is grouped into one deletion task, and the confirmation lists all affected records. Different content can be deleted concurrently using the existing per-content locks.

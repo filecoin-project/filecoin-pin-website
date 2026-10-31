@@ -19,7 +19,10 @@ export async function recoverUpload(synapse: Synapse, file: DatasetPiece, signal
       upload: {
         ...upload,
         phase: 'interrupted',
-        error: 'The page closed before receipt of the file was saved. Select the original file to try again.',
+        error:
+          upload.phase === 'waiting'
+            ? 'The page closed before this queued upload started. Select the original file to upload it.'
+            : 'The page closed before receipt of the file was saved. Select the original file to try again.',
       },
     }
   const providers = await Promise.all(

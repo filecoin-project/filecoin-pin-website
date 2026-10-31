@@ -13,7 +13,7 @@ export interface UploadProviderCheckpoint {
 
 /** JSON-only recovery data. File bytes and SDK objects are never persisted. */
 export interface UploadCheckpoint {
-  phase: 'uploading' | 'confirming' | 'pending' | 'interrupted' | 'failed' | 'complete'
+  phase: 'waiting' | 'uploading' | 'confirming' | 'pending' | 'interrupted' | 'failed' | 'complete'
   expectedCopies: number
   providers: UploadProviderCheckpoint[]
   steps: StepState[]

@@ -32,6 +32,7 @@ export function FileUploadDetails({ file }: { file: DatasetPiece }) {
   const status = fileStatus(file)
   const progress = copyProgress(file)
   const removable = canRemoveUpload(file) && !active
+  const queued = Boolean(tasks?.queuedIds.has(file.id))
   const canCheck = !active && upload.phase !== 'complete' && !retryable
   const canRetry = retryable && !active
   return (
@@ -58,8 +59,18 @@ export function FileUploadDetails({ file }: { file: DatasetPiece }) {
           </p>
         )}
       </div>
-      {(canCheck || hasUnsavedChanges || canRetry || removable) && (
+      {(queued || canCheck || hasUnsavedChanges || canRetry || removable) && (
         <div className="flex flex-wrap gap-2">
+          {queued && (
+            <Button
+              className="w-auto px-3 py-1.5 text-xs"
+              onClick={() => void tasks?.cancelQueued(file.id)}
+              size="sm"
+              variant="secondary"
+            >
+              Cancel queued upload
+            </Button>
+          )}
           {canCheck && (
             <Button
               className="w-auto px-3 py-1.5 text-xs sm:min-h-8"
@@ -87,7 +98,7 @@ export function FileUploadDetails({ file }: { file: DatasetPiece }) {
                 <summary className="w-fit cursor-pointer text-link">Retry folder upload</summary>
                 <div className="mt-3">
                   <FolderPicker
-                    disabled={!tasks || tasks.transferring}
+                    disabled={!tasks}
                     onUpload={(source) => {
                       void tasks?.start(source, file.folderPath ?? '', file.id)
                     }}
@@ -98,7 +109,7 @@ export function FileUploadDetails({ file }: { file: DatasetPiece }) {
               <>
                 <Button
                   className="w-auto px-3 py-1.5 text-xs sm:min-h-8"
-                  disabled={!tasks || tasks.transferring}
+                  disabled={!tasks}
                   onClick={() => picker.current?.click()}
                   size="sm"
                 >

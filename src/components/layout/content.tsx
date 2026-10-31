@@ -85,7 +85,7 @@ export default function Content() {
         folder={folder}
         onFolderChange={setFolder}
         onUpload={openUpload}
-        uploadDisabled={setupChecking || connection.busy || Boolean(tasks?.transferring)}
+        uploadDisabled={setupChecking || connection.busy}
       />
       <div className="flex flex-wrap justify-between gap-2 text-xs text-muted">
         <span>
@@ -123,7 +123,7 @@ export default function Content() {
           </p>
           {canUpload && (
             <Button
-              disabled={connection.busy || Boolean(tasks?.transferring)}
+              disabled={connection.busy}
               onClick={() => {
                 setPanel('upload')
               }}
@@ -154,7 +154,7 @@ export default function Content() {
                 <input
                   aria-describedby="upload-path-help"
                   className="h-11 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted"
-                  disabled={connection.busy || Boolean(tasks?.transferring)}
+                  disabled={connection.busy}
                   id="upload-folder"
                   onChange={(event) => setUploadFolder(event.target.value)}
                   placeholder="Choose a folder (optional)"
@@ -194,7 +194,7 @@ export default function Content() {
             </fieldset>
             {uploadKind === 'folder' ? (
               <FolderPicker
-                disabled={connection.busy || Boolean(tasks?.transferring)}
+                disabled={connection.busy}
                 onUpload={(source) => {
                   void tasks?.start(source, uploadFolder).then((started) => {
                     if (started) setPanel(null)
@@ -203,10 +203,10 @@ export default function Content() {
               />
             ) : (
               <DragNDrop
-                isUploading={connection.busy || Boolean(tasks?.transferring)}
+                isUploading={connection.busy}
                 key={panel === 'upload' ? 'picker' : 'closed'}
-                onUpload={(file) => {
-                  void tasks?.start(file, uploadFolder).then((started) => {
+                onUpload={(files) => {
+                  void tasks?.startMany(files, uploadFolder).then((started) => {
                     if (started) setPanel(null)
                   })
                 }}

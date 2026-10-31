@@ -6,42 +6,31 @@ import { UploadNotes } from '../file-picker/upload-instructions.tsx'
 import { ButtonBase as Button } from '../ui/button/button-base.tsx'
 
 interface DragNDropProps {
-  onFileSelected?: (file: File) => void
-  onUpload: (file: File) => void
+  onUpload: (files: File[]) => void
   isUploading?: boolean
 }
 
-export default function DragNDrop({ onFileSelected, onUpload, isUploading }: DragNDropProps) {
-  const [file, setFile] = useState<File | null>(null)
+export default function DragNDrop({ onUpload, isUploading }: DragNDropProps) {
+  const [files, setFiles] = useState<File[]>([])
 
-  const fileIsSelected = Boolean(file)
+  const fileIsSelected = files.length > 0
   const buttonIsDisabled = !fileIsSelected || isUploading
 
   function uploadFile(e: React.MouseEvent) {
     e.preventDefault() // Prevent form submission
-    if (file) {
-      onUpload(file)
+    if (files.length) {
+      onUpload(files)
     }
   }
 
   function clearFile(e: React.MouseEvent) {
     e.preventDefault() // Prevent form submission
-    setFile(null)
+    setFiles([])
   }
 
   return (
     <Root className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-      <FilePicker
-        disabled={isUploading}
-        file={file}
-        maxSize={MAX_FILE_SIZE}
-        onChange={(file) => {
-          setFile(file)
-          if (file && onFileSelected) {
-            onFileSelected(file)
-          }
-        }}
-      />
+      <FilePicker disabled={isUploading} files={files} maxSize={MAX_FILE_SIZE} onChange={setFiles} />
 
       <UploadNotes />
       <div className="flex justify-end">
@@ -65,7 +54,7 @@ export default function DragNDrop({ onFileSelected, onUpload, isUploading }: Dra
             type="button"
             variant="primary"
           >
-            Upload
+            {files.length > 1 ? `Upload ${files.length} files` : 'Upload'}
           </Button>
         </div>
       </div>

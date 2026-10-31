@@ -526,7 +526,7 @@ it.each([false, true])('keeps deletion running after closing details (failure: %
   await waitFor(() => expect(mocks.submit).toHaveBeenCalledOnce())
   fireEvent.click(screen.getByRole('button', { name: 'Close details' }))
   expect(screen.queryByRole('dialog')).toBeNull()
-  expect(screen.getByText('Deleting…', { exact: true })).toBeTruthy()
+  expect(screen.getByText('Deleting', { exact: true })).toBeTruthy()
   expect(mocks.deleting).not.toHaveBeenCalledWith(false)
   await act(async () => finish())
   if (fails) {
@@ -752,7 +752,10 @@ it.each([
         <FileBrowser folder="" onFolderChange={vi.fn()} />
       </UploadHistoryProvider>
     )
-    const count = await screen.findByText(`1 / ${expectedCopies} confirmed`)
+    const count =
+      phase === 'complete' && expectedCopies === 1
+        ? await screen.findByTitle('1 confirmed storage copy')
+        : await screen.findByText(`1 / ${expectedCopies} confirmed`)
     const row = count.closest('tr')
     expect(row).toBeTruthy()
     if (!row) return
@@ -914,4 +917,146 @@ it('keeps manual continuation disabled throughout automatic checking without cha
   ).toBeTruthy()
   fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
   expect(screen.getByRole('button', { name: 'Continue deletion' })).toHaveProperty('disabled', false)
+})
+
+it('confirms a batch once and deduplicates identical file records', async () => {
+  mocks.context.mockResolvedValue({ deletePieces: mocks.submit, getScheduledRemovals: async () => [] })
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'Select first.txt' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select second.txt' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }))
+  const dialog = screen.getByRole('dialog', { name: 'Delete selected files' })
+  expect(within(dialog).getByText('2 file records · 1 unique uploads')).toBeTruthy()
+  expect(within(dialog).getByRole('list', { name: 'Files affected by deletion' }).children).toHaveLength(2)
+  fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Delete all listed files and their recorded copies.' }))
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Delete selected files' }))
+  await waitFor(() => expect(mocks.submit).toHaveBeenCalledTimes(2))
+  await waitFor(() =>
+    expect(getCachedPieces(scope)?.every((file) => file.deletion?.[file.datasetId]?.confirmed)).toBe(true)
+  )
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
+
+it('selects only eligible records in the current file list', async () => {
+  setCachedPieces(scope, [
+    file,
+    { ...file, id: 'elsewhere', folderPath: 'elsewhere', fileName: 'other.txt' },
+    {
+      ...file,
+      id: 'queued',
+      fileName: 'queued.txt',
+      pieceCid: '',
+      upload: { phase: 'waiting', expectedCopies: 2, providers: [], steps: [], checks: 0, nextCheckAt: 0 },
+    },
+  ])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all files in this list' }))
+  expect(screen.getByText('1 selected')).toBeTruthy()
+  expect(screen.getByRole('checkbox', { name: 'Select queued.txt' })).toHaveProperty('disabled', true)
+  expect(screen.queryByRole('checkbox', { name: 'Select other.txt' })).toBeNull()
+})
+
+it('shows folder activity on every ancestor without marking similarly named folders', async () => {
+  const checkpoint = {
+    phase: 'waiting' as const,
+    expectedCopies: 2,
+    providers: [],
+    steps: [],
+    checks: 0,
+    nextCheckAt: 0,
+  }
+  setCachedPieces(scope, [
+    { ...file, id: 'active', folderPath: 'parent/deep', upload: checkpoint },
+    { ...file, id: 'idle', folderPath: 'parent-other', upload: undefined },
+  ])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  const root = await screen.findByRole('button', { name: 'Files (root)' })
+  const parent = within(screen.getByRole('navigation', { name: 'File folders' })).getByRole('button', {
+    name: 'parent',
+  })
+  expect(root.querySelector('[title="Uploads or deletions in progress"]')).not.toBeNull()
+  expect(parent.querySelector('[title="Uploads or deletions in progress"]')).not.toBeNull()
+  expect(
+    screen.getByRole('button', { name: 'deep' }).querySelector('[title="Uploads or deletions in progress"]')
+  ).not.toBeNull()
+  for (const idle of screen.getAllByRole('button', { name: 'parent-other' }))
+    expect(idle.querySelector('[title="Uploads or deletions in progress"]')).toBeNull()
+})
+
+it('marks ancestor folders while deletion confirmation is checked and clears activity when checking stops', async () => {
+  mocks.autoChecking = new Set([file.pieceCid])
+  setCachedPieces(scope, [{ ...file, folderPath: 'deletions/deep' }])
+  const view = render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  const nav = within(screen.getByRole('navigation', { name: 'File folders' }))
+  await waitFor(() =>
+    expect(
+      nav.getByRole('button', { name: 'deletions' }).querySelector('[title="Uploads or deletions in progress"]')
+    ).not.toBeNull()
+  )
+  mocks.autoChecking = new Set()
+  view.rerender(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  expect(
+    nav.getByRole('button', { name: 'deletions' }).querySelector('[title="Uploads or deletions in progress"]')
+  ).toBeNull()
+})
+
+it('defaults to natural filename order and toggles numeric size sorting without persisting the selection', async () => {
+  setCachedPieces(scope, [
+    { ...file, id: 'ten', fileName: 'file10.txt', fileSize: '1 KB', uploadedAt: 1 },
+    { ...file, id: 'two', fileName: 'file2.txt', fileSize: '20 Bytes', uploadedAt: 2 },
+    { ...file, id: 'one', fileName: 'file1.txt', fileSize: 'Unknown', uploadedAt: 3 },
+  ])
+  const renderBrowser = () => (
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  const view = render(renderBrowser())
+  const names = () =>
+    screen
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => within(row).getByRole('button', { name: /^file\d+\.txt$/ }).textContent)
+  await screen.findByRole('button', { name: 'file1.txt' })
+  expect(names()).toEqual(['file1.txt', 'file2.txt', 'file10.txt'])
+  fireEvent.click(screen.getByRole('button', { name: 'Size' }))
+  expect(names()).toEqual(['file2.txt', 'file10.txt', 'file1.txt'])
+  fireEvent.click(screen.getByRole('button', { name: 'Size' }))
+  expect(names()).toEqual(['file10.txt', 'file2.txt', 'file1.txt'])
+  expect(screen.getByRole('columnheader', { name: 'Size' }).getAttribute('aria-sort')).toBe('descending')
+  view.unmount()
+  render(renderBrowser())
+  await screen.findByRole('button', { name: 'file1.txt' })
+  expect(names()).toEqual(['file1.txt', 'file2.txt', 'file10.txt'])
+})
+
+it('uses the same default copy count for legacy records and their tooltip', async () => {
+  setCachedPieces(scope, [{ ...file, copyCount: undefined, upload: undefined }])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  const copies = await screen.findByTitle('1 confirmed storage copy')
+  expect(copies.textContent).toBe('1')
 })

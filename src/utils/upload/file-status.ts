@@ -3,6 +3,7 @@ import { hasRemovalProgress, isCopyRemovalScheduled, isDeletionScheduled } from 
 
 export function fileStatus(file: DatasetPiece) {
   if (file.upload && !(file.copyCount ?? 0)) {
+    if (file.upload.phase === 'waiting') return 'Waiting'
     if (file.upload.phase === 'uploading') return 'Uploading'
     if (file.upload.phase === 'failed') return 'Upload failed'
     if (file.upload.phase === 'interrupted') return 'Upload interrupted'
