@@ -61,20 +61,25 @@ function Harness() {
   const { history } = useUploadHistory()
   return (
     <>
-      <button
-        disabled={tasks.transferring}
-        onClick={() => void tasks.start(new File(['first'], 'first.txt'), 'one')}
-        type="button"
-      >
+      <button onClick={() => void tasks.start(new File(['first'], 'first.txt'), 'one')} type="button">
         First
       </button>
-      <button
-        disabled={tasks.transferring}
-        onClick={() => void tasks.start(new File(['second'], 'second.txt'), 'two')}
-        type="button"
-      >
+      <button onClick={() => void tasks.start(new File(['second'], 'second.txt'), 'two')} type="button">
         Second
       </button>
+      <button
+        onClick={() =>
+          void tasks.startMany([new File(['first'], 'first.txt'), new File(['second'], 'second.txt')], 'batch')
+        }
+        type="button"
+      >
+        Batch
+      </button>
+      {[...tasks.queuedIds].map((id) => (
+        <button key={id} onClick={() => void tasks.cancelQueued(id)} type="button">
+          Cancel queued upload
+        </button>
+      ))}
       <output>{history.map((file) => `${file.fileName}:${file.upload?.phase}:${file.copyCount}`).join('|')}</output>
     </>
   )
@@ -99,7 +104,7 @@ it('persists parked files, allows the next transfer and isolates each task when 
   )
   fireEvent.click(screen.getByRole('button', { name: 'First' }))
   await waitFor(() => expect(operations).toHaveLength(1))
-  expect(screen.getByRole('button', { name: 'Second' })).toHaveProperty('disabled', true)
+  expect(screen.getByRole('button', { name: 'Second' })).toHaveProperty('disabled', false)
   await act(async () =>
     operations[0].progress({ type: 'stored', data: { providerId: 4n, pieceCid: { toString: () => pieceCid } } })
   )
@@ -133,5 +138,64 @@ it('persists parked files, allows the next transfer and isolates each task when 
   expect(files.find((file) => file.fileName === 'second.txt')?.transactionHash).toBe('0xsecond')
   expect(files.find((file) => file.fileName === 'first.txt')?.folderPath).toBe('one')
   expect(files.find((file) => file.fileName === 'second.txt')?.folderPath).toBe('two')
+  await waitFor(() => expect(mocks.setUploading).toHaveBeenLastCalledWith(false))
+})
+
+it('queues a multi-file selection and starts the next file while earlier confirmations continue', async () => {
+  render(
+    <UploadHistoryProvider>
+      <UploadTasksProvider>
+        <Harness />
+      </UploadTasksProvider>
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Batch' }))
+  await waitFor(() => expect(operations).toHaveLength(1))
+  expect(getCachedPieces(scope)?.find((file) => file.fileName === 'second.txt')?.upload?.phase).toBe('waiting')
+  expect(getCachedPieces(scope)?.every((file) => file.folderPath === 'batch')).toBe(true)
+  await act(async () =>
+    operations[0].progress({ type: 'stored', data: { providerId: 4n, pieceCid: { toString: () => pieceCid } } })
+  )
+  await waitFor(() => expect(operations).toHaveLength(2))
+  expect(getCachedPieces(scope)?.find((file) => file.fileName === 'first.txt')?.upload?.phase).toBe('confirming')
+  await act(async () => {
+    for (const operation of operations) operation.reject(new Error('Stopped test fixture'))
+  })
+  await waitFor(() => expect(mocks.setUploading).toHaveBeenLastCalledWith(false))
+})
+
+it('cancels only waiting uploads and frees their local records without starting them', async () => {
+  render(
+    <UploadHistoryProvider>
+      <UploadTasksProvider>
+        <Harness />
+      </UploadTasksProvider>
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Batch' }))
+  await waitFor(() => expect(operations).toHaveLength(1))
+  fireEvent.click(await screen.findByRole('button', { name: 'Cancel queued upload' }))
+  await waitFor(() => expect(getCachedPieces(scope)).toHaveLength(1))
+  expect(getCachedPieces(scope)?.[0].fileName).toBe('first.txt')
+  expect(operations).toHaveLength(1)
+  expect(mocks.setUploading).not.toHaveBeenLastCalledWith(false)
+  await act(async () => operations[0].reject(new Error('Stopped test fixture')))
+  await waitFor(() => expect(mocks.setUploading).toHaveBeenLastCalledWith(false))
+})
+
+it('advances the queue after a file fails before reaching a provider', async () => {
+  mocks.execute.mockRejectedValueOnce(new Error('First transfer failed'))
+  render(
+    <UploadHistoryProvider>
+      <UploadTasksProvider>
+        <Harness />
+      </UploadTasksProvider>
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Batch' }))
+  await waitFor(() => expect(operations).toHaveLength(1))
+  expect(getCachedPieces(scope)?.find((file) => file.fileName === 'first.txt')?.upload?.phase).toBe('failed')
+  expect(getCachedPieces(scope)?.find((file) => file.fileName === 'second.txt')?.upload?.phase).toBe('uploading')
+  await act(async () => operations[0].reject(new Error('Stopped test fixture')))
   await waitFor(() => expect(mocks.setUploading).toHaveBeenLastCalledWith(false))
 })

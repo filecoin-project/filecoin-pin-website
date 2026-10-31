@@ -216,3 +216,15 @@
 @utility animate-session-hint {
   animation: session-hint 800ms ease-out;
 }
+
+/* Keep table selection compact without shrinking its label hit area. */
+input[type="checkbox"].drive-selection-checkbox {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+}
+
+input[type="checkbox"].drive-selection-checkbox:disabled {
+  cursor: default;
+}

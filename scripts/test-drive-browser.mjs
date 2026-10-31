@@ -107,7 +107,7 @@ try {
   await page.getByRole('button', { name: 'Upload files', exact: true }).click()
   await page.getByRole('textbox', { name: 'Upload location', exact: true }).waitFor()
   assert.equal(await page.getByRole('textbox', { name: 'Upload location', exact: true }).inputValue(), 'reports/2026')
-  await page.getByText('Choose a file', { exact: true }).waitFor()
+  await page.getByText('Choose files', { exact: true }).waitFor()
   const uploadPanel = page.getByRole('dialog', { name: 'Upload files', exact: true })
   await uploadPanel.locator('input[type="file"]').evaluate((input) => {
     const file = new File(['size fixture'], 'oversize.bin')
@@ -117,7 +117,7 @@ try {
     input.files = transfer.files
     input.dispatchEvent(new Event('change', { bubbles: true }))
   })
-  await uploadPanel.getByRole('alert').filter({ hasText: 'File is too large.' }).waitFor()
+  await uploadPanel.getByRole('alert').filter({ hasText: 'oversize.bin is too large.' }).waitFor()
   assert.equal(await uploadPanel.getByRole('button', { name: 'Upload', exact: true }).isDisabled(), true)
   await uploadPanel.locator('input[type="file"]').setInputFiles({
     name: 'small.txt',
@@ -240,7 +240,7 @@ try {
     await blockedPage.getByText('Wallet setup · Session authorized', { exact: true }).waitFor()
     await blockedPage.getByText('Setup required', { exact: true }).waitFor()
     assert.equal(
-      await blockedPage.getByText('Choose a file', { exact: true }).count(),
+      await blockedPage.getByText('Choose files', { exact: true }).count(),
       0,
       'An authorized session must not bypass missing storage funds or payment approval'
     )

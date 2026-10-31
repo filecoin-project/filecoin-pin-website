@@ -526,7 +526,7 @@ it.each([false, true])('keeps deletion running after closing details (failure: %
   await waitFor(() => expect(mocks.submit).toHaveBeenCalledOnce())
   fireEvent.click(screen.getByRole('button', { name: 'Close details' }))
   expect(screen.queryByRole('dialog')).toBeNull()
-  expect(screen.getByText('Deleting…', { exact: true })).toBeTruthy()
+  expect(screen.getByText('Deleting', { exact: true })).toBeTruthy()
   expect(mocks.deleting).not.toHaveBeenCalledWith(false)
   await act(async () => finish())
   if (fails) {
@@ -914,4 +914,49 @@ it('keeps manual continuation disabled throughout automatic checking without cha
   ).toBeTruthy()
   fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
   expect(screen.getByRole('button', { name: 'Continue deletion' })).toHaveProperty('disabled', false)
+})
+
+it('confirms a batch once and deduplicates identical file records', async () => {
+  mocks.context.mockResolvedValue({ deletePieces: mocks.submit, getScheduledRemovals: async () => [] })
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'Select first.txt' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select second.txt' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }))
+  const dialog = screen.getByRole('dialog', { name: 'Delete selected files' })
+  expect(within(dialog).getByText('2 file records · 1 unique uploads')).toBeTruthy()
+  expect(within(dialog).getByRole('list', { name: 'Files affected by deletion' }).children).toHaveLength(2)
+  fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Delete all listed files and their recorded copies.' }))
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Delete selected files' }))
+  await waitFor(() => expect(mocks.submit).toHaveBeenCalledTimes(2))
+  await waitFor(() =>
+    expect(getCachedPieces(scope)?.every((file) => file.deletion?.[file.datasetId]?.confirmed)).toBe(true)
+  )
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
+
+it('selects only eligible records in the current file list', async () => {
+  setCachedPieces(scope, [
+    file,
+    { ...file, id: 'elsewhere', folderPath: 'elsewhere', fileName: 'other.txt' },
+    {
+      ...file,
+      id: 'queued',
+      fileName: 'queued.txt',
+      pieceCid: '',
+      upload: { phase: 'waiting', expectedCopies: 2, providers: [], steps: [], checks: 0, nextCheckAt: 0 },
+    },
+  ])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all files in this list' }))
+  expect(screen.getByText('1 selected')).toBeTruthy()
+  expect(screen.getByRole('checkbox', { name: 'Select queued.txt' })).toHaveProperty('disabled', true)
+  expect(screen.queryByRole('checkbox', { name: 'Select other.txt' })).toBeNull()
 })

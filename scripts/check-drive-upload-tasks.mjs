@@ -253,7 +253,7 @@ export async function checkUploadTasks(browser) {
     const mainSearchBox = await page.getByRole('searchbox', { name: 'Search file list', exact: true }).boundingBox()
     await page.getByRole('button', { name: 'Upload files', exact: true }).click()
     const folderPanel = page.getByRole('dialog', { name: 'Upload files', exact: true })
-    await folderPanel.getByText('Choose a file', { exact: true }).waitFor()
+    await folderPanel.getByText('Choose files', { exact: true }).waitFor()
     const fileUploadButton = await folderPanel.getByRole('button', { name: 'Upload', exact: true }).boundingBox()
     await page.screenshot({ path: '/tmp/drive-file-upload-empty.png', fullPage: true, animations: 'disabled' })
     await folderPanel.getByRole('button', { name: 'Folder', exact: true }).click()

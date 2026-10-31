@@ -34,8 +34,8 @@ vi.mock('../drive/file-browser.tsx', () => ({
 }))
 vi.mock('../drive/wallet-controls.tsx', () => ({ WalletSetup: () => null }))
 vi.mock('../upload/drag-n-drop.tsx', () => ({
-  default: ({ onUpload }: { onUpload: (file: File) => void }) => (
-    <button onClick={() => onUpload(file)} type="button">
+  default: ({ onUpload }: { onUpload: (files: File[]) => void }) => (
+    <button onClick={() => onUpload([file])} type="button">
       Submit file
     </button>
   ),

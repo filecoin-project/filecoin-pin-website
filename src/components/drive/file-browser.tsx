@@ -14,7 +14,7 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { Fragment, type ReactNode, useState } from 'react'
+import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useUploadHistory } from '../../context/upload-history-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
@@ -35,6 +35,7 @@ import {
 import { copyProgress, fileStatus, fileStatusColors } from '../../utils/upload/file-status.ts'
 import { ButtonBase as Button, buttonVariants } from '../ui/button/button-base.tsx'
 import { CopyButton } from '../ui/copy-button.tsx'
+import { BatchDeleteDialog } from './batch-delete-dialog.tsx'
 import { DirectoryBrowser } from './directory-browser.tsx'
 import { FileTypeIcon } from './file-type-icon.tsx'
 import { FileUploadDetails } from './file-upload-details.tsx'
@@ -61,17 +62,28 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
     error: saveError,
   } = useUploadHistory()
   const { synapse, storageScope } = useFilecoinPinContext()
+  const selectionScope = useRef(storageScope)
+  useEffect(() => {
+    if (selectionScope.current === storageScope) return
+    selectionScope.current = storageScope
+    setSelectedFileIds(new Set())
+    setBatchDeleteOpen(false)
+  }, [storageScope])
   const connection = useBrowserWallet()
   const [search, setSearch] = useState('')
   const [sessionHintAttempt, setSessionHintAttempt] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedFileIds, setSelectedFileIds] = useState<ReadonlySet<string>>(new Set())
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
   const [directoryId, setDirectoryId] = useState<string | null>(null)
   const openDirectory = (id: string) => {
+    setSelectedFileIds(new Set())
     setShowFolders(false)
     setDirectoryId(id)
     setSearch('')
   }
   const onFolderChange = (path: string) => {
+    setSelectedFileIds(new Set())
     setShowFolders(false)
     setSearch('')
     setDirectoryId(null)
@@ -80,7 +92,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
   const [error, setError] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const { deleteFile, deletingPieceCids, autoCheckingPieceCids, deletionErrors } = useFileDeletion()
-  const displayStatus = (file: DatasetPiece) => (deletingPieceCids.has(file.pieceCid) ? 'Deleting…' : fileStatus(file))
+  const displayStatus = (file: DatasetPiece) => (deletingPieceCids.has(file.pieceCid) ? 'Deleting' : fileStatus(file))
   const { download, queuedDownloads, downloadError, enqueueDownload, cancelQueuedDownload } = useDownloadQueue(
     synapse,
     storageScope
@@ -167,6 +179,25 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
         : (file.folderPath ?? '') === folder
     )
     .sort((a, b) => b.uploadedAt - a.uploadedAt)
+  const canSelectForDeletion = (file: DatasetPiece) =>
+    Boolean(
+      file.pieceCid &&
+        !isDeletionScheduled(file) &&
+        (!file.upload || file.upload.phase === 'complete') &&
+        !deletingPieceCids.has(file.pieceCid) &&
+        !autoCheckingPieceCids.has(file.pieceCid)
+    )
+  const selectableFiles = files.filter(canSelectForDeletion)
+  const selectedFiles = selectableFiles.filter((file) => selectedFileIds.has(file.id))
+  const batchTargets = [...new Map(selectedFiles.map((file) => [file.pieceCid, file])).values()]
+  const batchAliases = visibleHistory.filter((file) => batchTargets.some((target) => target.pieceCid === file.pieceCid))
+  const toggleSelection = (file: DatasetPiece) =>
+    setSelectedFileIds((current) => {
+      const next = new Set(current)
+      if (next.has(file.id)) next.delete(file.id)
+      else next.add(file.id)
+      return next
+    })
   const children = allFolders.filter(
     (path) => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '') === folder
   )
@@ -224,6 +255,21 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
           </h2>
         </div>
         <div className="flex w-full flex-wrap items-center justify-end gap-2 md:w-auto">
+          {selectedFiles.length > 0 && (
+            <>
+              <span className="text-xs text-muted">{selectedFiles.length} selected</span>
+              <Button
+                className="w-auto"
+                disabled={connection.busy}
+                onClick={() => setBatchDeleteOpen(true)}
+                size="sm"
+                variant="danger"
+              >
+                <Trash2 aria-hidden="true" size={14} />
+                Delete selected
+              </Button>
+            </>
+          )}
           <label className="relative w-full md:w-64">
             <Search
               aria-hidden="true"
@@ -233,7 +279,10 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
             <span className="sr-only">{openedDirectory ? 'Search this folder' : 'Search file list'}</span>
             <input
               className="drive-field h-10 w-full pl-9 pr-3 text-xs"
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSelectedFileIds(new Set())
+                setSearch(event.target.value)
+              }}
               placeholder={openedDirectory ? 'Search this folder' : 'Search file list'}
               type="search"
               value={search}
@@ -401,6 +450,29 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
               <table className={`${files.length || children.length ? 'min-w-[760px]' : ''} w-full text-left text-sm`}>
                 <thead className="text-[11px] font-normal text-muted">
                   <tr>
+                    <th className="w-12 px-2 py-4">
+                      <label className="flex h-8 w-8 cursor-pointer items-center justify-center">
+                        <input
+                          aria-label="Select all files in this list"
+                          checked={selectableFiles.length > 0 && selectedFiles.length === selectableFiles.length}
+                          className="drive-selection-checkbox"
+                          disabled={!selectableFiles.length}
+                          onChange={() =>
+                            setSelectedFileIds(
+                              selectedFiles.length === selectableFiles.length
+                                ? new Set()
+                                : new Set(selectableFiles.map((file) => file.id))
+                            )
+                          }
+                          ref={(input) => {
+                            if (input)
+                              input.indeterminate =
+                                selectedFiles.length > 0 && selectedFiles.length < selectableFiles.length
+                          }}
+                          type="checkbox"
+                        />
+                      </label>
+                    </th>
                     <th className="p-4">Name</th>
                     <th className="p-4">Size</th>
                     <th className="p-4">Status</th>
@@ -413,6 +485,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                   {!search &&
                     children.map((path) => (
                       <tr className="border-t border-border" key={path}>
+                        <td className="p-4" />
                         <td className="p-4 whitespace-nowrap" colSpan={6}>
                           <button
                             className="inline-flex items-center gap-2 align-middle text-left hover:underline"
@@ -429,6 +502,18 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                     ))}
                   {files.map((file) => (
                     <tr className="border-t border-border hover:bg-surface" key={file.id}>
+                      <td className="px-2 py-4">
+                        <label className="flex h-8 w-8 cursor-pointer items-center justify-center">
+                          <input
+                            aria-label={`Select ${displayFileName(file)}`}
+                            checked={selectedFileIds.has(file.id) && canSelectForDeletion(file)}
+                            className="drive-selection-checkbox"
+                            disabled={!canSelectForDeletion(file)}
+                            onChange={() => toggleSelection(file)}
+                            type="checkbox"
+                          />
+                        </label>
+                      </td>
                       <td className="p-4 whitespace-nowrap">
                         <button
                           aria-label={displayFileName(file)}
@@ -528,7 +613,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                   ))}
                   {files.length === 0 && (search || children.length === 0) && (
                     <tr>
-                      <td className="px-5 py-16 text-center text-muted" colSpan={6}>
+                      <td className="px-5 py-16 text-center text-muted" colSpan={7}>
                         <span
                           aria-hidden="true"
                           className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-canvas/40 text-accent"
@@ -572,6 +657,21 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
           </div>
         )}
       </div>
+      <BatchDeleteDialog
+        aliases={batchAliases}
+        authorized={Boolean(connection.session)}
+        busy={connection.busy || isEditing}
+        key={batchDeleteOpen ? 'batch-open' : 'batch-closed'}
+        onConfirm={() => {
+          if (!connection.session) return
+          for (const file of batchTargets) void deleteFile(file)
+          setSelectedFileIds(new Set())
+          setBatchDeleteOpen(false)
+        }}
+        onOpenChange={setBatchDeleteOpen}
+        open={batchDeleteOpen}
+        targets={batchTargets}
+      />
       <Dialog.Root
         onOpenChange={(open) => {
           if (!open && !isEditing) setSelectedId(null)
