@@ -1,13 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useUploadHistory } from '../context/upload-history-context.tsx'
+import { DEFAULT_STORAGE_COPIES } from '../lib/filecoin-pin/config.ts'
+import type { UploadCheckpoint } from '../lib/filecoin-pin/upload-checkpoint.ts'
+import { isDirectoryUpload, type UploadSource } from '../lib/filecoin-pin/upload-source.ts'
+import { DIRECTORY_SAVE_ERROR } from '../lib/local-storage/directory-store.ts'
+import { normalizeFolder } from '../lib/local-storage/drive-directory.ts'
 import { formatFileSize } from '../utils/format-file-size.ts'
-import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 import { useFilecoinUpload } from './use-filecoin-upload.ts'
 import { useUploadProgress } from './use-upload-progress.ts'
 
 interface UploadedFile {
-  file: File
+  file: UploadSource
   cid: string
+  id?: string
+  folderPath?: string
+  startedAt?: number
 }
 
 /**
@@ -17,127 +24,229 @@ interface UploadedFile {
  * - Starting uploads and tracking uploaded file metadata
  * - Detecting upload completion and adding to history
  * - Resetting active upload state
- * - Tracking CIDs that should be auto-expanded in history
  *
  * Does NOT:
  * - Render UI (that's components' job)
  * - Store history (that's UploadHistoryContext's job)
  * - Perform uploads (that's useFilecoinUpload's job)
- * - Manage expansion state (that's useUploadExpansion's job)
  */
-export function useUploadOrchestration() {
-  const { uploadState, uploadFile, resetUpload } = useFilecoinUpload()
-  const { addUpload } = useUploadHistory()
-  const { wallet } = useFilecoinPinContext()
+export function useUploadOrchestration(taskId?: string) {
+  const { uploadState, uploadFile, resetUpload, releaseUploadLock } = useFilecoinUpload(true)
+  const { addUpload, history, hasUnsavedChanges } = useUploadHistory()
   const { uploadOutcome } = useUploadProgress({ stepStates: uploadState.stepStates, cid: uploadState.currentCid })
 
   const { isUploadSuccessful } = uploadOutcome
 
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null)
-  // Piece CIDs that should be auto-expanded when they appear in history (consumed by useUploadExpansion)
-  const pendingAutoExpandPieceCidsRef = useRef<Set<string>>(new Set())
+  const [directorySaveError, setDirectorySaveError] = useState<string | null>(null)
+  const [isSavingDirectory, setIsSavingDirectory] = useState(false)
+  const [saveAttempt, setSaveAttempt] = useState(0)
   // Key to force DragNDrop remount (clears its internal file state)
   const [dragDropKey, setDragDropKey] = useState(0)
+  const finishUpload = useCallback(() => {
+    releaseUploadLock()
+    setUploadedFile(null)
+    resetUpload()
+    setDragDropKey((prev) => prev + 1)
+  }, [resetUpload, releaseUploadLock])
+
+  // Another directory action can persist the retained checkpoint after a quota failure.
+  useEffect(() => {
+    if (
+      directorySaveError !== DIRECTORY_SAVE_ERROR ||
+      isSavingDirectory ||
+      hasUnsavedChanges !== false ||
+      !history.some((file) => file.id === uploadedFile?.id)
+    )
+      return
+    setDirectorySaveError(null)
+    if (!uploadState.isUploading) releaseUploadLock()
+    if (!uploadState.isUploading && !uploadState.error && isUploadSuccessful && uploadState.copies) finishUpload()
+  }, [
+    directorySaveError,
+    isSavingDirectory,
+    hasUnsavedChanges,
+    history,
+    uploadedFile?.id,
+    uploadState.isUploading,
+    uploadState.error,
+    isUploadSuccessful,
+    uploadState.copies,
+    finishUpload,
+    releaseUploadLock,
+  ])
 
   /**
    * Handle upload completion:
    * Build DatasetPiece from the primary copy result and add to history.
    */
   useEffect(() => {
-    if (!isUploadSuccessful || !uploadState.pieceCid || !uploadedFile) {
+    if ((!uploadState.pieceCid && !taskId) || !uploadedFile || !uploadState.network) {
       return
     }
 
-    const copies = uploadState.copies
-    if (!copies) {
+    const copies =
+      uploadState.copies ??
+      uploadState.confirmedPieces?.map((copy, index) => ({
+        ...copy,
+        role: index === 0 ? 'primary' : 'secondary',
+        retrievalUrl: '',
+      }))
+    if (!copies?.length && !taskId) {
       return
     }
-    const primary = copies.find((c) => c.role === 'primary')
+    // A partial upload may succeed only on a secondary provider.
+    const primary = copies?.find((c) => c.role === 'primary') ?? copies?.[0]
 
-    if (!primary) {
-      return
-    }
-
-    console.debug('[UploadOrchestration] Upload completed, adding to history')
-
-    pendingAutoExpandPieceCidsRef.current = new Set(pendingAutoExpandPieceCidsRef.current).add(uploadState.pieceCid)
+    console.debug('[UploadOrchestration] Saving upload checkpoint, retry:', saveAttempt)
 
     const providersById = uploadState.providersById
-    const orderedCopies = [primary, ...copies.filter((c) => c.role !== 'primary')]
+    const orderedCopies = primary ? [primary, ...(copies ?? []).filter((c) => c !== primary)] : []
     const providerNameFor = (providerId: bigint | string) => providersById[String(providerId)]?.name ?? ''
-    const serviceUrlFor = (c: (typeof copies)[number]) =>
+    const serviceUrlFor = (c: NonNullable<typeof copies>[number]) =>
       providersById[String(c.providerId)]?.pdp?.serviceURL ?? c.retrievalUrl ?? ''
+    const transactionFor = (providerId: bigint) =>
+      uploadState.confirmedPieces?.find((copy) => copy.providerId === providerId)?.transactionHash ?? ''
 
+    const providers = (uploadState.uploadProviders ?? []).map((provider) => {
+      const copy = orderedCopies.find((copy) => String(copy.providerId) === provider.providerId)
+      return copy
+        ? { ...provider, confirmed: true, dataSetId: String(copy.dataSetId), pieceId: String(copy.pieceId) }
+        : provider
+    })
+    const upload: UploadCheckpoint | undefined = taskId
+      ? {
+          phase: uploadState.isUploading
+            ? uploadState.pieceCid
+              ? 'confirming'
+              : 'uploading'
+            : uploadState.error
+              ? uploadState.pieceCid
+                ? 'pending'
+                : 'failed'
+              : (copies?.length ?? 0) < uploadState.expectedCopies
+                ? 'pending'
+                : 'complete',
+          expectedCopies: uploadState.expectedCopies || DEFAULT_STORAGE_COPIES,
+          providers,
+          steps: uploadState.stepStates,
+          error: uploadState.error,
+          checks: 0,
+          nextCheckAt: Date.now() + 30_000,
+        }
+      : undefined
+    const parked = providers.find((provider) => provider.stored)
     const newPiece = {
-      id: `piece-${uploadState.pieceCid}`,
+      id: uploadedFile.id ?? crypto.randomUUID(),
+      folderPath: normalizeFolder(uploadedFile.folderPath ?? ''),
+      ipfsIndexed: uploadState.stepStates.find((step) => step.step === 'announcing-cids')?.status === 'completed',
+      pieceIds: orderedCopies.map((c) => String(c.pieceId)),
       fileName: uploadedFile.file.name,
+      importedCar: uploadState.importedCar || undefined,
+      isDirectory: isDirectoryUpload(uploadedFile.file) || undefined,
       fileSize: formatFileSize(uploadedFile.file.size),
       cid: uploadState.currentCid || '',
-      pieceCid: uploadState.pieceCid,
-      providerName: providerNameFor(primary.providerId),
-      datasetId: String(primary.dataSetId),
-      providerId: String(primary.providerId),
-      serviceURL: serviceUrlFor(primary),
-      transactionHash: uploadState.transactionHashes[0] || uploadState.transactionHash || '',
-      network: uploadState.network || (wallet?.status === 'ready' ? wallet.data.network : 'calibration'),
-      uploadedAt: Date.now(),
-      pieceId: Number(primary.pieceId),
-      copyCount: copies.length,
+      pieceCid: uploadState.pieceCid ?? '',
+      ...(upload ? { upload } : {}),
+      providerName: primary ? providerNameFor(primary.providerId) : '',
+      datasetId: primary ? String(primary.dataSetId) : '',
+      providerId: primary ? String(primary.providerId) : (parked?.providerId ?? ''),
+      serviceURL: primary ? serviceUrlFor(primary) : (parked?.serviceURL ?? ''),
+      transactionHash:
+        (primary ? transactionFor(primary.providerId) : '') ||
+        uploadState.transactionHashes[0] ||
+        uploadState.transactionHash ||
+        '',
+      network: uploadState.network,
+      uploadedAt: uploadedFile.startedAt ?? Date.now(),
+      pieceId: primary ? Number(primary.pieceId) : undefined,
+      copyCount: copies?.length ?? 0,
       datasetIds: orderedCopies.map((c) => String(c.dataSetId)),
       providerIds: orderedCopies.map((c) => String(c.providerId)),
       providerNames: orderedCopies.map((c) => providerNameFor(c.providerId)),
       serviceURLs: orderedCopies.map(serviceUrlFor),
-      transactionHashes: uploadState.transactionHashes.slice(),
+      transactionHashes: orderedCopies.map((copy) => transactionFor(copy.providerId)),
     }
 
-    addUpload(newPiece)
-
-    setUploadedFile(null)
-    resetUpload()
-    setDragDropKey((prev) => prev + 1)
+    let current = true
+    setIsSavingDirectory(true)
+    void addUpload(newPiece)
+      .then(() => {
+        if (!current) return
+        setIsSavingDirectory(false)
+        setDirectorySaveError(null)
+        if (!uploadState.isUploading) releaseUploadLock()
+        // Do not discard the active file until its final directory checkpoint is durable.
+        if (uploadState.isUploading || uploadState.error || !isUploadSuccessful || !uploadState.copies) return
+        finishUpload()
+      })
+      .catch((error) => {
+        console.error('[UploadOrchestration] Unable to save upload checkpoint:', error)
+        if (current) {
+          setIsSavingDirectory(false)
+          setDirectorySaveError(error instanceof Error ? error.message : DIRECTORY_SAVE_ERROR)
+        }
+      })
+    return () => {
+      current = false
+    }
   }, [
+    taskId,
     isUploadSuccessful,
+    uploadState.expectedCopies,
+    uploadState.uploadProviders,
     uploadState.pieceCid,
+    uploadState.importedCar,
     uploadState.currentCid,
     uploadState.transactionHash,
     uploadState.copies,
+    uploadState.confirmedPieces,
+    uploadState.isUploading,
+    uploadState.error,
     uploadState.network,
     uploadState.providersById,
     uploadState.transactionHashes,
+    uploadState.stepStates,
     uploadedFile,
-    wallet,
     addUpload,
-    resetUpload,
+    finishUpload,
+    saveAttempt,
+    releaseUploadLock,
   ])
 
   const handleUpload = useCallback(
-    (file: File) => {
+    (file: UploadSource, folderPath = '') => {
       console.debug('[UploadOrchestration] Starting upload for file:', file.name)
 
-      pendingAutoExpandPieceCidsRef.current = new Set()
+      const id = taskId ?? crypto.randomUUID()
+      setDirectorySaveError(null)
+      setIsSavingDirectory(false)
+      setSaveAttempt(0)
+      setUploadedFile({ file, cid: '', id, folderPath, startedAt: Date.now() })
 
-      setUploadedFile({ file, cid: '' })
-
-      // Upload in background (not awaited) so handler returns immediately
-      uploadFile(file)
+      // Expose completion so callers can release their operation lock even on early failures.
+      return uploadFile(file, { path: folderPath, ...(taskId ? { taskId } : {}) })
         .then((cid) => {
           console.debug('[UploadOrchestration] Upload returned CID:', cid)
-          setUploadedFile({ file, cid })
+          setUploadedFile((current) => (current?.id === id ? { ...current, cid } : current))
         })
         .catch((error) => {
           // Keep uploadedFile state so the error shows in the progress view
           console.error('[UploadOrchestration] Upload failed:', error)
         })
     },
-    [uploadFile]
+    [uploadFile, taskId]
   )
 
   const cancelUpload = useCallback(() => {
     console.debug('[UploadOrchestration] Canceling upload')
+    releaseUploadLock()
     setUploadedFile(null)
+    setDirectorySaveError(null)
+    setIsSavingDirectory(false)
     resetUpload()
     setDragDropKey((prev) => prev + 1)
-  }, [resetUpload])
+  }, [resetUpload, releaseUploadLock])
 
   const retryUpload = useCallback(() => {
     if (!uploadedFile) {
@@ -145,16 +254,20 @@ export function useUploadOrchestration() {
       return
     }
     console.debug('[UploadOrchestration] Retrying upload for file:', uploadedFile.file.name)
-    handleUpload(uploadedFile.file)
+    return handleUpload(uploadedFile.file, uploadedFile.folderPath)
   }, [uploadedFile, handleUpload])
+
+  const retryDirectorySave = useCallback(() => setSaveAttempt((attempt) => attempt + 1), [])
 
   return {
     uploadedFile,
     activeUpload: uploadState,
-    pendingAutoExpandPieceCids: pendingAutoExpandPieceCidsRef.current,
     dragDropKey,
     startUpload: handleUpload,
     retryUpload,
     cancelUpload,
+    directorySaveError,
+    isSavingDirectory,
+    retryDirectorySave,
   }
 }

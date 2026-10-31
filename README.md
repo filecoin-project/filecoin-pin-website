@@ -1,108 +1,112 @@
-# Filecoin Pin Demo
+# Filecoin Drive
 
-A simple, easy-to-understand demo showing how to use [`filecoin-pin`](https://github.com/filecoin-project/filecoin-pin) to upload files to Filecoin. This single-page React + TypeScript app demonstrates the core upload workflow with progress tracking and wallet integration.
+Filecoin Drive is an open-source reference app built on Filecoin, using public libraries including Synapse SDK and Filecoin Pin. It provides a browser file manager for Filecoin. Connect your own wallet, authorize a browser session, then upload, download and browse files recovered from the public Filecoin index.
 
-## Status
-
-**⚠️ Not ready yet for production** - At least as of 2025-10-15, this Filecoin Pin demo dApp runs on Filecoin Calibration testnet only.  It's not ready for production use yet.  See:
-- [filecoin-pin#45](https://github.com/filecoin-project/filecoin-pin/issues/45) for tracking when this will be publicly deployed to pin.filecoin.cloud.
-- [filecoin-pin-website#77](https://github.com/filecoin-project/filecoin-pin-website/issues/77) for tracking "bring your own wallet" support.
-
-## What This Demo Shows
-
-This app demonstrates the complete `filecoin-pin` upload workflow:
-
-```mermaid
-graph LR
-    A[Select File] --> B[Create CAR]
-    B --> C[Fund Filecoin Pay Account if Necessary]
-    C --> D[Upload to SP]
-    D --> E[IPNI Indexing]
-    E --> F[IPFS Mainnet Retrieval]
-    D --> G[Onchain Commitment]
-    G --> H[Direct from SP retrieval]
-```
-
-- **Prepare** - Create CAR files from user files
-- **Upload** - Execute upload to Filecoin Storage Provider (SP)
-- **Index** - Verify CID indexing and advertising from the SP to IPNI
-- **Commit** - Verify the onchain commitment from the SP to perform proof of data possession (PDP)
-- **Track** - Monitor progress through each step
-
-The core integration logic is in [`src/hooks/use-filecoin-upload.ts`](src/hooks/use-filecoin-upload.ts) and [`src/context/filecoin-pin-provider.tsx`](src/context/filecoin-pin-provider.tsx). Everything else is UI components. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for detailed file structure.
-
-## Quick Start
-
-### Prerequisites
-
-- Node.js 18.0+ (Vite supports the active LTS releases)
-- npm 9+ (bundled with Node)
-
-### Installation
+## Run locally
 
 ```sh
-npm install
+npm ci
 npm run dev
 ```
 
-Visit `http://localhost:5173` to see the demo.
+Open `http://localhost:5173`. Use an Ethereum-compatible browser wallet. HTTPS or localhost is required for browser cryptography.
 
-**Available Scripts:**
-- `npm run dev` – Start development server
-- `npm run build` – Build for production
-- `npm run lint` – Check code quality
-- `npm run lint:fix` – Fix linting issues
+For mobile wallets, choose **WalletConnect** to scan the QR code or open a mobile wallet. The app includes Beck’s public Reown project ID by default. To use another project, copy [`.env.example`](.env.example) to `.env.local`, set `VITE_WALLETCONNECT_PROJECT_ID`, and restart the dev server (or rebuild for production). Configure the project's allowed origins to include your production site. WalletConnect is loaded when explicitly chosen or when restoring a previously selected WalletConnect session.
 
-For environment configuration and authentication options, see [`CONTRIBUTING.md`](CONTRIBUTING.md#local-setup).
+First-time visitors default to **Filecoin Mainnet**. **Calibration** is available for development and testing. A successful manual network selection is remembered in this browser across reloads and disconnects; reconnecting requests that selected network from the wallet. A rejected wallet switch leaves the previous selection unchanged. Wallet sessions, datasets, files and folders are isolated by chain ID and wallet address. No shared deployment wallet or private key is required.
 
-## Architecture
+## Wallet setup
 
-### Tech Stack
+1. Connect your wallet and select a network.
+2. Choose a session lifetime of 1, 7 or 30 days and review its permissions. New browser authorizations can create datasets, upload pieces and schedule piece removals. Service termination is not requested. Authorize it with your wallet.
+3. Deposit USDFC into Filecoin Pay and approve Warm Storage payments if needed. Payment approval uses unlimited rate and lockup allowances and requires explicit consent. These setup actions require owner-wallet confirmations.
+4. Upload files with the session key. Before sending file bytes, the app checks chain permissions and obtains a read-only funding quote for the actual selected storage copies, including dataset creation, operation fees and lockups. If more funds are needed, it displays the additional USDFC amount; deposits and payment approvals remain separate owner-wallet actions. Reauthorize expired or revoked sessions in Wallet setup.
 
-- **Build Tool** - Vite for dev server and bundling
-- **Framework** - React 19 with modern JSX runtime
-- **Language** - TypeScript with strict settings
-- **Code Quality** - Biome for formatting, linting, and import hygiene
+The Wallet and storage panel shows **Runway**, the estimated time before a top-up is needed at the account’s current recurring payment rate. It uses filecoin-pin’s SDK-based account summary, excludes locked reserves, and covers the wallet’s USDFC Filecoin Pay account, including other services billed there. Display labels follow Filecoin Pay Console. Accounts with no recurring spend show **No recurring charges**. This is an estimate, not a file retention guarantee. The panel fetches runway separately when mounted; a failed runway read does not block funding or uploads. **Refresh balances** also refreshes the visible estimate.
 
-### Project Structure
+You can revoke this browser's key from Wallet setup, or manage authorizations in Filecoin Pay Console. Disconnecting the wallet does not revoke its key. Session credentials are stored in IndexedDB, encrypted using a non-exportable AES-GCM wrapping key. Tabs on the same origin reuse the latest key under a short wallet/network-scoped lock, synchronize changes, and reread the vault when returning to the foreground. A completed revocation only clears the matching session revision. The application origin can still use those credentials; this does not provide protection against malicious scripts on the origin.
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for source layout and coding guidelines.
+After a successful connection, the app remembers the chosen wallet type (and the injected wallet's stable discovery ID when available). On reload it silently restores an already authorized injected account, or reuses a valid WalletConnect session approved for the selected network. It does not automatically request account access, switch wallet networks, or start QR pairing. Locked wallets, expired sessions, or unavailable providers return to explicit Connect. Disconnect clears this reconnect preference; it does not clear the directory or revoke the storage session key.
 
-### Multi-User Support with Session Keys
+Disconnecting a WalletConnect wallet also ends its remote connection session. Wallets must support Filecoin's EVM network and transaction requests. Both networks are requested when pairing; if a wallet only approves one, switching to the other may require a new connection.
 
-This demo currently doesn't support users bringing their own wallet, which is tracked in [issue #77](https://github.com/filecoin-project/filecoin-pin-website/issues/77). Instead it relies on deployment with a shared session key, allowing multiple users to safely upload files using the same wallet.
+## Files and folders
 
-**How it works:**
-- **Session key authentication** – Uses `VITE_WALLET_ADDRESS` + `VITE_SESSION_KEY` instead of exposing the wallet's private key
-- **Per-user data sets** – Each user gets their own data set ID, stored in browser localStorage
-- **Data set persistence** – Returning users automatically reconnect to their existing data set
-- **Upload history** – Users can view their uploaded files (fetched from their data set on-chain)
+- File table with search across file names and folder paths, dates, copy counts and storage status. File contents are not searched.
+- Folder tree and breadcrumbs derived from file paths recorded at upload. Names and paths are immutable in Drive; standalone empty folders are not supported.
+- File details with IPFS root CID, piece CID, providers, datasets and transaction links.
+- Original-file download: retrieve and validate the CAR from a recorded provider, then extract the UnixFS file in the browser. File details also offer a new-tab gateway preview for common browser-supported formats; media playback depends on the browser and encoding.
 
-**User isolation:**
-- All users share the same wallet (via session key)
-- Each user's browser stores their unique data set ID
-- Users only see pieces from their own data set
+- Scheduling deletion across recorded copies, with persisted transaction checkpoints for partial failures and retries.
 
-**Important:** This approach relies on browser localStorage for user identity, which is fine for demos but not suitable for production.
+Gateway links use the external `inbrowser.link` browser gateway. Gateway availability is separate from IPNI indexing: an indexed CID does not guarantee successful gateway retrieval. Use **Download** to retrieve the original file directly from a recorded Filecoin storage provider.
 
-### Storage Provider Selection
+Original-file downloads can run alongside an upload. Additional downloads are queued and run one at a time; repeated requests for the same file are deduplicated. Queued files show **Queued · Cancel** in the list and details. Expand the queue above the file list to manage pending downloads across folders. Pending downloads can be cancelled; an active download cannot be cancelled. A failed download reports its file name and the queue continues. The queue is kept only in the current page and is cleared on reload or a wallet/network change; an already running download may still finish. Closing file details keeps downloads running.
 
-During the pre-product development window we hardcode a small allowlist of "known good" storage providers and randomly pick from it when a provider is not specified via the `providerId` debug parameter. This is an expedient, temporary measure to smooth out early network volatility while we gather feedback and improve automated provider discovery. This allowlist will shift to onchain with [filecoin-services#291](https://github.com/FilOzone/filecoin-services/issues/291).  Outside the launch period you should remove the hardcoded IDs and rely on normal provider selection logic (inside filecoin-pin and underlying synapse-sdk) instead.
+New datasets carry `source: filecoin-drive` metadata. Known datasets are reused for uploads only when their on-chain source matches; older or differently marked datasets remain available for existing-file operations. If SDK resolution fails, Drive checks liveness with the SDK and skips only datasets confirmed non-live on-chain, preserving other candidates and historical files. Successful resolution adds no extra liveness read. Metadata/RPC failures with live or unknown liveness stop the upload rather than clearing candidates or creating replacement datasets.
 
-## Community and Support
+Each ordinary upload targets two storage copies on different providers. Matching datasets are reused, and missing copies are selected before the funding quote. A previous one-copy upload does not reduce the target for later uploads or trigger replication of existing files. An upload can still finish with fewer copies if another provider is unavailable or fails; the next upload tries for two again. Confirmed copies are saved, including when only a secondary provider succeeds, and the directory's copy count reflects the successful copies.
 
-### Get Help
+**Share** displays a public link and its QR code. **Copy link** copies the link and shows confirmation only after copying succeeds. Ordinary files open on inbrowser.link without forcing a download; the gateway and browser determine whether to display or download them. Imported CARs share the provider’s Piece URL to preserve the original archive. CAR records do not offer an IPFS gateway export.
 
-- **Issues** - Open issues in this repo if you see any problems with the demo dApp
-- **Community Discussion** - Join the conversation in Filecoin Slack's public [#fil-foc](https://filecoinproject.slack.com/archives/C07CGTXHHT4) channel
+Each new upload records its original filename as `label` and its normalized folder path as `path`. Both values must fit 96 UTF-8 bytes independently, including extensions and path separators; oversized values are rejected before packing or storage requests, never silently omitted. The IPFS root CID occupies the third piece metadata slot. Imported CARs use `carPath` instead of `path` to preserve both their folder and original-archive download mode within the three-key limit. Names, paths and content identifiers are publicly visible in upload events and the index. Repeated uploads can keep separate file records; deleting shared content affects all matching records, as explained before deletion.
 
-### Documentation
+Deletion resolves every matching piece instance across all pages. Providers accept batches of at most 35 removals per dataset, with a queue that drains at the next proving period. Larger removals retain their progress and show **Continue deletion**; retry when the queue has space. Local checkpoints preserve unfinished batches. Once every recorded copy has a confirmed removal-scheduling transaction and no remaining batch, the file is hidden from the normal list, search and count. Its metadata and transaction receipts remain in the browser cache. Partial removals stay available to continue. Archived receipts are preserved and are not reused to settle a later upload of identical content; pending transactions are checked before submitting another deletion.
 
-- **[Live Demo Walkthrough](https://docs.filecoin.io/builder-cookbook/filecoin-pin/dapp-demo)** - Step-by-step guide to using this demo
-- **[Video Demo](https://www.youtube.com/watch?v=UElx1_qF12o)** - Screen recording showing the dApp in action
-- **[filecoin-pin Repository](https://github.com/filecoin-project/filecoin-pin)** - Core library and CLI
-- **[Filecoin Pin Documentation](https://docs.filecoin.io/builder-cookbook/filecoin-pin)** - Complete guides and tutorials
+Deletion is scheduled for provider processing, rather than immediate erasure. IPFS caches may retain content. Piece removal does not terminate the whole dataset or immediately end every storage charge.
 
-### Contributing
+Uploads and deletions of different content can run together. Uploads acquire the existing content lock after packing, before storage requests; the same content cannot be uploaded and deleted concurrently. Deleting a legacy record without an IPFS root CID excludes all uploads for that wallet and network. Wallet switching and session changes stay locked until both operations finish. Only one tab can delete the same content for a wallet and network at a time. Another tab reports that deletion is already in progress; after it finishes or fails, **Continue deletion** reads the latest saved checkpoints. This operation lock is separate from the short directory-save lock. Receipts update only their dataset and do not overwrite a newer transaction when a failed save is retried.
 
-For contributing to this project, see [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Wallet discovery, connector account events and chain switching use wagmi. Both connection buttons connect directly when one browser wallet is available, or open the same wallet-selection interface when several are available. Announced wallet icons are used when valid; the unnamed legacy Browser wallet entry is not displayed. The existing lazy WalletConnect provider is adapted to a wagmi injected connector to preserve mobile namespace account resolution and explicit pairing. Injected-wallet connection attempts stop waiting after 45 seconds and restore page controls. An unresolved request blocks another connection attempt to that wallet until it settles; other wallets remain available. Reload after restarting an unresponsive extension. A late response does not sign the user in automatically. WalletConnect pairing keeps its existing interactive wait. Synapse React resolves the owner signing client; when a late response changes wagmi’s current connection, the selected connector is passed explicitly to wagmi instead. TanStack Query scopes and deduplicates storage configuration, wallet snapshots and pending receipt reads. Session-key persistence, permission lifecycle, bounded transaction recovery, dataset reuse and CAR/IPNI orchestration remain application logic.
+
+## Persistence and limitations
+
+Drive reads [the public Filecoin API](https://api.filecoin.io/docs) by wallet and network on connection, including when this browser has no remembered dataset IDs. It paginates the wallet's datasets, selects `source: filecoin-drive`, and reads their pieces and provider details. It checks each selected dataset's scheduled removals using the SDK, because the index exposes completed removals but not the pending queue. **Load from Filecoin** retries discovery as indexing catches up. File discovery does not wait for wallet balances, payment approvals or session authorization. An empty cache shows a loading state until the first index request completes; failed requests show a retry action rather than an empty-directory message. The API is a third-party index, not proof that a provider is reachable.
+
+The browser caches file records and pending upload/deletion checkpoints in localStorage. Cached files appear immediately. Indexed records merge by dataset/piece identity; missing records in a lagging response never delete local records. Local removal receipts remain authoritative, and explicit indexed removals/chain removal queues keep acknowledged copies hidden. Active and acknowledged historical copies are not paired into a new file record. Local deletions show **Deleting…** while running; partial removals remain visible as **Deletion incomplete**, with per-copy queue/receipt status. Once every copy is scheduled or removed, the normal list hides that record. The queue reports Piece IDs, not a progress percentage or guaranteed completion time. A different browser can still see stale state until the chain and index catch up. API or chain-read failures leave the cache intact and report an error instead of treating the wallet as empty.
+
+Connect the same wallet on another browser to discover indexed Drive files without importing a directory. Recent unindexed uploads may initially be absent there. Original names come from `label`; missing names display the IPFS root CID, then Piece CID, without storing the fallback as a real name. Missing paths recover at the root. Existing local names, paths and checkpoints are preserved. Older datasets marked `filecoin-pin` are not automatically classified as Drive datasets, but their cached records remain available. Historical local edits cannot be recovered by another browser. Recovered dates use the indexed add-piece epoch and the SDK’s epoch-to-date conversion, so they reflect storage confirmation rather than the original browser upload start. No per-file block RPC is needed. CAR archive sizes use the indexed raw size. For ordinary files with unknown size, at most two background requests read raw IPFS root blocks from recorded providers; reads have an 8-second timeout per provider, a 2 MiB cap and CID hash verification. UnixFS metadata gives multi-block file sizes without fetching child blocks. Failed size reads keep Unknown and never block file discovery; known local sizes and dates are preserved. Upload transaction hashes remain omitted when unavailable.
+
+File and checkpoint writes use wallet/network-scoped Web Locks to merge against the latest records across tabs on the same origin. Tabs reread the cache when visible, focused, resumed or restored from the page cache; these local resume reads do not query the chain. Wallet/network changes abort discovery and ignore late responses. Directory import/export, local rename/move controls and standalone empty-folder creation/deletion are no longer exposed.
+
+Writes require Web Locks over HTTPS or localhost. If a cache save fails, keep the page open, free browser storage and retry saving. Unsaved upload/deletion checkpoints remain in memory and merge with the latest cache on retry. Upload details offer **Retry saving** to persist confirmed file metadata without uploading again. Once the primary provider acknowledges receipt and that checkpoint is saved, the file can be downloaded and another upload can start. The list and details share Uploading, Confirming, Stored, Upload interrupted and Upload failed statuses; Stored means at least one confirmed copy, with outstanding-copy progress shown separately. Indexing, provider receipts and technical steps stay in expandable upload details. Each file has its own upload status and expandable details; replication, indexing and provider confirmation continue in the background. Share and Preview wait for storage processing to finish. Keep the tab open while background upload work is running. Closing file details does not cancel a running deletion; keep the browser tab open.
+
+Uploads save confirmed copies locally even if later replication or IPFS indexing fails. After reload, saved tasks check existing provider operations without resubmitting uploads. Automatic checks run at 30-second intervals while visible, up to 20 checks per task; **Check status** also refreshes the Filecoin index and remains available afterwards. Refreshing the page stops browser-side replication, submission and indexing work that has not finished. Missing submission hashes display an interrupted upload, rather than an indefinitely running confirmation; status checks can discover existing indexed confirmations but cannot resume those unfinished steps. Transfers interrupted before a receipt was saved require selecting the file again; timeouts alone do not authorize a new upload. The upload network is fixed when the operation starts. After local storage is cleared, the API can recover indexed records; unindexed work and historical local-only metadata cannot be reconstructed immediately. Content is not encrypted.
+
+Uploads inspect file contents to detect CAR archives regardless of the filename extension. Ordinary files retain the existing UnixFS packing. A detected CAR is stored byte-for-byte without wrapping it in a new file DAG, preserving its root CIDs. Drive uses the first root as the primary CID when an archive has multiple roots. Rootless archives and archives missing a declared root block are rejected before storage requests; the browser directory and content locks require a real primary root.
+
+Imported archives appear as one file record and download as the original CAR bytes from a storage provider. Drive does not expand their internal folders into the browser directory. Single-file previews and IPFS gateway file downloads are omitted for these records: traversing one root cannot reproduce an archive’s other roots or extra blocks. New CAR uploads preserve their download mode through `carPath` metadata, so another browser can recover it. Older CAR records without that field retain their mode only in existing browser caches.
+
+## Development
+
+```sh
+npm run lint
+npm run test
+npm run build
+```
+
+For browser regression checks, run `npm run dev` in another terminal, install Chromium with `npx playwright install chromium`, then run `npm run test:drive`. If Chrome is installed, use `PLAYWRIGHT_CHANNEL=chrome npm run test:drive`. `PLAYWRIGHT_CHANNEL=chrome npm run test:drive:theme` checks both themes, shared component contrast, focus/hover states, and rendered console details. `DRIVE_TEST_URL` can select another local dev-server URL. Wallet requests and external RPCs are mocked.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for source layout and contribution conventions. Core code lives in [the wallet provider](src/context/browser-wallet-provider.tsx), [the upload hook](src/hooks/use-filecoin-upload.ts), and [the drive components](src/components/drive/).
+
+Pending IPFS root CIDs receive at most five additional background indexing checks, two minutes apart. The browser saves the attempt count and cooldown per wallet/network and CID, so reloads and reconnects do not restart the budget. Checks pause while the page is hidden. When the budget is exhausted, the file remains stored and downloadable; its status becomes `Stored · IPFS indexing unconfirmed`. File details offer `Retry indexing checks` to explicitly start another bounded round. This checks root-CID discoverability in IPNI, not full-file retrieval or replica health.
+
+The folder sidebar shows **Files** as the root, with nested paths derived from visible files. Choose a folder path in the upload panel; deleting all files under a path removes that path from the tree.
+
+Wallet authorization, revocation, deposits and storage-payment approvals retain their submitted transaction hash per wallet/network until the outcome is known. A confirmation timeout leaves the operation pending and blocks duplicate wallet setup submissions. After the initial wait, visible pages check every 30 seconds for up to ten minutes from submission. Returning to the foreground or selecting **Refresh status** performs another read, including after that automatic window ends. Reloading restores pending work. Revoking a session also clears the termination permission granted by older versions; renewing it with fewer permissions does not revoke an existing grant. Session authorization also checks the actual permissions and requested expiry; revocation checks that all storage permissions are inactive. This can recover session changes when a wallet replacement changes the transaction hash. Missing receipts and RPC failures are never treated as proof of failure. Payments require a successful receipt. Pending records also retain the original Filecoin message CID when the node can resolve it from the submitted hash. Recovery first checks the ordinary Ethereum receipt. If that receipt is missing, Lotus `StateSearchMsg` searches at most 120 recent epochs (about one hour) with `allowReplaced` enabled, allowing an otherwise identical gas-repriced message to supply the execution receipt. Exit code zero confirms success; a nonzero code reports failure. Lotus’s explicit call-changing replacement error clears the pending operation with a cancellation/replacement notice and never counts as payment success. A returned message CID is converted to an Ethereum hash for transaction links when available; a failed hash conversion does not invalidate the native execution receipt. Unsupported Lotus methods, missing original-message data, rate limits and unknown responses leave the outcome unresolved rather than inferring it from a nonce or balance change. Recovery does not search historical account nonces or enumerate blocks. Older pending hashes remain restorable without the obsolete nonce-recovery metadata.
+
+## Deployment
+
+Build with `npm run build` and serve `dist` over HTTPS on a stable origin. Browser directory data and session credentials are scoped to that origin. Configure the public origin in the Reown project's allowlist. Set `VITE_WALLETCONNECT_PROJECT_ID` before building to override the built-in public project ID. Never configure wallet private keys in deployment environment variables.
+
+Uploads and deletions of identical content are mutually exclusive across tabs on the same browser origin, wallet and network. Uploads acquire a Web Lock after local CAR packing reveals the IPFS root CID, before sending data, and retain it until confirmed file metadata is saved. Conflicting operations fail immediately and require an explicit retry; different content can proceed independently. Deleting an older record without a root CID conservatively excludes uploads for that wallet/network. An unfinished recorded deletion must be continued before uploading the same content again. These browser locks do not coordinate other devices, browser profiles or CLI clients.
+
+### Uploading folders
+
+Choose **Folder** in the upload panel to store an entire folder as one UnixFS directory. Nested folders retain their paths. Browse the uploaded folder in Drive, download individual files, or download a folder as a ZIP. Preview and sharing use each entry’s IPFS CID when available. The browser picker omits empty folders; selected content and the packed CAR must each fit the 200 MB browser limit.
+
+An organizing folder groups independent uploads. An uploaded folder stores its contents together: its children share the folder’s upload time and cannot be added, renamed or deleted individually. Delete the uploaded folder from its details to remove its storage copies. Icons and folder information distinguish these two kinds of folder. Known name collisions are rejected before a folder upload starts.
+
+Folder listings are cached in IndexedDB by root CID, path and page. The bounded cache contains names, CIDs and sizes, not file bytes, and survives reloads. New uploads seed it from the packed CAR; uncached pages are read and verified from storage providers before caching. Provider failures do not erase cached pages. The cache can be evicted under its capacity limits or cleared with site data; file downloads still need retrievable content.
+
+The search field stays in the Files toolbar beside Load from Filecoin and Upload. **Search file list** matches names and paths in the wallet’s file records, without searching inside uploaded folders. Inside an uploaded folder, **Search this folder** matches names across all pages of the current directory (not file contents or nested directories), up to 10,000 entries. Opening Upload from an uploaded folder leaves Upload location empty and starts at Files root because uploaded folders cannot be appended to. Opening Upload from an organizing folder pre-fills its current path.
