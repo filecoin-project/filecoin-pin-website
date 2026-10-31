@@ -17,6 +17,7 @@ import {
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useUploadHistory } from '../../context/upload-history-context.tsx'
+import { useUploadTasks } from '../../context/upload-tasks-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { useDownloadQueue } from '../../hooks/use-download-queue.ts'
 import { useFileDeletion } from '../../hooks/use-file-deletion.ts'
@@ -42,8 +43,11 @@ import { FileUploadDetails } from './file-upload-details.tsx'
 import { FolderInfo } from './folder-info.tsx'
 import { ProviderLink } from './provider-link.tsx'
 import { ShareFileButton } from './share-file-button.tsx'
+import { compareValues, nameOrder, SortHeading, sizeInBytes, useFileSort } from './sort-heading.tsx'
 
 export { fileStatus } from '../../utils/upload/file-status.ts'
+
+const confirmedCopies = (file: DatasetPiece) => file.copyCount ?? (file.upload ? 0 : 1)
 
 interface Props {
   folder: string
@@ -71,6 +75,8 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
   }, [storageScope])
   const connection = useBrowserWallet()
   const [search, setSearch] = useState('')
+  const { sort, toggleSort } = useFileSort()
+  const { sort: directorySort, toggleSort: toggleDirectorySort } = useFileSort()
   const [sessionHintAttempt, setSessionHintAttempt] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedFileIds, setSelectedFileIds] = useState<ReadonlySet<string>>(new Set())
@@ -105,6 +111,31 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
   const allFolders = directoryFolders(visibleHistory, [])
   const openedDirectory = visibleHistory.find((file) => file.id === directoryId && file.isDirectory)
   const uploadedFolders = visibleHistory.filter((file) => file.isDirectory)
+  const uploadTasks = useUploadTasks()
+  const activeFiles = visibleHistory.filter(
+    (file) =>
+      deletingPieceCids.has(file.pieceCid) ||
+      autoCheckingPieceCids.has(file.pieceCid) ||
+      uploadTasks?.activeIds.has(file.id) ||
+      uploadTasks?.checking.has(file.id) ||
+      ['waiting', 'uploading', 'confirming'].includes(file.upload?.phase ?? '')
+  )
+  const activeFolders = new Set<string>()
+  for (const file of activeFiles) {
+    activeFolders.add('')
+    const parts = (file.folderPath ?? '').split('/').filter(Boolean)
+    for (let i = 1; i <= parts.length; i++) activeFolders.add(parts.slice(0, i).join('/'))
+  }
+  const activityIndicator = (active: boolean) =>
+    active ? (
+      <span
+        aria-hidden="true"
+        className="ml-auto inline-flex shrink-0 text-accent"
+        title="Uploads or deletions in progress"
+      >
+        <Loader2 className="animate-spin motion-reduce:animate-none" size={13} />
+      </span>
+    ) : null
   const renderFolderTree = (parent: string, depth: number): ReactNode => (
     <>
       {allFolders
@@ -121,6 +152,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
             >
               <Folder aria-hidden="true" className="shrink-0" size={16} />
               <span className="truncate">{path.split('/').at(-1)}</span>
+              {activityIndicator(activeFolders.has(path))}
             </button>
             {renderFolderTree(path, depth + 1)}
           </Fragment>
@@ -140,6 +172,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
           >
             <FolderUp aria-hidden="true" className="shrink-0" size={16} />
             <span className="truncate">{displayFileName(file)}</span>
+            {activityIndicator(activeFiles.some((active) => active.id === file.id))}
             {uploadedFolders.some(
               (other) => other.id !== file.id && other.fileName === file.fileName && (other.folderPath ?? '') === parent
             ) && (
@@ -178,7 +211,27 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
         ? `${file.folderPath ?? ''}/${displayFileName(file)}`.toLowerCase().includes(search.toLowerCase())
         : (file.folderPath ?? '') === folder
     )
-    .sort((a, b) => b.uploadedAt - a.uploadedAt)
+    .sort((a, b) => {
+      const value = (file: DatasetPiece) => {
+        switch (sort.key) {
+          case 'name':
+            return displayFileName(file)
+          case 'size':
+            return sizeInBytes(file.fileSize)
+          case 'status':
+            return displayStatus(file)
+          case 'copies':
+            return confirmedCopies(file)
+          case 'uploaded':
+            return file.uploadedAt || undefined
+        }
+      }
+      return (
+        compareValues(value(a), value(b), sort) ||
+        nameOrder.compare(displayFileName(a), displayFileName(b)) ||
+        a.id.localeCompare(b.id)
+      )
+    })
   const canSelectForDeletion = (file: DatasetPiece) =>
     Boolean(
       file.pieceCid &&
@@ -198,9 +251,9 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
       else next.add(file.id)
       return next
     })
-  const children = allFolders.filter(
-    (path) => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '') === folder
-  )
+  const children = allFolders
+    .filter((path) => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '') === folder)
+    .sort((a, b) => nameOrder.compare(a, b) * (sort.key === 'name' && sort.direction === 'desc' ? -1 : 1))
   const choose = (file: DatasetPiece) => {
     setSelectedId(file.id)
     setDeleteConsent(false)
@@ -402,6 +455,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
               <ChevronDown aria-hidden="true" className="shrink-0" size={14} />
               <FolderOpen aria-hidden="true" className="shrink-0" size={16} />
               Files
+              {activityIndicator(activeFolders.has(''))}
             </button>
             <div className="ml-8 max-h-52 overflow-y-auto border-l border-border pl-2 md:max-h-80">
               {renderFolderTree('', 0)}
@@ -419,6 +473,8 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
             onFolderChange={onFolderChange}
             onSearchChange={setSearch}
             search={search}
+            sort={directorySort}
+            toggleSort={toggleDirectorySort}
           />
         ) : (
           <div className="flex min-h-0 min-w-0 flex-col">
@@ -448,9 +504,9 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
             </div>
             <section aria-label="Files list" className="drive-file-list" key={`${folder}:${search}`}>
               <table className={`${files.length || children.length ? 'min-w-[760px]' : ''} w-full text-left text-sm`}>
-                <thead className="text-[11px] font-normal text-muted">
+                <thead className="text-xs text-muted">
                   <tr>
-                    <th className="w-12 px-2 py-4">
+                    <th className="w-12 px-2 py-2">
                       <label className="flex h-8 w-8 cursor-pointer items-center justify-center">
                         <input
                           aria-label="Select all files in this list"
@@ -473,20 +529,20 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                         />
                       </label>
                     </th>
-                    <th className="p-4">Name</th>
-                    <th className="p-4">Size</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4">Copies</th>
-                    <th className="p-4">Uploaded</th>
-                    <th className="p-4">Actions</th>
+                    <SortHeading column="name" label="Name" onSort={toggleSort} sort={sort} />
+                    <SortHeading column="size" label="Size" onSort={toggleSort} sort={sort} />
+                    <SortHeading column="status" label="Status" onSort={toggleSort} sort={sort} />
+                    <SortHeading column="copies" label="Copies" onSort={toggleSort} sort={sort} />
+                    <SortHeading column="uploaded" label="Uploaded" onSort={toggleSort} sort={sort} />
+                    <th className="px-4 py-2 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {!search &&
                     children.map((path) => (
                       <tr className="border-t border-border" key={path}>
-                        <td className="p-4" />
-                        <td className="p-4 whitespace-nowrap" colSpan={6}>
+                        <td className="px-4 py-3" />
+                        <td className="px-4 py-3 whitespace-nowrap" colSpan={6}>
                           <button
                             className="inline-flex items-center gap-2 align-middle text-left hover:underline"
                             onClick={() => onFolderChange(path)}
@@ -496,13 +552,14 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                               <Folder aria-hidden="true" size={16} />
                             </span>
                             {path.split('/').at(-1)}
+                            {activityIndicator(activeFolders.has(path))}
                           </button>
                         </td>
                       </tr>
                     ))}
                   {files.map((file) => (
                     <tr className="border-t border-border hover:bg-surface" key={file.id}>
-                      <td className="px-2 py-4">
+                      <td className="px-2 py-3">
                         <label className="flex h-8 w-8 cursor-pointer items-center justify-center">
                           <input
                             aria-label={`Select ${displayFileName(file)}`}
@@ -514,7 +571,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                           />
                         </label>
                       </td>
-                      <td className="p-4 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <button
                           aria-label={displayFileName(file)}
                           className="inline-flex items-center gap-2 align-middle text-left hover:underline"
@@ -534,8 +591,8 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                           </span>
                         </button>
                       </td>
-                      <td className="p-4 whitespace-nowrap">{file.fileSize}</td>
-                      <td className="p-4">
+                      <td className="px-4 py-3 whitespace-nowrap">{file.fileSize}</td>
+                      <td className="px-4 py-3">
                         <span
                           className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] ${fileStatusColors(displayStatus(file))}`}
                         >
@@ -543,17 +600,21 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                           {displayStatus(file)}
                         </span>
                       </td>
-                      <td className="p-4 tabular-nums text-muted">
-                        <span className="whitespace-nowrap">
-                          {file.upload
-                            ? `${file.copyCount ?? 0} / ${file.upload.expectedCopies} confirmed`
-                            : (file.copyCount ?? 1)}
+                      <td className="px-4 py-3 tabular-nums text-muted">
+                        <span
+                          className="whitespace-nowrap"
+                          title={`${confirmedCopies(file)} confirmed storage ${confirmedCopies(file) === 1 ? 'copy' : 'copies'}`}
+                        >
+                          {file.upload &&
+                          (file.upload.phase !== 'complete' || confirmedCopies(file) < file.upload.expectedCopies)
+                            ? `${confirmedCopies(file)} / ${file.upload.expectedCopies} confirmed`
+                            : confirmedCopies(file)}
                         </span>
                         {copyProgress(file) && (
                           <span className="mt-1 block text-[11px] text-warning">{copyProgress(file)}</span>
                         )}
                       </td>
-                      <td className="p-4 whitespace-nowrap text-xs text-muted">
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-muted">
                         {file.uploadedAt
                           ? file.isDirectory &&
                             uploadedFolders.some(
@@ -566,8 +627,8 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                             : new Date(file.uploadedAt).toLocaleDateString()
                           : 'Unknown'}
                       </td>
-                      <td className="p-4">
-                        <div className="flex gap-3">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-4">
                           <button
                             aria-label={
                               isQueued(file.id) ? `Cancel queued download for ${displayFileName(file)}` : undefined
@@ -600,12 +661,13 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                             file={file}
                           />
                           <button
-                            className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent"
+                            aria-label="Details"
+                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-raised hover:text-foreground"
                             onClick={() => choose(file)}
+                            title="File details"
                             type="button"
                           >
-                            <MoreHorizontal aria-hidden="true" size={14} />
-                            Details
+                            <MoreHorizontal aria-hidden="true" size={18} />
                           </button>
                         </div>
                       </td>

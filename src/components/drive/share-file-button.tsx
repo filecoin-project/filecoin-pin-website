@@ -28,7 +28,7 @@ export function ShareFileButton({
             variant === 'button'
               ? cn(
                   buttonVariants({ variant: 'secondary', size: 'sm', disabled: disabled || !link }),
-                  'min-h-9 w-full min-w-0 gap-1.5 px-3 py-1.5 text-xs'
+                  'h-7 min-h-7 w-auto min-w-0 gap-1.5 rounded-md px-2.5 py-1 text-xs'
                 )
               : 'inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent disabled:opacity-40'
           }

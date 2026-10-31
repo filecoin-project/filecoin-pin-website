@@ -15,9 +15,12 @@ import { getIpfsGatewayPreviewLink } from '../../utils/links.ts'
 import { ButtonBase as Button } from '../ui/button/button-base.tsx'
 import { FileTypeIcon } from './file-type-icon.tsx'
 import { ShareFileButton } from './share-file-button.tsx'
+import { compareValues, type FileSort, nameOrder, SortHeading, type SortKey } from './sort-heading.tsx'
 
 type Props = {
   file: DatasetPiece
+  sort: FileSort
+  toggleSort: (key: SortKey) => void
   search: string
   onSearchChange: (value: string) => void
   onFolderChange: (path: string) => void
@@ -29,6 +32,8 @@ type Props = {
 
 export function DirectoryBrowser({
   file,
+  sort,
+  toggleSort,
   search,
   onSearchChange,
   onFolderChange,
@@ -106,7 +111,7 @@ export function DirectoryBrowser({
     path && page ? selection({ name: path.split('/').at(-1) ?? '', path, cid: page.cid, isDirectory: true }) : file
   return (
     <div className="flex min-h-0 min-w-0 flex-col">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
+      <div className="flex min-h-[52px] shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-2.5">
         <nav aria-label="Current folder" className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
           <button className="text-muted hover:text-accent" onClick={() => onFolderChange('')} type="button">
             Files
@@ -144,9 +149,9 @@ export function DirectoryBrowser({
               </span>
             ))}
         </nav>
-        <div className="grid w-full grid-cols-2 gap-2 sm:w-64">
+        <div className="flex shrink-0 items-center gap-2">
           <Button
-            className="min-h-9 w-full min-w-0 gap-1.5 px-3 py-1.5 text-xs"
+            className="h-7 min-h-7 w-auto min-w-0 gap-1.5 rounded-md px-2.5 py-1 text-xs"
             disabled={(Boolean(path) && !page) || downloadBlocked(currentFolder)}
             onClick={() => onDownload(currentFolder)}
             size="sm"
@@ -179,75 +184,87 @@ export function DirectoryBrowser({
             </Button>
           </div>
         )}
+        {page && (offset > 0 || page.hasMore) && (
+          <p className="px-5 py-2 text-xs text-muted">Sorting applies to this page of folder contents.</p>
+        )}
         {page && (
           <table className="w-full min-w-[480px] text-left text-sm">
-            <thead className="text-[11px] text-muted">
+            <thead className="text-xs text-muted">
               <tr>
-                <th className="p-4">Name</th>
-                <th className="p-4">Size</th>
-                <th className="p-4">Actions</th>
+                <SortHeading className="pl-16" column="name" label="Name" onSort={toggleSort} sort={sort} />
+                <SortHeading column="size" label="Size" onSort={toggleSort} sort={sort} />
+                <th className="px-4 py-2 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {page.items.map((item) => {
-                const child = selection(item)
-                const preview =
-                  !item.isDirectory && canPreviewFile(child) && (!file.upload || file.upload.phase === 'complete')
-                return (
-                  <tr className="border-t border-border hover:bg-surface" key={item.path}>
-                    <td className="p-4">
-                      <button
-                        className="inline-flex items-center gap-2 text-left disabled:cursor-default"
-                        disabled={!item.isDirectory}
-                        onClick={() => navigate(item.path)}
-                        type="button"
-                      >
-                        {item.isDirectory ? (
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-800/10 text-accent">
-                            <Folder size={16} />
-                          </span>
-                        ) : (
-                          <FileTypeIcon fileName={item.name} />
-                        )}
-                        <span className="max-w-[260px] truncate">{item.name}</span>
-                      </button>
-                    </td>
-                    <td className="p-4 whitespace-nowrap text-muted">
-                      {item.size === undefined ? '—' : formatFileSize(item.size)}
-                    </td>
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
+              {[...page.items]
+                .sort((a, b) => {
+                  if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
+                  return (
+                    compareValues(sort.key === 'size' ? a.size : a.name, sort.key === 'size' ? b.size : b.name, sort) ||
+                    nameOrder.compare(a.name, b.name) ||
+                    a.path.localeCompare(b.path)
+                  )
+                })
+                .map((item) => {
+                  const child = selection(item)
+                  const preview =
+                    !item.isDirectory && canPreviewFile(child) && (!file.upload || file.upload.phase === 'complete')
+                  return (
+                    <tr className="border-t border-border hover:bg-surface" key={item.path}>
+                      <td className="pl-16 pr-4 py-3">
                         <button
-                          className="inline-flex items-center gap-1 text-xs text-muted hover:text-accent disabled:opacity-40"
-                          disabled={downloadBlocked(child)}
-                          onClick={() => onDownload(child)}
+                          className="inline-flex items-center gap-2 text-left disabled:cursor-default"
+                          disabled={!item.isDirectory}
+                          onClick={() => navigate(item.path)}
                           type="button"
                         >
-                          <Download size={14} />
-                          {isQueued(child.id)
-                            ? 'Cancel queued download'
-                            : activeDownloadId === child.id
-                              ? 'Downloading…'
-                              : item.isDirectory
-                                ? 'Download ZIP'
-                                : 'Download'}
+                          {item.isDirectory ? (
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-800/10 text-accent">
+                              <Folder size={16} />
+                            </span>
+                          ) : (
+                            <FileTypeIcon fileName={item.name} />
+                          )}
+                          <span className="max-w-[260px] truncate">{item.name}</span>
                         </button>
-                        {preview && (
-                          <a
-                            className="inline-flex items-center gap-1 text-xs text-muted hover:text-accent"
-                            href={getIpfsGatewayPreviewLink(item.cid, item.name)}
-                            rel="noopener noreferrer"
-                            target="_blank"
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-muted">
+                        {item.size === undefined ? '—' : formatFileSize(item.size)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-4">
+                          <button
+                            className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent disabled:opacity-40"
+                            disabled={downloadBlocked(child)}
+                            onClick={() => onDownload(child)}
+                            type="button"
                           >
-                            <Eye size={14} /> Preview
-                          </a>
-                        )}
-                        <ShareFileButton file={child} />
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
+                            <Download size={14} />
+                            {isQueued(child.id)
+                              ? 'Cancel queued download'
+                              : activeDownloadId === child.id
+                                ? 'Downloading…'
+                                : item.isDirectory
+                                  ? 'Download ZIP'
+                                  : 'Download'}
+                          </button>
+                          {preview && (
+                            <a
+                              className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent"
+                              href={getIpfsGatewayPreviewLink(item.cid, item.name)}
+                              rel="noopener noreferrer"
+                              target="_blank"
+                            >
+                              <Eye size={14} /> Preview
+                            </a>
+                          )}
+                          <ShareFileButton file={child} />
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               {!page.items.length && (
                 <tr>
                   <td className="p-8 text-center text-sm text-muted" colSpan={3}>

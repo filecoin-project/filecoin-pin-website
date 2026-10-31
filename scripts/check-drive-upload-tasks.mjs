@@ -316,7 +316,7 @@ export async function checkUploadTasks(browser) {
     const shareAction = await page.getByRole('button', { name: 'Share', exact: true }).first().boundingBox()
     assert.equal(zipAction.y, shareAction.y, 'Directory actions should align in one row')
     assert.equal(zipAction.height, shareAction.height, 'Directory actions should have matching heights')
-    assert.equal(zipAction.width, shareAction.width, 'Directory actions should have equal widths')
+    assert(zipAction.width > shareAction.width, 'Directory actions should size to their labels')
     const searchBox = await folderSearch.boundingBox()
     const uploadAction = await page.getByRole('button', { name: 'Upload files', exact: true }).boundingBox()
     assert.equal(searchBox.height, uploadAction.height, 'Search and global actions should have matching heights')

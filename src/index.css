@@ -179,6 +179,15 @@
   scrollbar-gutter: stable;
   isolation: isolate;
 
+  & th {
+    height: 48px;
+    vertical-align: middle;
+  }
+
+  & td {
+    vertical-align: middle;
+  }
+
   & thead {
     position: sticky;
     top: 0;
