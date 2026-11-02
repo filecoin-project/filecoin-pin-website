@@ -5,8 +5,8 @@ export type SortKey = 'name' | 'size' | 'status' | 'copies' | 'uploaded'
 export type FileSort = { key: SortKey; direction: 'asc' | 'desc' }
 export const nameOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
 
-export function useFileSort() {
-  const [sort, setSort] = useState<FileSort>({ key: 'name', direction: 'asc' })
+export function useFileSort(initialSort: FileSort = { key: 'name', direction: 'asc' }) {
+  const [sort, setSort] = useState<FileSort>(initialSort)
   const toggleSort = (key: SortKey) =>
     setSort((current) => ({
       key,

@@ -75,7 +75,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
   }, [storageScope])
   const connection = useBrowserWallet()
   const [search, setSearch] = useState('')
-  const { sort, toggleSort } = useFileSort()
+  const { sort, toggleSort } = useFileSort({ key: 'uploaded', direction: 'desc' })
   const { sort: directorySort, toggleSort: toggleDirectorySort } = useFileSort()
   const [sessionHintAttempt, setSessionHintAttempt] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)

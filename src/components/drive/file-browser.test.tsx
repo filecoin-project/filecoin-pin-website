@@ -1020,9 +1020,9 @@ it('marks ancestor folders while deletion confirmation is checked and clears act
   ).toBeNull()
 })
 
-it('defaults to natural filename order and toggles numeric size sorting without persisting the selection', async () => {
+it('defaults to newest uploads and allows name and size sorting without persisting the selection', async () => {
   setCachedPieces(scope, [
-    { ...file, id: 'ten', fileName: 'file10.txt', fileSize: '1 KB', uploadedAt: 1 },
+    { ...file, id: 'ten', fileName: 'file10.txt', fileSize: '1 KB', uploadedAt: 4 },
     { ...file, id: 'two', fileName: 'file2.txt', fileSize: '20 Bytes', uploadedAt: 2 },
     { ...file, id: 'one', fileName: 'file1.txt', fileSize: 'Unknown', uploadedAt: 3 },
   ])
@@ -1038,6 +1038,9 @@ it('defaults to natural filename order and toggles numeric size sorting without 
       .slice(1)
       .map((row) => within(row).getByRole('button', { name: /^file\d+\.txt$/ }).textContent)
   await screen.findByRole('button', { name: 'file1.txt' })
+  expect(names()).toEqual(['file10.txt', 'file1.txt', 'file2.txt'])
+  expect(screen.getByRole('columnheader', { name: 'Uploaded' }).getAttribute('aria-sort')).toBe('descending')
+  fireEvent.click(screen.getByRole('button', { name: 'Name' }))
   expect(names()).toEqual(['file1.txt', 'file2.txt', 'file10.txt'])
   fireEvent.click(screen.getByRole('button', { name: 'Size' }))
   expect(names()).toEqual(['file2.txt', 'file10.txt', 'file1.txt'])
@@ -1047,7 +1050,7 @@ it('defaults to natural filename order and toggles numeric size sorting without 
   view.unmount()
   render(renderBrowser())
   await screen.findByRole('button', { name: 'file1.txt' })
-  expect(names()).toEqual(['file1.txt', 'file2.txt', 'file10.txt'])
+  expect(names()).toEqual(['file10.txt', 'file1.txt', 'file2.txt'])
 })
 
 it('uses the same default copy count for legacy records and their tooltip', async () => {
