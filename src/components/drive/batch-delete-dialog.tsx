@@ -59,6 +59,13 @@ export function BatchDeleteDialog({
       <p className="text-sm text-muted">
         Removal may take some time. You can close this panel after starting deletion.
       </p>
+      <details className="text-xs text-muted">
+        <summary className="w-fit cursor-pointer hover:text-foreground">How deletion works</summary>
+        <p className="mt-2 leading-relaxed">
+          Other instances of the same content in the datasets being processed will also be removed, even if they are not
+          shown in this file list. Other datasets are not affected.
+        </p>
+      </details>
       <label className="flex items-start gap-2 text-sm">
         <input checked={consent} onChange={(event) => setConsent(event.target.checked)} type="checkbox" />
         Delete all listed files and their recorded copies.

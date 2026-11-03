@@ -87,6 +87,21 @@ try {
   assert((await page.locator('table').boundingBox()).y < 500, 'File table should occupy the first desktop viewport')
   await page.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
   await page.getByRole('checkbox', { name: 'I authorize storage uploads and file deletions for this browser.' }).check()
+  // Exercise the real viem error wrapping and the visible first-authorization state.
+  await page.evaluate(() => {
+    window.__driveRejectNextTransaction = true
+  })
+  await page.getByRole('button', { name: 'Authorize session', exact: true }).click()
+  await page.waitForFunction(() => window.__driveRejectNextTransaction === false)
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll('button')].some(
+      (button) => button.textContent.trim() === 'Authorize session' && !button.disabled
+    )
+  )
+  assert.equal(await page.getByRole('button', { name: 'Renew authorization', exact: true }).count(), 0)
+  assert.equal(await page.getByRole('button', { name: 'Revoke session', exact: true }).count(), 0)
+  assert.equal(await page.getByText(/^Key 0x/).count(), 0)
+  await page.screenshot({ path: '/tmp/filecoin-drive-authorization-rejected.png', animations: 'disabled' })
   await page.getByRole('button', { name: 'Authorize session', exact: true }).click()
   await page
     .getByText('Wallet setup · Session authorized', { exact: true })
@@ -96,6 +111,21 @@ try {
       console.log(errors)
       throw error
     })
+  // Expired local credentials must not appear as an active authorization.
+  await page.evaluate(async () => {
+    window.__driveAuthorized = false
+    const { updateBrowserSession } = await import('/src/lib/local-storage/session-vault.ts')
+    await updateBrowserSession('314:0x1111111111111111111111111111111111111111', (current) => ({
+      ...current,
+      expiresAt: Math.floor(Date.now() / 1000) - 60,
+    }))
+  })
+  await page.getByRole('button', { name: 'Authorize session', exact: true }).waitFor()
+  await page.getByText('Wallet setup · Authorize a session to upload and delete', { exact: true }).waitFor()
+  assert.equal(await page.getByRole('button', { name: 'Revoke session', exact: true }).count(), 0)
+  assert.equal(await page.getByText(/^Key 0x/).count(), 0)
+  await page.getByRole('button', { name: 'Authorize session', exact: true }).click()
+  await page.getByText('Wallet setup · Session authorized', { exact: true }).waitFor()
   await page.getByRole('button', { name: 'Close Wallet and storage', exact: true }).click()
   await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Wallet and storage')
   await page.getByRole('button', { name: 'Wallet and storage', exact: true }).click()

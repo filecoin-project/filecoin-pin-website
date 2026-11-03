@@ -252,7 +252,7 @@ export function WalletSetup({ inDrawer = false }: { inDrawer?: boolean }) {
             Authorize this browser to create datasets, upload files and schedule piece removals billed to your wallet.
             Uploads and file deletions then use this key without repeated wallet prompts.
           </p>
-          {connection.session && (
+          {active && connection.session && (
             <p className="rounded-lg border border-border bg-canvas/40 p-3 text-xs leading-5 text-muted break-all">
               Key {shortenAddress(privateKeyToAccount(connection.session.privateKey).address)} · expires{' '}
               {new Date(connection.session.expiresAt * 1000).toLocaleString()}
@@ -261,8 +261,11 @@ export function WalletSetup({ inDrawer = false }: { inDrawer?: boolean }) {
           <details className="text-xs leading-5 text-muted">
             <summary className="cursor-pointer hover:text-foreground">How your session key is stored</summary>
             <p className="mt-2">
-              The key is encrypted in this browser using a non-exportable wrapping key. Scripts running on this origin
-              can still use it. Directory backups exclude the key.
+              Your session key is stored in this browser. Scripts running on this site can access and use it.
+            </p>
+            <p className="mt-2">
+              Anyone with this key can upload and delete data until the authorization expires or is revoked. Uploads can
+              incur storage charges paid from your deposited storage balance.
             </p>
           </details>
           <label className="flex items-start gap-2.5 rounded-lg border border-border bg-canvas/30 p-3 text-xs leading-5 text-foreground">
@@ -291,10 +294,11 @@ export function WalletSetup({ inDrawer = false }: { inDrawer?: boolean }) {
               onClick={() => void connection.authorize(days)}
               size="sm"
             >
-              {connection.session ? 'Renew authorization' : 'Authorize session'}
+              {active ? 'Renew authorization' : 'Authorize session'}
             </ButtonBase>
-            {connection.session && (
+            {active && connection.session && (
               <ButtonBase
+                aria-describedby="session-revoke-note"
                 className="w-auto"
                 disabled={disabled}
                 onClick={() => void connection.revoke()}
@@ -305,6 +309,12 @@ export function WalletSetup({ inDrawer = false }: { inDrawer?: boolean }) {
               </ButtonBase>
             )}
           </div>
+          {active && connection.session && (
+            <p className="text-xs leading-5 text-muted" id="session-revoke-note">
+              Revoking this session blocks future use of this key. It does not delete your files or stop existing
+              storage charges.
+            </p>
+          )}
         </section>
         <section
           className={`space-y-4 ${inDrawer ? 'border-t border-border pt-6' : 'lg:border-l lg:border-border lg:pl-10'}`}

@@ -4,7 +4,7 @@ import { getSignerClient } from '@filoz/synapse-react'
 import { Synapse } from '@filoz/synapse-sdk'
 import { useQueryClient } from '@tanstack/react-query'
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { type Address, getAddress, type Hash } from 'viem'
+import { type Address, BaseError, getAddress, type Hash, UserRejectedRequestError } from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import { writeContract } from 'viem/actions'
 import { type Connector, useConfig, useConnections, useConnectors } from 'wagmi'
@@ -555,25 +555,46 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
             if (!address || ![1, 7, 30].includes(days)) throw new Error('Choose a session duration')
             const scope = scopeFor(address, network)
             const client = await requireOwner()
-            const next = await updateBrowserSession(scope, (current) => ({
-              privateKey: current?.privateKey ?? generatePrivateKey(),
-              expiresAt: Math.floor(Date.now() / 1000) + days * 86400,
-              revision: crypto.randomUUID(),
-            }))
+            let previous: BrowserSession | null = null
+            const next = await updateBrowserSession(scope, (current) => {
+              previous = current
+              return {
+                privateKey: current?.privateKey ?? generatePrivateKey(),
+                expiresAt: Math.floor(Date.now() / 1000) + days * 86400,
+                revision: crypto.randomUUID(),
+              }
+            })
             if (!next) throw new Error('Unable to save the upload session.')
             // Save before requesting a transaction so a reload cannot lose an authorized key.
             if (identity.current === scope) setSession({ ...next })
             const sessionKey = privateKeyToAccount(next.privateKey).address
-            const hash = await writeContract(
-              client,
-              loginCall({
-                chain: chains[network],
-                address: sessionKey,
-                permissions: SESSION_PERMISSIONS,
-                expiresAt: BigInt(next.expiresAt),
-                origin: 'Filecoin Drive',
-              })
-            )
+            let hash: Hash
+            try {
+              hash = await writeContract(
+                client,
+                loginCall({
+                  chain: chains[network],
+                  address: sessionKey,
+                  permissions: SESSION_PERMISSIONS,
+                  expiresAt: BigInt(next.expiresAt),
+                  origin: 'Filecoin Drive',
+                })
+              )
+            } catch (cause) {
+              const rejected = (error: unknown) =>
+                error instanceof UserRejectedRequestError ||
+                (typeof error === 'object' && error !== null && 'code' in error && error.code === 4001)
+              if (rejected(cause) || (cause instanceof BaseError && rejected(cause.walk(rejected)))) {
+                // Only a definite refusal can discard the draft; transport errors may hide a submission.
+                const restored = await updateBrowserSession(scope, (current) =>
+                  current && current.revision === next.revision && current.privateKey === next.privateKey
+                    ? previous
+                    : current
+                )
+                if (identity.current === scope) setSession(restored)
+              }
+              throw cause
+            }
             // Track the submitted hash immediately; the key was saved before signing.
             await transaction.confirm(hash, 'authorize', next.expiresAt, { key: sessionKey, revision: next.revision })
           }),
