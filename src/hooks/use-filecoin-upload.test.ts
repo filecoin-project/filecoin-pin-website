@@ -64,6 +64,18 @@ beforeEach(() => {
   createFreshUploadContextsMock.mockResolvedValue(fakeContexts)
 })
 
+describe('useFilecoinUpload readiness', () => {
+  it('stops before uploading when the readiness check is blocked', async () => {
+    useFilecoinPinContextMock.mockReturnValue(baseContext)
+    checkUploadReadinessMock.mockResolvedValueOnce({ status: 'blocked' })
+
+    const { result } = renderHook(() => useFilecoinUpload())
+
+    await expect(result.current.uploadFile(testFile)).rejects.toThrow('Readiness check failed')
+    expect(executeUploadMock).not.toHaveBeenCalled()
+  })
+})
+
 describe('useFilecoinUpload providerId debug param', () => {
   const getOpts = () => executeUploadMock.mock.lastCall?.at(-1)
 
