@@ -974,6 +974,10 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                   <details className="text-xs text-muted">
                     <summary className="w-fit cursor-pointer hover:text-foreground">How deletion works</summary>
                     <p className="mt-2 leading-relaxed">
+                      Other instances of the same content in the datasets being processed will also be removed, even if
+                      they are not shown in this file list. Other datasets are not affected.
+                    </p>
+                    <p className="mt-2 leading-relaxed">
                       Storage providers remove copies during their next proving period. Cached copies may remain
                       accessible through IPFS. Deleting files does not close your storage datasets or immediately stop
                       all charges. Large deletions may require you to continue once the provider’s queue has space.

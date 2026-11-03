@@ -230,6 +230,10 @@ export async function prepareBrowserPage(
             return null
           }
           if (method === 'eth_sendTransaction') {
+            if (window.__driveRejectNextTransaction) {
+              window.__driveRejectNextTransaction = false
+              throw { code: 4001, message: 'User rejected the request.' }
+            }
             window.__driveAuthorized = true
             localStorage.setItem('__mockDriveAuthorized', 'true')
             return `0x${'a'.repeat(64)}`

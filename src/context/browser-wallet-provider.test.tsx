@@ -6,6 +6,7 @@ import {
 } from '@filoz/synapse-core/session-key'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { BaseError, UserRejectedRequestError } from 'viem'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -769,4 +770,55 @@ it('allows another wallet after timeout and keeps it selected when the old walle
   } finally {
     vi.useRealTimers()
   }
+})
+
+it('removes a newly saved authorization draft after an explicitly rejected signature', async () => {
+  mocks.write.mockRejectedValue(
+    new BaseError('Contract request failed', { cause: new UserRejectedRequestError(new Error('User rejected')) })
+  )
+  const { result } = renderHook(useBrowserWallet, { wrapper })
+  await act(async () => result.current.connect())
+  await act(async () => result.current.authorize(7))
+  await waitFor(() => expect(result.current.sessionStatus).toBe('none'))
+  expect(result.current.session).toBeNull()
+  expect(await mocks.load(`314:${ALICE}`)).toBeNull()
+  expect(result.current.pendingTransaction).toBeNull()
+})
+
+it('restores the existing session and expiry when a renewal signature is rejected', async () => {
+  const { result } = renderHook(useBrowserWallet, { wrapper })
+  await act(async () => result.current.connect())
+  await act(async () => result.current.authorize(7))
+  await waitFor(() => expect(result.current.sessionStatus).toBe('active'))
+  const previous = result.current.session
+  mocks.write.mockRejectedValue({ code: 4001, message: 'User rejected' })
+  await act(async () => result.current.authorize(30))
+  await waitFor(() => expect(result.current.sessionStatus).toBe('active'))
+  expect(result.current.session).toEqual(previous)
+  expect(await mocks.load(`314:${ALICE}`)).toEqual(previous)
+  expect(result.current.pendingTransaction).toBeNull()
+})
+
+it('keeps the saved key when an authorization request fails with an unknown submission outcome', async () => {
+  mocks.write.mockRejectedValue(new Error('Network disconnected'))
+  mocks.validate.mockRejectedValue(new SessionPermissionError())
+  const { result } = renderHook(useBrowserWallet, { wrapper })
+  await act(async () => result.current.connect())
+  await act(async () => result.current.authorize(7))
+  await waitFor(() => expect(result.current.sessionStatus).toBe('inactive'))
+  expect(result.current.session?.privateKey).toBeTruthy()
+  expect(await mocks.load(`314:${ALICE}`)).toEqual(result.current.session)
+})
+
+it('does not roll back a newer session saved by another tab when the old prompt is rejected', async () => {
+  const { result } = renderHook(useBrowserWallet, { wrapper })
+  await act(async () => result.current.connect())
+  const newer = { privateKey: `0x${'2'.repeat(64)}`, expiresAt: mocks.chainExpiry, revision: 'another-tab' }
+  mocks.write.mockImplementation(async () => {
+    await mocks.save(`314:${ALICE}`, newer)
+    throw { code: 4001, message: 'User rejected' }
+  })
+  await act(async () => result.current.authorize(7))
+  expect(await mocks.load(`314:${ALICE}`)).toEqual(newer)
+  expect(result.current.session).toEqual(newer)
 })
