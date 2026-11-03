@@ -22,6 +22,7 @@ vi.mock('../hooks/use-data-set-manager.ts', () => ({
   useDataSetManager: () => ({ dataSet: { status: 'idle' }, checkIfDatasetExists: vi.fn(), addDataSetId: vi.fn() }),
 }))
 
+import { resolveStorageChain } from '../lib/filecoin-pin/storage-chain.ts'
 import { FilecoinPinContext, FilecoinPinProvider } from './filecoin-pin-provider.tsx'
 
 beforeEach(() => {
@@ -150,4 +151,35 @@ it('keeps the current balance visible during a refresh and reports a failed refr
   await waitFor(() => expect(result.current?.wallet.status).toBe('error'))
   expect(result.current?.wallet.data).toEqual(snapshot)
   expect(result.current?.storageSetup?.status).toBe('error')
+})
+
+it('retries missing chain configuration immediately and then loads balances', async () => {
+  vi.mocked(resolveStorageChain).mockRejectedValueOnce(new Error('Configuration RPC unavailable'))
+  mocks.snapshot.mockResolvedValue({
+    address: mocks.connection.address,
+    network: 'mainnet',
+    filBalance: 1n,
+    raw: { filecoinPayBalance: 1n },
+  })
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const { result, unmount } = renderHook(() => useContext(FilecoinPinContext), {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>
+        <FilecoinPinProvider>{children}</FilecoinPinProvider>
+      </QueryClientProvider>
+    ),
+  })
+  try {
+    await waitFor(() => expect(result.current?.storageSetup?.status).toBe('error'))
+    expect(mocks.snapshot).not.toHaveBeenCalled()
+    await act(async () => {
+      await result.current?.refreshWallet()
+    })
+    await waitFor(() => expect(result.current?.storageSetup?.status).toBe('ready'))
+    expect(mocks.snapshot).toHaveBeenCalledTimes(1)
+    expect(result.current?.wallet.data?.network).toBe('mainnet')
+  } finally {
+    unmount()
+    queryClient.clear()
+  }
 })

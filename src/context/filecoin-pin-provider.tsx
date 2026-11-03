@@ -82,11 +82,18 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
     },
   })
   const refreshWallet = useCallback(async () => {
+    if (!storageChain) {
+      // Restart immediately rather than waiting for the configuration retry backoff.
+      await queryClient.cancelQueries({ queryKey: ['drive-storage-chain', connection.network], exact: true })
+      await chainQuery.refetch()
+      // Resolving the configuration enables the wallet query on the next render.
+      return
+    }
     await Promise.all([
       snapshotQuery.refetch(),
       queryClient.invalidateQueries({ queryKey: ['drive-storage-runway', storageScope] }),
     ])
-  }, [snapshotQuery.refetch, queryClient, storageScope])
+  }, [storageChain, connection.network, chainQuery.refetch, snapshotQuery.refetch, queryClient, storageScope])
   const { wallet, storageSetup } = useMemo<{
     wallet: WalletState
     storageSetup: NonNullable<FilecoinPinContextValue['storageSetup']>

@@ -116,13 +116,13 @@ export async function checkUploadTasks(browser) {
     })
     await page.goto(process.env.DRIVE_TEST_URL || 'http://127.0.0.1:5173/')
     await page.getByRole('button', { name: 'Connect wallet', exact: true }).click()
-    await page.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
+    await page.getByRole('button', { name: 'Wallet and Storage', exact: true }).click()
     await page
       .getByRole('checkbox', { name: 'I authorize storage uploads and file deletions for this browser.' })
       .check()
     await page.getByRole('button', { name: 'Authorize session', exact: true }).click()
-    await page.getByText('Wallet setup · Session authorized', { exact: true }).waitFor()
-    await page.getByRole('button', { name: 'Close Wallet and storage', exact: true }).click()
+    await page.getByLabel('Session authorized', { exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Close Wallet and Storage', exact: true }).click()
     const start = async (name) => {
       await page.getByRole('button', { name: 'Upload files', exact: true }).click()
       const panel = page.getByRole('dialog', { name: 'Upload files', exact: true })
