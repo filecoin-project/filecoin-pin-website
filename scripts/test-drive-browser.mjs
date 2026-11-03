@@ -85,7 +85,24 @@ try {
   await page.screenshot({ path: '/tmp/filecoin-drive-details.png', animations: 'disabled' })
   await page.getByRole('button', { name: 'Close details', exact: true }).click()
   assert((await page.locator('table').boundingBox()).y < 500, 'File table should occupy the first desktop viewport')
-  await page.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
+  await page.getByRole('button', { name: 'Wallet and Storage', exact: true }).click()
+  const reviewSession = page.getByRole('button', { name: 'Review session authorization', exact: true })
+  await reviewSession.waitFor()
+  const reviewBounds = await reviewSession.boundingBox()
+  assert(
+    reviewBounds.y >= 0 && reviewBounds.y + reviewBounds.height <= page.viewportSize().height,
+    'The next setup action must be visible on opening the drawer without scrolling'
+  )
+  await reviewSession.click()
+  const sessionConsent = page.getByRole('checkbox', {
+    name: 'I authorize storage uploads and file deletions for this browser.',
+  })
+  assert.equal(await sessionConsent.isChecked(), false, 'Guidance must not preselect consent')
+  assert.equal(
+    await sessionConsent.evaluate((input) => input === document.activeElement),
+    true,
+    'Guidance should focus the required consent'
+  )
   await page.getByRole('checkbox', { name: 'I authorize storage uploads and file deletions for this browser.' }).check()
   // Exercise the real viem error wrapping and the visible first-authorization state.
   await page.evaluate(() => {
@@ -104,7 +121,7 @@ try {
   await page.screenshot({ path: '/tmp/filecoin-drive-authorization-rejected.png', animations: 'disabled' })
   await page.getByRole('button', { name: 'Authorize session', exact: true }).click()
   await page
-    .getByText('Wallet setup · Session authorized', { exact: true })
+    .getByLabel('Session authorized', { exact: true })
     .waitFor({ timeout: 20000 })
     .catch(async (error) => {
       console.log(await page.locator('body').innerText())
@@ -121,14 +138,14 @@ try {
     }))
   })
   await page.getByRole('button', { name: 'Authorize session', exact: true }).waitFor()
-  await page.getByText('Wallet setup · Authorize a session to upload and delete', { exact: true }).waitFor()
+  await page.getByLabel('Session not authorized', { exact: true }).waitFor()
   assert.equal(await page.getByRole('button', { name: 'Revoke session', exact: true }).count(), 0)
   assert.equal(await page.getByText(/^Key 0x/).count(), 0)
   await page.getByRole('button', { name: 'Authorize session', exact: true }).click()
-  await page.getByText('Wallet setup · Session authorized', { exact: true }).waitFor()
-  await page.getByRole('button', { name: 'Close Wallet and storage', exact: true }).click()
-  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Wallet and storage')
-  await page.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
+  await page.getByLabel('Session authorized', { exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Close Wallet and Storage', exact: true }).click()
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Wallet and Storage')
+  await page.getByRole('button', { name: 'Wallet and Storage', exact: true }).click()
   await page.getByText('Wallet setup complete. You can upload files.', { exact: true }).waitFor()
   await page.getByRole('button', { name: 'Continue to upload', exact: true }).click()
   await page.getByRole('textbox', { name: 'Upload location', exact: true }).waitFor()
@@ -188,10 +205,10 @@ try {
   await restored.getByRole('button', { name: '2026', exact: true }).waitFor()
   await restored.getByRole('button', { name: '2026', exact: true }).click()
   await restored.getByRole('button', { name: 'Annual report.pdf', exact: true }).waitFor()
-  await restored.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
+  await restored.getByRole('button', { name: 'Wallet and Storage', exact: true }).click()
   assert.equal(await restored.getByRole('button', { name: 'Authorize session', exact: true }).count(), 1)
   assert.equal(await restored.getByRole('button', { name: 'Renew authorization', exact: true }).count(), 0)
-  await restored.getByRole('button', { name: 'Close Wallet and storage', exact: true }).click()
+  await restored.getByRole('button', { name: 'Close Wallet and Storage', exact: true }).click()
   await restored.getByRole('button', { name: 'Details', exact: true }).click()
   assert.equal(await restored.getByLabel('IPFS root CID', { exact: true }).inputValue(), backup[0].cid)
   assert.equal(await restored.getByLabel('Piece CID', { exact: true }).inputValue(), backup[0].pieceCid)
@@ -260,14 +277,14 @@ try {
     await blockedPage.goto(process.env.DRIVE_TEST_URL || 'http://127.0.0.1:5173/')
     await blockedPage.getByRole('button', { name: 'Connect wallet', exact: true }).click()
     await blockedPage.getByRole('button', { name: 'Upload files', exact: true }).click()
-    await blockedPage.getByRole('dialog', { name: 'Wallet and storage', exact: true }).waitFor()
+    await blockedPage.getByRole('dialog', { name: 'Wallet and Storage', exact: true }).waitFor()
     await blockedPage
       .getByRole('checkbox', {
         name: 'I authorize storage uploads and file deletions for this browser.',
       })
       .check()
     await blockedPage.getByRole('button', { name: 'Authorize session', exact: true }).click()
-    await blockedPage.getByText('Wallet setup · Session authorized', { exact: true }).waitFor()
+    await blockedPage.getByLabel('Session authorized', { exact: true }).waitFor()
     await blockedPage.getByText('Setup required', { exact: true }).waitFor()
     assert.equal(
       await blockedPage.getByText('Choose files', { exact: true }).count(),

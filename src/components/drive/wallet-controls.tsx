@@ -11,7 +11,7 @@ import {
   Sun,
   Wallet,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { parseUnits } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
@@ -25,6 +25,7 @@ import { ButtonBase } from '../ui/button/button-base.tsx'
 import { Select } from '../ui/select.tsx'
 import { ConnectWalletButton } from './connect-wallet-button.tsx'
 import { StorageRunway } from './storage-runway.tsx'
+import { type SetupTarget, WalletNextStep } from './wallet-next-step.tsx'
 
 export function WalletControls() {
   const wallet = useBrowserWallet()
@@ -162,7 +163,13 @@ export function WalletControls() {
   )
 }
 
-export function WalletSetup({ inDrawer = false }: { inDrawer?: boolean }) {
+export function WalletSetup({
+  inDrawer = false,
+  onContinueUpload,
+}: {
+  inDrawer?: boolean
+  onContinueUpload?: () => void
+}) {
   const connection = useBrowserWallet()
   const { wallet, refreshWallet, storageSetup } = useFilecoinPinContext()
   const [days, setDays] = useState(DEFAULT_SESSION_DAYS)
@@ -170,6 +177,29 @@ export function WalletSetup({ inDrawer = false }: { inDrawer?: boolean }) {
   const [consent, setConsent] = useState(false)
   const [approvalConsent, setApprovalConsent] = useState(false)
   const [message, setMessage] = useState('')
+  const sessionTarget = useRef<HTMLElement>(null)
+  const gasTarget = useRef<HTMLDListElement>(null)
+  const depositTarget = useRef<HTMLDivElement>(null)
+  const approvalTarget = useRef<HTMLDivElement>(null)
+  const reviewStep = (target: SetupTarget) => {
+    const node = { session: sessionTarget, gas: gasTarget, deposit: depositTarget, approval: approvalTarget }[target]
+      .current
+    if (!node) return
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    node.scrollIntoView({ behavior: reducedMotion ? 'instant' : 'smooth', block: 'center' })
+    node.querySelector<HTMLElement>('input:not(:disabled), button:not(:disabled)')?.focus({ preventScroll: true })
+    if (!reducedMotion && node.animate) {
+      for (const animation of node.getAnimations()) animation.cancel()
+      node.animate(
+        [
+          { backgroundColor: getComputedStyle(node).backgroundColor },
+          { backgroundColor: 'color-mix(in srgb, var(--color-brand-500) 7%, transparent)', offset: 0.35 },
+          { backgroundColor: getComputedStyle(node).backgroundColor },
+        ],
+        { duration: 1400, easing: 'ease-out' }
+      )
+    }
+  }
   const active = connection.sessionStatus === 'active'
   const disabled =
     connection.busy || connection.uploading || connection.deleting || Boolean(connection.pendingTransaction)
@@ -190,230 +220,261 @@ export function WalletSetup({ inDrawer = false }: { inDrawer?: boolean }) {
   const Container = inDrawer ? 'section' : 'details'
   const Header = inDrawer ? 'div' : 'summary'
   return (
-    <Container
-      className="drive-panel group/setup"
-      {...(inDrawer ? {} : { open: !active || storageSetup?.status !== 'ready' })}
-    >
-      <Header className="drive-summary flex items-center gap-3 p-4 sm:px-6 sm:py-5">
-        <span
-          aria-hidden="true"
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${active ? 'bg-emerald-500/10 text-success' : 'bg-brand-800/15 text-accent'}`}
-        >
-          <ShieldCheck size={18} />
-        </span>
-        <span className="min-w-0 flex-1 text-sm font-medium">
-          Wallet setup ·{' '}
-          {active
-            ? 'Session authorized'
-            : connection.sessionStatus === 'checking'
-              ? 'Checking session authorization…'
-              : 'Authorize a session to upload and delete'}
-        </span>
-        {!inDrawer && (
-          <ChevronDown
-            aria-hidden="true"
-            className="text-muted transition-transform group-open/setup:rotate-180"
-            size={17}
-          />
-        )}
-      </Header>
-      <fieldset
-        aria-label="Storage setup checklist"
-        className="flex flex-wrap gap-x-6 gap-y-2 border-t border-border bg-canvas/20 px-5 py-3 text-xs sm:px-6"
+    <>
+      {inDrawer && onContinueUpload && <WalletNextStep onContinue={onContinueUpload} onReview={reviewStep} />}
+      <Container
+        className={inDrawer ? 'group/setup' : 'drive-panel group/setup'}
+        {...(inDrawer ? {} : { open: !active || storageSetup?.status !== 'ready' })}
       >
-        {[
-          { title: 'Session authorized', ready: active },
-          { title: 'Gas balance sufficient', ready: storageSetup?.gasReady },
-          { title: 'Storage funds available', ready: storageSetup?.depositReady },
-          { title: 'Storage payments approved', ready: storageSetup?.approvalReady },
-        ].map(({ title, ready }) => (
-          <span className={`inline-flex items-center gap-2 ${ready ? 'text-success' : 'text-muted'}`} key={title}>
-            {ready ? (
-              <Check aria-hidden="true" size={13} />
-            ) : (
-              <span className="h-3 w-3 rounded-full border border-border" />
-            )}
-            {title}
-          </span>
-        ))}
-        {storageSetup?.status === 'checking' && (
-          <span className="text-muted" role="status">
-            Checking chain configuration…
-          </span>
+        {!(inDrawer && onContinueUpload) && (
+          <>
+            <Header
+              className={
+                inDrawer
+                  ? 'drive-summary flex items-center gap-3 py-4'
+                  : 'drive-summary flex items-center gap-3 p-4 sm:px-6 sm:py-5'
+              }
+            >
+              <span
+                aria-hidden="true"
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${active ? 'bg-emerald-500/10 text-success' : 'bg-brand-800/15 text-accent'}`}
+              >
+                <ShieldCheck size={18} />
+              </span>
+              <span className="min-w-0 flex-1 text-sm font-medium">
+                Wallet setup ·{' '}
+                {active
+                  ? 'Session authorized'
+                  : connection.sessionStatus === 'checking'
+                    ? 'Checking session authorization…'
+                    : 'Authorize a session to upload and delete'}
+              </span>
+              {!inDrawer && (
+                <ChevronDown
+                  aria-hidden="true"
+                  className="text-muted transition-transform group-open/setup:rotate-180"
+                  size={17}
+                />
+              )}
+            </Header>
+            <fieldset
+              aria-label="Storage setup checklist"
+              className={
+                inDrawer
+                  ? 'flex flex-wrap gap-x-5 gap-y-2 border-y border-border py-3 text-xs'
+                  : 'flex flex-wrap gap-x-6 gap-y-2 border-t border-border bg-canvas/20 px-5 py-3 text-xs sm:px-6'
+              }
+            >
+              {[
+                { title: 'Session authorized', ready: active },
+                { title: 'Gas balance sufficient', ready: storageSetup?.gasReady },
+                { title: 'Storage funds available', ready: storageSetup?.depositReady },
+                { title: 'Storage payments approved', ready: storageSetup?.approvalReady },
+              ].map(({ title, ready }) => (
+                <span className={`inline-flex items-center gap-2 ${ready ? 'text-success' : 'text-muted'}`} key={title}>
+                  {ready ? (
+                    <Check aria-hidden="true" size={13} />
+                  ) : (
+                    <span className="h-3 w-3 rounded-full border border-border" />
+                  )}
+                  {title}
+                </span>
+              ))}
+              {storageSetup?.status === 'checking' && (
+                <span className="text-muted" role="status">
+                  Checking chain configuration…
+                </span>
+              )}
+            </fieldset>
+          </>
         )}
-      </fieldset>
-      <div className={`grid gap-8 border-t border-border p-5 sm:p-6 ${inDrawer ? '' : 'lg:grid-cols-2 lg:gap-10'}`}>
-        <section className="space-y-4">
-          <h2 className="flex items-center gap-2 text-sm font-semibold">
-            <KeyRound aria-hidden="true" className="text-accent" size={16} />
-            Browser session
-          </h2>
-          <p className="text-sm leading-6 text-muted">
-            Authorize this browser to create datasets, upload files and schedule piece removals billed to your wallet.
-            Uploads and file deletions then use this key without repeated wallet prompts.
-          </p>
-          {active && connection.session && (
-            <p className="rounded-lg border border-border bg-canvas/40 p-3 text-xs leading-5 text-muted break-all">
-              Key {shortenAddress(privateKeyToAccount(connection.session.privateKey).address)} · expires{' '}
-              {new Date(connection.session.expiresAt * 1000).toLocaleString()}
+        <div
+          className={
+            inDrawer ? 'grid gap-7 py-5' : 'grid gap-8 border-t border-border p-5 sm:p-6 lg:grid-cols-2 lg:gap-10'
+          }
+        >
+          <section className="scroll-mt-24 space-y-4 rounded-lg" data-setup-target="session" ref={sessionTarget}>
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <KeyRound aria-hidden="true" className="text-accent" size={16} />
+              Browser session
+            </h2>
+            <p className="text-sm leading-6 text-muted">
+              Authorize this browser to create datasets, upload files and schedule piece removals billed to your wallet.
+              Uploads and file deletions then use this key without repeated wallet prompts.
             </p>
-          )}
-          <details className="text-xs leading-5 text-muted">
-            <summary className="cursor-pointer hover:text-foreground">How your session key is stored</summary>
-            <p className="mt-2">
-              Your session key is stored in this browser. Scripts running on this site can access and use it.
-            </p>
-            <p className="mt-2">
-              Anyone with this key can upload and delete data until the authorization expires or is revoked. Uploads can
-              incur storage charges paid from your deposited storage balance.
-            </p>
-          </details>
-          <label className="flex items-start gap-2.5 rounded-lg border border-border bg-canvas/30 p-3 text-xs leading-5 text-foreground">
-            <input
-              checked={consent}
-              disabled={disabled}
-              onChange={(event) => setConsent(event.target.checked)}
-              type="checkbox"
-            />
-            I authorize storage uploads and file deletions for this browser.
-          </label>
-          <div className="flex flex-wrap gap-3">
-            <Select
-              aria-label="Session duration"
-              disabled={disabled}
-              onChange={(event) => setDays(Number(event.target.value))}
-              value={days}
-            >
-              <option value={1}>1 day</option>
-              <option value={7}>7 days</option>
-              <option value={30}>30 days</option>
-            </Select>
-            <ButtonBase
-              className="w-auto"
-              disabled={disabled || !consent}
-              onClick={() => void connection.authorize(days)}
-              size="sm"
-            >
-              {active ? 'Renew authorization' : 'Authorize session'}
-            </ButtonBase>
             {active && connection.session && (
-              <ButtonBase
-                aria-describedby="session-revoke-note"
-                className="w-auto"
+              <p className="rounded-lg border border-border bg-canvas/40 p-3 text-xs leading-5 text-muted break-all">
+                Key {shortenAddress(privateKeyToAccount(connection.session.privateKey).address)} · expires{' '}
+                {new Date(connection.session.expiresAt * 1000).toLocaleString()}
+              </p>
+            )}
+            <details className="text-xs leading-5 text-muted">
+              <summary className="cursor-pointer hover:text-foreground">How your session key is stored</summary>
+              <p className="mt-2">
+                Your session key is stored in this browser. Scripts running on this site can access and use it.
+              </p>
+              <p className="mt-2">
+                Anyone with this key can upload and delete data until the authorization expires or is revoked. Uploads
+                can incur storage charges paid from your deposited storage balance.
+              </p>
+            </details>
+            <label className="flex items-start gap-2.5 rounded-lg border border-border bg-canvas/30 p-3 text-xs leading-5 text-foreground">
+              <input
+                checked={consent}
                 disabled={disabled}
-                onClick={() => void connection.revoke()}
+                onChange={(event) => setConsent(event.target.checked)}
+                type="checkbox"
+              />
+              I authorize storage uploads and file deletions for this browser.
+            </label>
+            <div className="flex flex-wrap gap-3">
+              <Select
+                aria-label="Session duration"
+                disabled={disabled}
+                onChange={(event) => setDays(Number(event.target.value))}
+                value={days}
+              >
+                <option value={1}>1 day</option>
+                <option value={7}>7 days</option>
+                <option value={30}>30 days</option>
+              </Select>
+              <ButtonBase
+                className="w-auto"
+                disabled={disabled || !consent}
+                onClick={() => void connection.authorize(days)}
+                size="sm"
+              >
+                {active ? 'Renew authorization' : 'Authorize session'}
+              </ButtonBase>
+              {active && connection.session && (
+                <ButtonBase
+                  aria-describedby="session-revoke-note"
+                  className="w-auto"
+                  disabled={disabled}
+                  onClick={() => void connection.revoke()}
+                  size="sm"
+                  variant="secondary"
+                >
+                  Revoke session
+                </ButtonBase>
+              )}
+            </div>
+            {active && connection.session && (
+              <p className="text-xs leading-5 text-muted" id="session-revoke-note">
+                Revoking this session blocks future use of this key. It does not delete your files or stop existing
+                storage charges.
+              </p>
+            )}
+          </section>
+          <section
+            className={`space-y-4 ${inDrawer ? 'border-t border-border pt-6' : 'lg:border-l lg:border-border lg:pl-10'}`}
+          >
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <Wallet aria-hidden="true" className="text-accent" size={16} />
+              Storage payments
+            </h2>
+            {storageSetup?.gasIssue && (
+              <p className="text-xs leading-5 text-warning" role="alert">
+                {storageSetup.gasIssue}
+              </p>
+            )}
+            {wallet.data && (
+              <dl
+                className="grid scroll-mt-24 grid-cols-3 gap-3 rounded-lg border border-border bg-canvas/40 p-3"
+                data-setup-target="gas"
+                ref={gasTarget}
+              >
+                {[
+                  ['Gas balance', wallet.data.formatted.fil],
+                  ['Wallet balance', wallet.data.formatted.usdfc],
+                  ['Available for storage', `${formatUSDFC(wallet.data.raw.filecoinPayBalance, 2)} USDFC`],
+                ].map(([label, value]) => (
+                  <div className="min-w-0" key={label}>
+                    <dt className="text-[10px] text-muted">{label}</dt>
+                    <dd className="mt-1 truncate text-xs font-medium tabular-nums" title={value}>
+                      {value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+            {wallet.data && <StorageRunway />}
+            <p className="text-sm leading-6 text-muted">
+              FIL pays wallet transaction gas; deposited USDFC pays ongoing storage. Deposit and payment approvals
+              require your main wallet.
+            </p>
+            <div
+              className="flex scroll-mt-24 flex-wrap gap-3 rounded-lg"
+              data-setup-target="deposit"
+              ref={depositTarget}
+            >
+              <input
+                aria-label="Deposit amount in USDFC"
+                className="drive-field h-10 w-28 px-3 text-sm tabular-nums"
+                disabled={disabled}
+                min="0"
+                onChange={(event) => setAmount(event.target.value)}
+                step="0.1"
+                type="number"
+                value={amount}
+              />
+              <ButtonBase
+                className="w-auto"
+                disabled={disabled || !amount}
+                onClick={() => void pay('deposit')}
                 size="sm"
                 variant="secondary"
               >
-                Revoke session
+                Deposit USDFC
               </ButtonBase>
+            </div>
+            <div className="scroll-mt-24 space-y-3 rounded-lg" data-setup-target="approval" ref={approvalTarget}>
+              <label className="flex items-start gap-2.5 text-xs leading-5 text-foreground">
+                <input
+                  checked={approvalConsent}
+                  disabled={disabled}
+                  onChange={(event) => setApprovalConsent(event.target.checked)}
+                  type="checkbox"
+                />
+                Allow Warm Storage to manage payment rails with unlimited rate and lockup allowances.
+              </label>
+              <div className="flex flex-wrap gap-3">
+                <ButtonBase
+                  className="w-auto"
+                  disabled={disabled || !approvalConsent}
+                  onClick={() => void pay('approve')}
+                  size="sm"
+                  variant="secondary"
+                >
+                  Approve storage payments
+                </ButtonBase>
+                <ButtonBase
+                  className="w-auto"
+                  disabled={disabled}
+                  onClick={() => void refreshWallet()}
+                  size="sm"
+                  variant="secondary"
+                >
+                  Refresh balances
+                </ButtonBase>
+                <a
+                  className="inline-flex items-center gap-1 self-center text-xs text-muted hover:text-accent"
+                  href="https://pay.filecoin.cloud/console"
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  Open Filecoin User Console <ArrowUpRight aria-hidden="true" size={13} />
+                </a>
+              </div>
+            </div>
+            {message && (
+              <p className="text-sm text-success" role="status">
+                {message}
+              </p>
             )}
-          </div>
-          {active && connection.session && (
-            <p className="text-xs leading-5 text-muted" id="session-revoke-note">
-              Revoking this session blocks future use of this key. It does not delete your files or stop existing
-              storage charges.
-            </p>
-          )}
-        </section>
-        <section
-          className={`space-y-4 ${inDrawer ? 'border-t border-border pt-6' : 'lg:border-l lg:border-border lg:pl-10'}`}
-        >
-          <h2 className="flex items-center gap-2 text-sm font-semibold">
-            <Wallet aria-hidden="true" className="text-accent" size={16} />
-            Storage payments
-          </h2>
-          {storageSetup?.gasIssue && (
-            <p className="text-xs leading-5 text-warning" role="alert">
-              {storageSetup.gasIssue}
-            </p>
-          )}
-          {wallet.data && (
-            <dl className="grid grid-cols-3 gap-3 rounded-lg border border-border bg-canvas/40 p-3">
-              {[
-                ['Gas balance', wallet.data.formatted.fil],
-                ['Wallet balance', wallet.data.formatted.usdfc],
-                ['Available for storage', `${formatUSDFC(wallet.data.raw.filecoinPayBalance, 2)} USDFC`],
-              ].map(([label, value]) => (
-                <div className="min-w-0" key={label}>
-                  <dt className="text-[10px] text-muted">{label}</dt>
-                  <dd className="mt-1 truncate text-xs font-medium tabular-nums" title={value}>
-                    {value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          )}
-          {wallet.data && <StorageRunway />}
-          <p className="text-sm leading-6 text-muted">
-            FIL pays wallet transaction gas; deposited USDFC pays ongoing storage. Deposit and payment approvals require
-            your main wallet.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <input
-              aria-label="Deposit amount in USDFC"
-              className="drive-field h-10 w-28 px-3 text-sm tabular-nums"
-              disabled={disabled}
-              min="0"
-              onChange={(event) => setAmount(event.target.value)}
-              step="0.1"
-              type="number"
-              value={amount}
-            />
-            <ButtonBase
-              className="w-auto"
-              disabled={disabled || !amount}
-              onClick={() => void pay('deposit')}
-              size="sm"
-              variant="secondary"
-            >
-              Deposit USDFC
-            </ButtonBase>
-          </div>
-          <label className="flex items-start gap-2.5 text-xs leading-5 text-foreground">
-            <input
-              checked={approvalConsent}
-              disabled={disabled}
-              onChange={(event) => setApprovalConsent(event.target.checked)}
-              type="checkbox"
-            />
-            Allow Warm Storage to manage payment rails with unlimited rate and lockup allowances.
-          </label>
-          <div className="flex flex-wrap gap-3">
-            <ButtonBase
-              className="w-auto"
-              disabled={disabled || !approvalConsent}
-              onClick={() => void pay('approve')}
-              size="sm"
-              variant="secondary"
-            >
-              Approve storage payments
-            </ButtonBase>
-            <ButtonBase
-              className="w-auto"
-              disabled={disabled}
-              onClick={() => void refreshWallet()}
-              size="sm"
-              variant="secondary"
-            >
-              Refresh balances
-            </ButtonBase>
-            <a
-              className="inline-flex items-center gap-1 self-center text-xs text-muted hover:text-accent"
-              href="https://pay.filecoin.cloud/console"
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              Open Filecoin User Console <ArrowUpRight aria-hidden="true" size={13} />
-            </a>
-          </div>
-          {message && (
-            <p className="text-sm text-success" role="status">
-              {message}
-            </p>
-          )}
-        </section>
-      </div>
-    </Container>
+          </section>
+        </div>
+      </Container>
+    </>
   )
 }

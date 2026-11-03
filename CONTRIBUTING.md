@@ -158,6 +158,10 @@ Organizing folders group independent uploads using path metadata. Uploaded folde
 
 Folder listing pages use [directory-content-cache.ts](src/lib/local-storage/directory-content-cache.ts) and idb-keyval. Atomic updates retain immutable CID-addressed pages across reloads, bounded to 256 pages, 10,000 items and approximately 4 MiB of serialized metadata. IndexedDB failures fall back to provider reads; upload-time in-memory listings remain available in the current tab. Existing file records and operation checkpoints continue to use the localStorage directory store.
 
+### Wallet setup guidance
+
+At the top of the wallet drawer, the app highlights one next step at a time: gas funds, browser authorization, storage deposit, or payment approval. Guidance buttons scroll to and focus the relevant controls; they never select consent or submit wallet transactions. The target briefly highlights unless reduced motion is requested. Pending wallet requests and transactions suppress additional setup actions, while failed balance/configuration reads offer a retry. Once all prerequisites pass, the drawer offers Continue to upload.
+
 ### Batch operations
 
 Selecting multiple files creates independent uploads. Transfers run one at a time; after a provider acknowledges receipt and the checkpoint is saved, the next file can transfer while earlier files await confirmation. Users can add files during a transfer and cancel waiting uploads. Source bytes remain in memory: reloading interrupts uploads that have not started, and the original files must be selected again.

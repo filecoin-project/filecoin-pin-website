@@ -103,16 +103,16 @@ async function newWalletPage() {
 try {
   const page = await newWalletPage()
   primaryPage = page
-  await page.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
+  await page.getByRole('button', { name: 'Wallet and Storage', exact: true }).click()
   await page.getByRole('checkbox', { name: 'I authorize storage uploads and file deletions for this browser.' }).check()
   await page.getByRole('button', { name: 'Authorize session', exact: true }).click()
-  await page.getByText('Wallet setup · Session authorized', { exact: true }).waitFor()
+  await page.getByLabel('Session authorized', { exact: true }).waitFor()
   if (authorizationOnly) {
     await page.reload()
     await page.getByLabel('Network', { exact: true }).selectOption('calibration')
     await page.getByRole('button', { name: 'Disconnect', exact: true }).waitFor()
-    await page.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
-    await page.getByText('Wallet setup · Session authorized', { exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Wallet and Storage', exact: true }).click()
+    await page.getByLabel('Session authorized', { exact: true }).waitFor()
     await page.getByRole('button', { name: 'Revoke session', exact: true }).click()
     await page.getByRole('button', { name: 'Authorize session', exact: true }).waitFor()
     console.log('Real session authorization, encrypted reload recovery and revocation verified')
@@ -121,7 +121,7 @@ try {
     if (additionalDeposit) {
       const input = page.getByLabel('Deposit amount in USDFC', { exact: true })
       if (!(await input.isVisible()))
-        await page.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
+        await page.getByRole('button', { name: 'Wallet and Storage', exact: true }).click()
       await input.fill(additionalDeposit)
       await page.getByRole('button', { name: 'Deposit USDFC', exact: true }).click()
       await page.getByText('Deposit confirmed.', { exact: true }).waitFor()
@@ -146,7 +146,7 @@ try {
       await page.getByRole('button', { name: 'Approve storage payments', exact: true }).click()
       await page.getByText('Session ready', { exact: true }).waitFor()
     }
-    await page.getByRole('button', { name: 'Close Wallet and storage', exact: true }).click()
+    await page.getByRole('button', { name: 'Close Wallet and Storage', exact: true }).click()
     console.log('Owner session authorized; storage funding and payment approval ready')
     const bytes = Buffer.from(Array.from({ length: 256 * 1024 + 123 }, (_, index) => index % 251))
     const fileName = process.env.DRIVE_TEST_EXISTING_FILE || `验收-${Date.now()}.bin`
@@ -241,7 +241,7 @@ try {
       { timeout: 600_000 }
     )
     await page.getByRole('dialog').waitFor({ state: 'hidden' })
-    await page.getByRole('button', { name: 'Wallet and storage', exact: true }).click()
+    await page.getByRole('button', { name: 'Wallet and Storage', exact: true }).click()
     await page.getByRole('button', { name: 'Revoke session', exact: true }).click()
     await page.getByRole('button', { name: 'Authorize session', exact: true }).waitFor()
     console.log('All recorded copies scheduled for deletion; browser session revoked')

@@ -41,7 +41,7 @@ export default function Content() {
           <p className="mt-1 text-sm text-muted">Store and manage files on Filecoin.</p>
         </div>
         <Button
-          aria-label="Wallet and storage"
+          aria-label="Wallet and Storage"
           className="w-auto"
           onClick={() => {
             setUploadFolder(folder)
@@ -51,7 +51,7 @@ export default function Content() {
           variant="secondary"
         >
           <Wallet aria-hidden="true" size={15} />
-          Wallet and storage
+          Wallet and Storage
           {setupChecking ? (
             <Loader2 aria-label="Checking wallet setup" className="animate-spin text-muted" size={14} />
           ) : (
@@ -100,39 +100,9 @@ export default function Content() {
           if (!open) setPanel(null)
         }}
         open={panel === 'wallet'}
-        title="Wallet and storage"
+        title="Wallet and Storage"
       >
-        <WalletSetup inDrawer />
-        <div className="space-y-3 rounded-lg border border-border bg-canvas/30 p-4">
-          <p className={`text-sm ${canUpload ? 'text-success' : 'text-muted'}`} role="status">
-            {setupChecking
-              ? 'Checking storage setup…'
-              : canUpload
-                ? 'Wallet setup complete. You can upload files.'
-                : connection.sessionStatus === 'active'
-                  ? storageSetup?.status === 'error' || wallet.status === 'error'
-                    ? 'Unable to confirm storage setup. Refresh balances to try again.'
-                    : storageSetup?.gasReady
-                      ? storageSetup?.depositReady
-                        ? storageSetup?.approvalReady
-                          ? 'Refresh balances to confirm storage setup.'
-                          : 'Next: approve storage payments.'
-                        : 'Next: deposit USDFC into your storage account.'
-                      : 'Next: add FIL to your wallet for transaction gas, then refresh balances.'
-                  : 'Next: authorize a browser session to upload files.'}
-          </p>
-          {canUpload && (
-            <Button
-              disabled={connection.busy}
-              onClick={() => {
-                setPanel('upload')
-              }}
-              size="sm"
-            >
-              Continue to upload
-            </Button>
-          )}
-        </div>
+        <WalletSetup inDrawer onContinueUpload={() => setPanel('upload')} />
       </SidePanel>
       <SidePanel
         description="Choose a location, then upload a file or an entire folder."
