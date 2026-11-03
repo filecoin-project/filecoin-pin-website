@@ -6,9 +6,8 @@ configureTelemetry({ affordance: 'pin.filecoin.cloud' })
 
 Sentry.init({
   dsn: 'https://PH2VByCrdrU9fmwjQe13KuuZ@s1682007.us-east-9.betterstackdata.com/1682007',
-  // Setting this option to false will prevent the SDK from sending default PII data to Sentry.
-  // For example, automatic IP address collection on events
-  sendDefaultPii: false,
+  // v11 collects these by default; keep them off
+  dataCollection: { userInfo: false, cookies: false, httpHeaders: false, httpBodies: [] },
   // Enable tracing/performance monitoring
   tracesSampleRate: 1.0, // Capture 100% of transactions for development (adjust in production)
 })
