@@ -1,5 +1,5 @@
 import { cva, type VariantProps } from 'class-variance-authority'
-import { CircleCheck, LoaderCircle } from 'lucide-react'
+import { CircleAlert, CircleCheck, LoaderCircle } from 'lucide-react'
 import type { StepState } from '../../types/upload/step.ts'
 import { cn } from '../../utils/cn.ts'
 
@@ -15,11 +15,11 @@ const badgeVariants = cva(
     variants: {
       status: {
         'in-progress': 'bg-badge-in-progress text-badge-in-progress-text border border-badge-in-progress-border',
-        completed: 'bg-brand-950 text-brand-700 border border-brand-900',
-        pinned: 'bg-brand-950 text-brand-700 border border-brand-900',
-        published: 'bg-yellow-600/30 border border-yellow-400/20 text-yellow-200',
-        error: null,
-        pending: 'bg-zinc-800 border border-zinc-700 text-zinc-300',
+        completed: 'bg-badge-completed text-badge-completed-text border border-badge-completed-border',
+        pinned: 'bg-badge-completed text-badge-completed-text border border-badge-completed-border',
+        published: 'bg-amber-500/10 border border-amber-500/25 text-warning',
+        error: 'bg-red-500/10 border border-red-500/25 text-danger',
+        pending: 'bg-surface-raised border border-border text-foreground',
       },
     },
     defaultVariants: {
@@ -33,7 +33,7 @@ const statusIcons: Record<Status, React.ReactNode> = {
   completed: <CircleCheck size={12} />,
   pinned: <CircleCheck size={12} />,
   published: null,
-  error: null,
+  error: <CircleAlert size={12} />,
   pending: null,
 }
 
@@ -42,7 +42,7 @@ const statusLabels: Record<Status, string | null> = {
   completed: 'Complete',
   pinned: 'Pinned',
   published: 'Published',
-  error: null,
+  error: 'Failed',
   pending: 'Pending',
 }
 

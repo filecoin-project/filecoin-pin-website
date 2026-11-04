@@ -24,19 +24,7 @@ const DATA_SET_IDS_KEY = 'filecoin-pin-data-set-ids-v1'
 
 const getDataSetIdsKey = (walletAddress: string): string => `${DATA_SET_IDS_KEY}-${walletAddress}`
 
-/**
- * Get the storage key for a given wallet and optional provider.
- *
- * @param walletAddress - The wallet address
- * @param providerId - Optional provider ID for provider-specific keys
- * @returns The localStorage key string
- */
-const getDataSetStorageKey = (walletAddress: string, providerId?: number): string => {
-  if (providerId) {
-    return `${DATA_SET_ID_KEY}-${walletAddress}-provider-${providerId}`
-  }
-  return `${DATA_SET_ID_KEY}-${walletAddress}`
-}
+const getDataSetStorageKey = (walletAddress: string): string => `${DATA_SET_ID_KEY}-${walletAddress}`
 
 /**
  * Get the stored data set ID for a specific wallet address.
@@ -125,47 +113,5 @@ export const clearStoredDataSetIds = (walletAddress: string): void => {
     console.debug('[DataSetStorage] Cleared stored data set IDs for wallet:', walletAddress)
   } catch (error) {
     console.warn('[DataSetStorage] Failed to clear data set IDs from localStorage:', error)
-  }
-}
-
-/**
- * Get the stored data set ID for a specific wallet address and provider ID.
- *
- * This allows testing/debugging with different providers by storing separate
- * data sets per wallet+provider combination.
- *
- * @param walletAddress - The wallet address to look up the data set ID for
- * @param providerId - The provider ID to scope the data set to
- * @returns The data set ID if found, null otherwise
- */
-export const getStoredDataSetIdForProvider = (walletAddress: string, providerId: number): number | null => {
-  try {
-    const key = getDataSetStorageKey(walletAddress, providerId)
-    const storedId = localStorage.getItem(key)
-    console.debug('[DataSetStorage] Reading from key:', key, '→', storedId || 'not found')
-    return storedId ? Number.parseInt(storedId, 10) : null
-  } catch (error) {
-    console.warn('[DataSetStorage] Failed to read data set ID from localStorage:', error)
-    return null
-  }
-}
-
-/**
- * Store the data set ID for a specific wallet address and provider ID.
- *
- * This allows testing/debugging with different providers by storing separate
- * data sets per wallet+provider combination.
- *
- * @param walletAddress - The wallet address to associate with this data set ID
- * @param providerId - The provider ID to scope the data set to
- * @param dataSetId - The data set ID to store
- */
-export const storeDataSetIdForProvider = (walletAddress: string, providerId: number, dataSetId: number): void => {
-  try {
-    const key = getDataSetStorageKey(walletAddress, providerId)
-    localStorage.setItem(key, dataSetId.toString())
-    console.debug('[DataSetStorage] Stored dataSetId:', dataSetId, 'to key:', key)
-  } catch (error) {
-    console.warn('[DataSetStorage] Failed to store data set ID in localStorage:', error)
   }
 }

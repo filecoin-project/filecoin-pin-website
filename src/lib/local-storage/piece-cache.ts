@@ -1,21 +1,23 @@
-/**
- * LocalStorage cache of the upload-history piece list, scoped per wallet.
- *
- * Why cache?
- * ----------
- * Rebuilding history from chain is expensive: `getDetailedDataSet` costs
- * several eth_calls per dataset plus one eth_call per piece for metadata
- * (filename, root CID, tx hash). All of that information is already known
- * in-browser at upload time, so we persist it here and render history from
- * cache with zero RPC calls. The chain fetch only runs when there is no cache
- * (e.g. localStorage was cleared) or when the user explicitly refreshes.
- */
+/** Wallet/network-scoped cache plus durable checkpoints for uploads and removals. */
 
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
+import { createDirectoryStore } from './directory-store.ts'
 
 const PIECE_CACHE_KEY = 'filecoin-pin-piece-cache-v1'
 
 const getPieceCacheKey = (walletAddress: string): string => `${PIECE_CACHE_KEY}-${walletAddress}`
+
+const store = createDirectoryStore<DatasetPiece[]>(getPieceCacheKey, (raw) => {
+  if (raw === null) return []
+  const parsed: unknown = JSON.parse(raw)
+  if (!Array.isArray(parsed))
+    throw new Error('Invalid browser file directory. Check browser storage before continuing.')
+  return parsed as DatasetPiece[]
+})
+
+export const mutateCachedPieces = store.mutate
+export const subscribeCachedPieces = store.subscribe
+export const hasUnsavedPieces = store.hasUnsaved
 
 /**
  * Read the cached piece list for a wallet.
@@ -25,38 +27,104 @@ const getPieceCacheKey = (walletAddress: string): string => `${PIECE_CACHE_KEY}-
  */
 export const getCachedPieces = (walletAddress: string): DatasetPiece[] | null => {
   try {
-    const raw = localStorage.getItem(getPieceCacheKey(walletAddress))
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return null
-    return parsed as DatasetPiece[]
+    if (localStorage.getItem(getPieceCacheKey(walletAddress)) === null && !store.hasUnsaved(walletAddress)) return null
+    return store.read(walletAddress)
   } catch (error) {
     console.warn('[PieceCache] Failed to read piece cache from localStorage:', error)
     return null
   }
 }
 
-/** Replace the cached piece list for a wallet. */
-export const setCachedPieces = (walletAddress: string, pieces: DatasetPiece[]): void => {
+/** Low-level initialization helper. Live directory changes must use mutateCachedPieces. */
+export const setCachedPieces = (walletAddress: string, pieces: DatasetPiece[]): boolean => {
   try {
     localStorage.setItem(getPieceCacheKey(walletAddress), JSON.stringify(pieces))
+    store.reset(walletAddress)
+    return true
   } catch (error) {
     console.warn('[PieceCache] Failed to write piece cache to localStorage:', error)
+    return false
   }
 }
 
-/** Prepend a piece to the cached list (used after an upload completes). Idempotent by pieceCid. */
-export const addCachedPiece = (walletAddress: string, piece: DatasetPiece): void => {
-  const current = getCachedPieces(walletAddress) ?? []
-  if (current.some((p) => p.pieceCid === piece.pieceCid)) return
-  setCachedPieces(walletAddress, [piece, ...current])
-}
+/** Prepend a piece to the cached list (used after an upload completes). Idempotent by file record ID. */
+export const addCachedPiece = (walletAddress: string, piece: DatasetPiece): Promise<DatasetPiece[]> =>
+  mutateCachedPieces(walletAddress, (current) => {
+    const indexed = current.filter(
+      (record) =>
+        record.id.startsWith('indexed-') &&
+        record.pieceCid === piece.pieceCid &&
+        storageInstances(record).some((instance) => storageInstances(piece).includes(instance))
+    )
+    const previous = current.find((record) => record.id === piece.id)
+    const next = previous
+      ? {
+          ...mergeStorageCopies(previous, piece),
+          ipfsIndexed: previous.ipfsIndexed === true || piece.ipfsIndexed === true,
+        }
+      : piece
+    if (piece.upload && next) {
+      Object.assign(next, {
+        cid: piece.cid || previous?.cid || '',
+        pieceCid: piece.pieceCid || previous?.pieceCid || '',
+        upload: {
+          ...piece.upload,
+          providers: piece.upload.providers.map((provider) => {
+            const known = previous?.upload?.providers.find(
+              (entry) =>
+                entry.providerId === provider.providerId &&
+                entry.confirmed &&
+                (!provider.dataSetId || entry.dataSetId === provider.dataSetId)
+            )
+            return known ? { ...provider, ...known } : provider
+          }),
+          ...(previous?.upload?.phase === 'complete' ? { phase: 'complete' as const, error: undefined } : {}),
+        },
+        ...(piece.datasetId ? { datasetId: piece.datasetId, pieceId: piece.pieceId } : {}),
+      })
+    }
+    const complete = indexed.reduce((value, record) => mergeStorageCopies(value, record), next)
+    return [complete, ...current.filter((record) => record.id !== piece.id && !indexed.includes(record))]
+  })
 
-/** Remove the cached piece list. Called alongside clearStoredDataSetIds so cache and ids stay in lockstep. */
-export const clearCachedPieces = (walletAddress: string): void => {
-  try {
-    localStorage.removeItem(getPieceCacheKey(walletAddress))
-  } catch (error) {
-    console.warn('[PieceCache] Failed to clear piece cache from localStorage:', error)
+/** Merge storage facts without reverting names, folders, indexing progress or removal receipts. */
+export function mergeStorageCopies(recorded: DatasetPiece, incoming: DatasetPiece): DatasetPiece {
+  const recordedIds = recorded.datasetIds ?? [recorded.datasetId]
+  const incomingIds = incoming.datasetIds ?? [incoming.datasetId]
+  const datasetIds = [...new Set([...recordedIds, ...incomingIds])]
+  const mergeField = (
+    plural: 'providerIds' | 'providerNames' | 'serviceURLs' | 'transactionHashes' | 'pieceIds',
+    singular: 'providerId' | 'providerName' | 'serviceURL' | 'transactionHash' | 'pieceId'
+  ) =>
+    datasetIds.map((id) => {
+      const value = (file: DatasetPiece, ids: string[]) => {
+        const index = ids.indexOf(id)
+        return index < 0 ? '' : file[plural]?.[index] || (index === 0 ? String(file[singular] ?? '') : '')
+      }
+      return value(recorded, recordedIds) || value(incoming, incomingIds)
+    })
+  const providerIds = mergeField('providerIds', 'providerId')
+  const providerNames = mergeField('providerNames', 'providerName')
+  const serviceURLs = mergeField('serviceURLs', 'serviceURL')
+  const transactionHashes = mergeField('transactionHashes', 'transactionHash')
+  return {
+    ...incoming,
+    ...recorded,
+    datasetId: recorded.datasetId || incoming.datasetId,
+    pieceId: recorded.pieceId ?? incoming.pieceId,
+    datasetIds,
+    copyCount: datasetIds.length,
+    providerIds,
+    providerNames,
+    serviceURLs,
+    transactionHashes,
+    pieceIds: mergeField('pieceIds', 'pieceId'),
+    providerId: providerIds[0] || recorded.providerId || incoming.providerId,
+    providerName: providerNames[0] || recorded.providerName || incoming.providerName,
+    serviceURL: serviceURLs[0] || recorded.serviceURL || incoming.serviceURL,
+    transactionHash: transactionHashes[0] || recorded.transactionHash || incoming.transactionHash,
   }
 }
+
+export const storageInstances = (file: DatasetPiece) =>
+  (file.datasetIds ?? [file.datasetId]).map((id, i) => `${id}:${file.pieceIds?.[i] ?? (i === 0 ? file.pieceId : '')}`)

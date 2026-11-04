@@ -1,5 +1,0 @@
-export const CALIBRATION_LABEL_FIL = 'tFIL'
-export const MAINNET_LABEL_FIL = 'FIL'
-
-export const CALIBRATION_LABEL_USDFC = 'tUSDFC'
-export const MAINNET_LABEL_USDFC = 'USDFC'
