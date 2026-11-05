@@ -2,6 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import {
   ChevronDown,
   ChevronRight,
+  Clock3,
   Download,
   Eye,
   Folder,
@@ -112,7 +113,17 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
           <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" size={14} />
         </span>
       )
-    if (status === 'Waiting') return <span className="ml-2 align-middle text-[11px] text-muted">Waiting</span>
+    if (status === 'Waiting')
+      return (
+        <span
+          aria-label="Waiting to upload"
+          className="ml-2 inline-flex align-middle text-muted"
+          role="img"
+          title="Waiting to upload"
+        >
+          <Clock3 aria-hidden="true" size={14} />
+        </span>
+      )
     if (status === 'Paused')
       return (
         <span className="ml-2 inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 align-middle text-[11px] text-warning">

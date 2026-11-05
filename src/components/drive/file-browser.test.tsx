@@ -1238,7 +1238,10 @@ it.each(['waiting', 'uploading', 'confirming', 'pending'] as const)(
     const row = (await screen.findByRole('button', { name: 'first.txt' })).closest('tr') as HTMLElement
     const selection = within(row).getByRole('checkbox', { name: 'Select first.txt' })
     if (phase === 'waiting') {
-      expect(within(row).getByText('Waiting')).toBeTruthy()
+      expect(within(row).getByRole('img', { name: 'Waiting to upload' }).getAttribute('title')).toBe(
+        'Waiting to upload'
+      )
+      expect(within(row).queryByText('Waiting')).toBeNull()
       expect(within(row).queryByLabelText('Uploading…')).toBeNull()
       expect(selection).toHaveProperty('disabled', false)
     } else {

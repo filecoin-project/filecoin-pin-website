@@ -96,7 +96,8 @@ try {
       assert.equal(await page.getByRole('columnheader', { name: /Status|Copies/ }).count(), 0)
       for (const name of ['notes.txt', 'receipt.csv']) {
         const row = page.getByRole('button', { name, exact: true }).locator('..').locator('..')
-        await row.getByText('Waiting', { exact: true }).waitFor()
+        await row.getByRole('img', { name: 'Waiting to upload', exact: true }).waitFor()
+        assert.equal(await row.getByText('Waiting', { exact: true }).count(), 0)
         assert.equal(await row.getByLabel('Uploading…').count(), 0, 'Queued uploads must not show a spinner')
         assert.equal(await row.getByRole('checkbox', { name: `Select ${name}`, exact: true }).isEnabled(), true)
       }
