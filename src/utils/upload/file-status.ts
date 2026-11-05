@@ -3,6 +3,7 @@ import { hasRemovalProgress, isCopyRemovalScheduled, isDeletionScheduled } from 
 
 export function fileStatus(file: DatasetPiece) {
   if (file.upload && !(file.copyCount ?? 0)) {
+    if (file.upload.phase === 'funding') return 'Waiting for funding'
     if (file.upload.phase === 'waiting') return 'Waiting'
     if (file.upload.phase === 'uploading') return 'Uploading'
     if (file.upload.phase === 'failed') return 'Upload failed'
@@ -38,23 +39,22 @@ export function copyProgress(file: DatasetPiece) {
   return 'Confirming'
 }
 
-/** Collapsed customer-facing vocabulary; everything finer-grained is developer detail. */
-export type CustomerStatus = 'Uploading…' | 'Stored' | 'Upload failed' | 'Deleting…'
+/** Presentation only: storage confirmation, indexing and recovery retain their own states. */
+export type CustomerStatus = 'Uploading…' | 'Stored' | 'Paused' | 'Upload failed' | 'Deleting…'
 
-/**
- * A file counts as Stored once one provider holds the bytes (pieceCid
- * recorded) AND the root CID is announced on IPNI — the point where download
- * and share links both resolve. Chain confirmation and replication continue
- * in the background as internals. Records without an indexing marker
- * (legacy or index-recovered) are Stored.
- */
+/** One confirmed copy is stored; replication and gateway indexing are separate progress. */
 export function customerStatus(file: DatasetPiece): CustomerStatus {
   if (isDeletionScheduled(file) || hasRemovalProgress(file)) return 'Deleting…'
   if (file.upload && !(file.copyCount ?? 0)) {
-    if (file.upload.phase === 'failed' || file.upload.phase === 'interrupted') return 'Upload failed'
-    if (file.pieceCid && file.ipfsIndexed === true) return 'Stored'
+    if (file.upload.phase === 'funding') return 'Paused'
+    if (file.upload.phase === 'failed') return 'Upload failed'
+    if (file.upload.phase === 'interrupted') {
+      const pendingSubmission = file.upload.providers.some(
+        (provider) => provider.transactionHash && !provider.confirmed && !provider.rejected
+      )
+      return pendingSubmission ? 'Uploading…' : 'Upload failed'
+    }
     return 'Uploading…'
   }
-  if (file.cid && file.ipfsIndexed === false) return 'Uploading…'
   return 'Stored'
 }

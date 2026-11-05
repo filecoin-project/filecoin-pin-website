@@ -9,6 +9,7 @@ import {
   FolderUp,
   Loader2,
   MoreHorizontal,
+  Pause,
   Search,
   Trash2,
   Upload,
@@ -109,6 +110,13 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
       return (
         <span aria-label={status} className="ml-2 inline-flex align-middle text-accent" role="img" title={status}>
           <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" size={14} />
+        </span>
+      )
+    if (status === 'Paused')
+      return (
+        <span className="ml-2 inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 align-middle text-[11px] text-warning">
+          <Pause aria-hidden="true" size={12} />
+          Paused
         </span>
       )
     if (status === 'Upload failed')
@@ -257,7 +265,9 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
         !autoCheckingPieceCids.has(file.pieceCid)
     )
   const canSelectForRemoval = (file: DatasetPiece) =>
-    canRemoveUpload(file) && !uploadTasks?.activeIds.has(file.id) && !uploadTasks?.checking.has(file.id)
+    canRemoveUpload(file) &&
+    (!uploadTasks?.activeIds.has(file.id) || !!uploadTasks?.queuedIds.has(file.id)) &&
+    !uploadTasks?.checking.has(file.id)
   const canSelect = (file: DatasetPiece) => canSelectForDeletion(file) || canSelectForRemoval(file)
   const selectableFiles = files.filter(canSelect)
   const selectedFiles = selectableFiles.filter((file) => selectedFileIds.has(file.id))
@@ -335,7 +345,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                   size="sm"
                   variant="secondary"
                 >
-                  Remove failed records ({removableFiles.length})
+                  Remove local records ({removableFiles.length})
                 </Button>
               )}
               {batchTargets.length > 0 && (
@@ -727,7 +737,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
         )}
       </div>
       <SidePanel
-        description="Only the listed local upload records will be removed. This does not delete stored content or cancel transactions."
+        description="Cancel queued uploads and remove these local records. Stored files are not deleted."
         onOpenChange={setBatchRemoveOpen}
         open={batchRemoveOpen}
         title="Remove local records"
@@ -747,11 +757,13 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
           onClick={() =>
             void act(async () => {
               const ids = new Set(removableFiles.map((file) => file.id))
-              await mutateHistory((current) => {
-                if (current.some((file) => ids.has(file.id) && !canSelectForRemoval(file)))
-                  throw new Error('Storage status changed. Check the latest result before removing these records.')
-                return current.filter((file) => !ids.has(file.id))
-              })
+              if (uploadTasks) await uploadTasks.removeMany([...ids])
+              else
+                await mutateHistory((current) => {
+                  if (current.some((file) => ids.has(file.id) && !canSelectForRemoval(file)))
+                    throw new Error('Storage status changed. Check the latest result before removing these records.')
+                  return current.filter((file) => !ids.has(file.id))
+                })
               setSelectedFileIds(new Set())
               setBatchRemoveOpen(false)
             })
@@ -946,7 +958,13 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                     </a>
                   )}
                 </section>
-                <FileUploadDetails file={selected} />
+                <FileUploadDetails
+                  file={selected}
+                  onOpenWallet={() => {
+                    setSelectedId(null)
+                    window.dispatchEvent(new Event('drive-open-wallet'))
+                  }}
+                />
                 <section className="space-y-3">
                   <h3 className="font-medium">Storage copies</h3>
                   {(selected.datasetIds ?? [selected.datasetId]).map((datasetId, index) => {

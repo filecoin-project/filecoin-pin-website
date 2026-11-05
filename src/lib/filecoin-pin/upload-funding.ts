@@ -8,9 +8,36 @@ import { createFreshUploadContexts } from './fresh-contexts.ts'
 import { assertCurrentStorageChain } from './storage-chain.ts'
 import { APPLICATION_SOURCE } from './synapse.ts'
 
-export async function prepareUploadContexts(
+export function formatFundingAmount(amount: bigint): string {
+  // Round up so the displayed amount always covers the quoted shortfall.
+  const rounded = ((amount + 10n ** 14n - 1n) / 10n ** 14n) * 10n ** 14n
+  return formatUnits(rounded, 18)
+}
+
+export class UploadFundingRequired extends Error {
+  depositNeeded: bigint
+  needsApproval: boolean
+  copies: number
+  constructor(depositNeeded: bigint, needsApproval: boolean, copies: number) {
+    super(
+      [
+        depositNeeded > 0n
+          ? `Deposit at least ${formatFundingAmount(depositNeeded)} more USDFC for these ${copies} storage copies, including dataset fees and lockups.`
+          : '',
+        needsApproval ? 'Approve storage payments in Wallet and Storage.' : '',
+      ]
+        .filter(Boolean)
+        .join(' ') || 'Refresh Wallet and Storage to check funding.'
+    )
+    this.name = 'UploadFundingRequired'
+    this.depositNeeded = depositNeeded
+    this.needsApproval = needsApproval
+    this.copies = copies
+  }
+}
+
+export async function resolveUploadContexts(
   synapse: Synapse,
-  dataSize: bigint,
   options: Pick<UploadExecutionOptions, 'contexts' | 'dataSetIds' | 'providerIds' | 'metadata'>
 ) {
   await assertCurrentStorageChain(synapse)
@@ -63,17 +90,20 @@ export async function prepareUploadContexts(
     contexts = [...contexts, ...additional]
   }
   if (!contexts.length) throw new Error('No storage providers available')
+  return contexts
+}
+
+export async function prepareUploadContexts(
+  synapse: Synapse,
+  dataSize: bigint,
+  options: Pick<UploadExecutionOptions, 'contexts' | 'dataSetIds' | 'providerIds' | 'metadata'>
+) {
+  const contexts = await resolveUploadContexts(synapse, options)
   // prepare is a read-only quote. Never execute its optional funding transaction:
   // deposits and owner approvals require the separate Wallet setup actions.
   const { costs } = await synapse.storage.prepare({ context: contexts, pieceSizes: [dataSize] })
   if (!costs.ready) {
-    const issues: string[] = []
-    if (costs.depositNeeded > 0n)
-      issues.push(
-        `Deposit at least ${formatUnits(costs.depositNeeded, 18)} more USDFC for these ${contexts.length} storage copies, including dataset fees and lockups.`
-      )
-    if (costs.needsFwssMaxApproval) issues.push('Approve storage payments in Wallet setup.')
-    throw new Error(issues.join(' ') || 'Storage funding is not ready. Refresh Wallet setup and try again.')
+    throw new UploadFundingRequired(costs.depositNeeded, costs.needsFwssMaxApproval, contexts.length)
   }
   return contexts
 }

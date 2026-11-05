@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useUploadHistory } from '../context/upload-history-context.tsx'
 import { DEFAULT_STORAGE_COPIES } from '../lib/filecoin-pin/config.ts'
 import type { UploadCheckpoint } from '../lib/filecoin-pin/upload-checkpoint.ts'
+import { UploadFundingRequired } from '../lib/filecoin-pin/upload-funding.ts'
 import { isDirectoryUpload, type UploadSource } from '../lib/filecoin-pin/upload-source.ts'
 import { DIRECTORY_SAVE_ERROR } from '../lib/local-storage/directory-store.ts'
 import { normalizeFolder } from '../lib/local-storage/drive-directory.ts'
@@ -120,17 +121,20 @@ export function useUploadOrchestration(taskId?: string) {
             ? uploadState.pieceCid
               ? 'confirming'
               : 'uploading'
-            : uploadState.error
-              ? uploadState.pieceCid
-                ? 'pending'
-                : 'failed'
-              : (copies?.length ?? 0) < uploadState.expectedCopies
-                ? 'pending'
-                : 'complete',
+            : uploadState.funding
+              ? 'funding'
+              : uploadState.error
+                ? uploadState.pieceCid
+                  ? 'pending'
+                  : 'failed'
+                : (copies?.length ?? 0) < uploadState.expectedCopies
+                  ? 'pending'
+                  : 'complete',
           expectedCopies: uploadState.expectedCopies || DEFAULT_STORAGE_COPIES,
           providers,
           steps: uploadState.stepStates,
           error: uploadState.error,
+          funding: uploadState.funding,
           checks: 0,
           nextCheckAt: Date.now() + 30_000,
         }
@@ -203,6 +207,7 @@ export function useUploadOrchestration(taskId?: string) {
     uploadState.confirmedPieces,
     uploadState.isUploading,
     uploadState.error,
+    uploadState.funding,
     uploadState.network,
     uploadState.providersById,
     uploadState.transactionHashes,
@@ -232,7 +237,7 @@ export function useUploadOrchestration(taskId?: string) {
         })
         .catch((error) => {
           // Keep uploadedFile state so the error shows in the progress view
-          console.error('[UploadOrchestration] Upload failed:', error)
+          if (!(error instanceof UploadFundingRequired)) console.error('[UploadOrchestration] Upload failed:', error)
         })
     },
     [uploadFile, taskId]

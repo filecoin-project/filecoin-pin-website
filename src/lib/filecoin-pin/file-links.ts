@@ -18,8 +18,18 @@ export function fileShareLink(file: DatasetPiece): string | undefined {
     return getIpfsGatewayPreviewLink(file.cid, displayFileName(file))
   }
   const datasetIds = file.datasetIds ?? [file.datasetId]
-  for (const [index, serviceURL] of (file.serviceURLs ?? [file.serviceURL]).entries()) {
-    if (isCopyRemovalScheduled(file, datasetIds[index])) continue
+  const candidates: { serviceURL: string; dataSetId: string | undefined }[] = (
+    file.serviceURLs ?? [file.serviceURL]
+  ).map((serviceURL, index) => ({
+    serviceURL,
+    dataSetId: datasetIds[index],
+  }))
+  // Bytes can be downloaded before the first copy is confirmed onchain.
+  for (const provider of file.upload?.providers ?? []) {
+    if (provider.stored) candidates.push({ serviceURL: provider.serviceURL, dataSetId: provider.dataSetId })
+  }
+  for (const { serviceURL, dataSetId } of candidates) {
+    if (dataSetId && isCopyRemovalScheduled(file, dataSetId)) continue
     try {
       const url = new URL(serviceURL)
       if (url.protocol !== 'https:' && url.protocol !== 'http:') continue

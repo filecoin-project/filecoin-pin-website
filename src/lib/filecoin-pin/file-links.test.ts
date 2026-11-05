@@ -79,3 +79,62 @@ it('offers Markdown preview and shares its preview link, including directory ent
     expect(url.searchParams.has('download')).toBe(false)
   }
 })
+
+const pendingCar = {
+  ...file,
+  importedCar: true,
+  ipfsIndexed: false,
+  datasetId: '',
+  datasetIds: [],
+  serviceURLs: [],
+  copyCount: 0,
+  upload: {
+    phase: 'confirming',
+    expectedCopies: 2,
+    providers: [{ providerId: '4', serviceURL: 'https://stored.example', stored: true }],
+    steps: [],
+    checks: 0,
+    nextCheckAt: 0,
+  },
+} satisfies DatasetPiece
+
+it('shares a stored CAR before any onchain or IPNI confirmation', () => {
+  expect(fileShareLink(pendingCar)).toBe('https://stored.example/piece/bafk-piece')
+})
+
+it.each([false, undefined])('does not share an upload provider without stored confirmation (%s)', (stored) => {
+  expect(
+    fileShareLink({
+      ...pendingCar,
+      upload: { ...pendingCar.upload, providers: [{ ...pendingCar.upload.providers[0], stored }] },
+    })
+  ).toBeUndefined()
+})
+
+it('prefers a confirmed CAR copy over a stored upload provider', () => {
+  expect(fileShareLink({ ...pendingCar, datasetIds: ['1'], serviceURLs: ['https://confirmed.example'] })).toBe(
+    'https://confirmed.example/piece/bafk-piece'
+  )
+})
+
+it('skips invalid and removal-scheduled upload providers when sharing a CAR', () => {
+  expect(
+    fileShareLink({
+      ...pendingCar,
+      serviceURLs: ['bad url'],
+      removedCopies: ['1'],
+      removalQueuedCopies: ['2'],
+      deletion: { '3': { confirmed: true, transactionHash: '0x123' } },
+      upload: {
+        ...pendingCar.upload,
+        providers: [
+          { providerId: '0', serviceURL: 'javascript:alert(1)', stored: true },
+          { providerId: '1', dataSetId: '1', serviceURL: 'https://removed.example', stored: true },
+          { providerId: '2', dataSetId: '2', serviceURL: 'https://queued.example', stored: true },
+          { providerId: '3', dataSetId: '3', serviceURL: 'https://scheduled.example', stored: true },
+          ...pendingCar.upload.providers,
+        ],
+      },
+    })
+  ).toBe('https://stored.example/piece/bafk-piece')
+})

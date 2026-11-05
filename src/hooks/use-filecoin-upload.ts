@@ -1,10 +1,6 @@
 import { CommitError, type PDPProvider, StoreError } from '@filoz/synapse-sdk'
-import {
-  checkUploadReadiness,
-  executeUpload,
-  type UploadExecutionOptions,
-  type UploadExecutionResult,
-} from 'filecoin-pin/core/upload'
+import { checkFILBalance, validateGasRequirement } from 'filecoin-pin/core/payments'
+import { executeUpload, type UploadExecutionOptions, type UploadExecutionResult } from 'filecoin-pin/core/upload'
 import pino from 'pino'
 import prettyBytes from 'pretty-bytes'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -16,7 +12,7 @@ import { validateDriveMetadata } from '../lib/filecoin-pin/drive-metadata.ts'
 import { createFreshUploadContexts } from '../lib/filecoin-pin/fresh-contexts.ts'
 import { ensureSessionKeyPermissions } from '../lib/filecoin-pin/synapse.ts'
 import type { UploadProviderCheckpoint } from '../lib/filecoin-pin/upload-checkpoint.ts'
-import { prepareUploadContexts } from '../lib/filecoin-pin/upload-funding.ts'
+import { prepareUploadContexts, UploadFundingRequired } from '../lib/filecoin-pin/upload-funding.ts'
 import { prepareUploadInput } from '../lib/filecoin-pin/upload-input.ts'
 import type { UploadSource } from '../lib/filecoin-pin/upload-source.ts'
 import { getOrCreateClientId } from '../lib/local-storage/client-id.ts'
@@ -36,6 +32,7 @@ export interface UploadState {
   isUploading: boolean
   stepStates: StepState[]
   error?: string
+  funding?: { depositNeeded: string; needsApproval: boolean }
   currentCid?: string
   pieceCid?: string
   transactionHash?: string
@@ -195,7 +192,8 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
                 (piece.cid === rootCid &&
                   piece.upload &&
                   piece.upload.phase !== 'complete' &&
-                  piece.upload.phase !== 'failed'))
+                  piece.upload.phase !== 'failed' &&
+                  piece.upload.phase !== 'funding'))
           )
         )
           throw new Error(
@@ -211,28 +209,9 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
         await (ensurePermissions ? ensurePermissions() : ensureSessionKeyPermissions())
         updateStepState('checking-readiness', { progress: 50 })
 
-        logger.info('Checking upload readiness')
-        const readinessCheck = await checkUploadReadiness({
-          synapse,
-          fileSize: carResult.carBytes.length,
-          autoConfigureAllowances: false,
-        })
-
-        logger.info({ readinessCheck }, 'Upload readiness check')
-
-        if (readinessCheck.status === 'blocked') {
-          throw new Error(
-            [
-              readinessCheck.validation?.errorMessage,
-              ...(readinessCheck.suggestions ?? []),
-              'Check your Filecoin Pay deposit and storage payment approval in Wallet setup.',
-            ]
-              .filter(Boolean)
-              .join(' ')
-          )
-        }
-
-        logger.info('Upload readiness check completed')
+        const gas = await checkFILBalance(synapse)
+        const gasCheck = validateGasRequirement(gas.balance, gas.isCalibnet)
+        if (!gasCheck.isValid) throw new Error(gasCheck.errorMessage)
 
         logger.info('Uploading CAR to Synapse')
         // Distinguishes resolution failures (safe to retry into fresh data
@@ -571,13 +550,21 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
 
         return rootCid
       } catch (error) {
-        console.error('[FilecoinUpload] Upload failed with error:', error)
+        if (!(error instanceof UploadFundingRequired))
+          console.error('[FilecoinUpload] Upload failed with error:', error)
         const errorMessage = error instanceof Error ? error.message : 'Upload failed'
         setUploadState((prev) => ({
           ...prev,
           error: errorMessage,
+          expectedCopies: error instanceof UploadFundingRequired ? error.copies : prev.expectedCopies,
+          funding:
+            error instanceof UploadFundingRequired
+              ? { depositNeeded: error.depositNeeded.toString(), needsApproval: error.needsApproval }
+              : undefined,
           stepStates: prev.stepStates.map((step) =>
-            step.status === 'in-progress' ? { ...step, status: 'error', error: errorMessage } : step
+            step.status === 'in-progress'
+              ? { ...step, status: error instanceof UploadFundingRequired ? 'pending' : 'error', error: errorMessage }
+              : step
           ),
         }))
         throw error

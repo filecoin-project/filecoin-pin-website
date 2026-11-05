@@ -9,6 +9,11 @@ vi.mock('../lib/filecoin-pin/drive-api.ts', async (original) => ({
 const mocks = vi.hoisted(() => ({ execute: vi.fn() }))
 vi.mock('../lib/filecoin-pin/storage-chain.ts', () => ({ assertCurrentStorageChain: vi.fn() }))
 
+vi.mock('filecoin-pin/core/payments', () => ({
+  checkFILBalance: vi.fn().mockResolvedValue({ balance: 10n ** 18n, isCalibnet: false }),
+  validateGasRequirement: vi.fn().mockReturnValue({ isValid: true }),
+}))
+
 vi.mock('filecoin-pin/core/upload', () => ({
   executeUpload: mocks.execute,
   checkUploadReadiness: vi.fn().mockResolvedValue({ status: 'ready' }),

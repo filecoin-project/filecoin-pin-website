@@ -29,7 +29,7 @@ export async function checkUploadTasks(browser) {
     await page.route('**/src/lib/filecoin-pin/upload-funding.ts*', (route) =>
       route.fulfill({
         contentType: 'application/javascript',
-        body: `${providers} export async function prepareUploadContexts(_synapse,_size,options){ return options.contexts ?? contexts() }`,
+        body: `${providers} export class UploadFundingRequired extends Error {} export const formatFundingAmount = amount => String(Number(amount)/1e18); export async function resolveUploadContexts(){return contexts()} export async function prepareUploadContexts(_synapse,_size,options){ return options.contexts ?? contexts() }`,
       })
     )
     await page.route('**/node_modules/.vite/deps/filecoin-pin_core_upload.js*', (route) =>
@@ -164,7 +164,7 @@ export async function checkUploadTasks(browser) {
     await secondRow.locator('button:not([disabled])', { hasText: 'Share' }).waitFor()
     await firstRow.getByLabel('Uploading…').waitFor()
     await page.evaluate(() => window.__taskUploads['first.txt'].confirmPrimary())
-    await firstRow.getByLabel('Uploading…').waitFor()
+    await firstRow.getByLabel('Uploading…').waitFor({ state: 'detached' })
     assert.equal(await firstRow.getByText(/confirmed/).count(), 0, 'Replication counts must stay out of the list')
     assert.equal(await firstRow.getByText('Stored', { exact: true }).count(), 0, 'Stored must not render as a badge')
     await page.screenshot({ path: '/tmp/drive-partial-copy-status.png', fullPage: true })

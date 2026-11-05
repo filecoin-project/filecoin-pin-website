@@ -11,19 +11,23 @@ import {
   Sun,
   Wallet,
 } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { parseUnits } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useTheme } from '../../context/theme-provider.tsx'
+import { useUploadHistory } from '../../context/upload-history-context.tsx'
+import { useUploadTasks } from '../../context/upload-tasks-context.tsx'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { chains } from '../../lib/filecoin-pin/browser-wallet.ts'
 import { DEFAULT_SESSION_DAYS } from '../../lib/filecoin-pin/config.ts'
 import { approveStoragePayments, depositStorageFunds } from '../../lib/filecoin-pin/payments.ts'
+import { formatFundingAmount } from '../../lib/filecoin-pin/upload-funding.ts'
 import { shortenAddress } from '../../lib/filecoin-pin/wallet.ts'
 import { ButtonBase } from '../ui/button/button-base.tsx'
 import { Select } from '../ui/select.tsx'
 import { ConnectWalletButton } from './connect-wallet-button.tsx'
+import { StorageBudget } from './storage-budget.tsx'
 import { StorageRunway } from './storage-runway.tsx'
 import { type SetupTarget, WalletNextStep } from './wallet-next-step.tsx'
 
@@ -161,19 +165,33 @@ export function WalletSetup({
   onContinueUpload?: () => void
 }) {
   const connection = useBrowserWallet()
+  const { history } = useUploadHistory()
+  const tasks = useUploadTasks()
+  const fundingRequests = history.filter((file) => file.upload?.phase === 'funding')
   const { wallet, refreshWallet, storageSetup } = useFilecoinPinContext()
   const [days, setDays] = useState(DEFAULT_SESSION_DAYS)
-  const [amount, setAmount] = useState('1')
+  const [amount, setAmount] = useState('')
+  const lastSuggestedAmount = useRef<string | null>(null)
+  const updateSuggestedAmount = useCallback((suggestion: string) => {
+    const previous = lastSuggestedAmount.current
+    lastSuggestedAmount.current = suggestion
+    setAmount((current) => (previous === null ? current || suggestion : current === previous ? suggestion : current))
+  }, [])
   const [consent, setConsent] = useState(false)
   const [approvalConsent, setApprovalConsent] = useState(false)
   const [message, setMessage] = useState('')
   const sessionTarget = useRef<HTMLElement>(null)
-  const gasTarget = useRef<HTMLDListElement>(null)
+  const gasTarget = useRef<HTMLElement>(null)
   const depositTarget = useRef<HTMLDivElement>(null)
+  const pendingFundingTarget = useRef<HTMLElement>(null)
   const approvalTarget = useRef<HTMLDivElement>(null)
   const reviewStep = (target: SetupTarget) => {
-    const node = { session: sessionTarget, gas: gasTarget, deposit: depositTarget, approval: approvalTarget }[target]
-      .current
+    const node = {
+      session: sessionTarget,
+      gas: gasTarget,
+      deposit: pendingFundingTarget.current ? pendingFundingTarget : depositTarget,
+      approval: approvalTarget,
+    }[target].current
     if (!node) return
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     node.scrollIntoView({ behavior: reducedMotion ? 'instant' : 'smooth', block: 'center' })
@@ -189,6 +207,11 @@ export function WalletSetup({
         { duration: 1400, easing: 'ease-out' }
       )
     }
+  }
+  const applyDepositAmount = (value: string) => {
+    setAmount(value)
+    depositTarget.current?.scrollIntoView({ behavior: 'instant', block: 'center' })
+    depositTarget.current?.querySelector('input')?.focus({ preventScroll: true })
   }
   const active = connection.sessionStatus === 'active'
   const disabled =
@@ -211,7 +234,13 @@ export function WalletSetup({
   const Header = inDrawer ? 'div' : 'summary'
   return (
     <>
-      {inDrawer && onContinueUpload && <WalletNextStep onContinue={onContinueUpload} onReview={reviewStep} />}
+      {inDrawer && onContinueUpload && (
+        <WalletNextStep
+          onContinue={onContinueUpload}
+          onReview={reviewStep}
+          pendingFunding={fundingRequests.length > 0}
+        />
+      )}
       <Container
         className={inDrawer ? 'group/setup' : 'drive-panel group/setup'}
         {...(inDrawer ? {} : { open: !active || storageSetup?.status !== 'ready' })}
@@ -369,56 +398,121 @@ export function WalletSetup({
               </p>
             )}
             {wallet.data && (
-              <dl
-                className="grid scroll-mt-24 grid-cols-3 gap-3 rounded-lg border border-border bg-canvas/40 p-3"
+              <section
+                className="scroll-mt-24 space-y-3 rounded-xl border border-border bg-surface p-4"
                 data-setup-target="gas"
                 ref={gasTarget}
               >
-                {[
-                  ['Gas balance', wallet.data.formatted.fil],
-                  ['Wallet balance', wallet.data.formatted.usdfc],
-                  ['Available for storage', `${formatUSDFC(wallet.data.raw.filecoinPayBalance, 2)} USDFC`],
-                ].map(([label, value]) => (
-                  <div className="min-w-0" key={label}>
-                    <dt className="text-[10px] text-muted">{label}</dt>
-                    <dd className="mt-1 truncate text-xs font-medium tabular-nums" title={value}>
-                      {value}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-medium">Balances</h3>
+                  <button
+                    aria-label="Refresh balances"
+                    className="rounded-md border border-border px-2 py-1 text-xs text-muted transition-colors hover:bg-surface-raised hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={disabled}
+                    onClick={() => void refreshWallet()}
+                    type="button"
+                  >
+                    Refresh
+                  </button>
+                </div>
+                <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {[
+                    ['Gas balance', wallet.data.formatted.fil],
+                    ['Wallet balance', wallet.data.formatted.usdfc],
+                    ['Total storage deposit', `${formatUSDFC(wallet.data.raw.filecoinPayBalance, 2)} USDFC`],
+                  ].map(([label, value]) => (
+                    <div className="min-w-0" key={label}>
+                      <dt className="text-[10px] text-muted">{label}</dt>
+                      <dd className="mt-1 truncate text-xs font-medium tabular-nums" title={value}>
+                        {value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
             )}
             {wallet.data && <StorageRunway />}
-            <p className="text-sm leading-6 text-muted">
-              FIL pays wallet transaction gas; deposited USDFC pays ongoing storage. Deposit and payment approvals
-              require your main wallet.
-            </p>
-            <div
-              className="flex scroll-mt-24 flex-wrap gap-3 rounded-lg"
-              data-setup-target="deposit"
-              ref={depositTarget}
-            >
-              <input
-                aria-label="Deposit amount in USDFC"
-                className="drive-field h-10 w-28 px-3 text-sm tabular-nums"
-                disabled={disabled}
-                min="0"
-                onChange={(event) => setAmount(event.target.value)}
-                step="0.1"
-                type="number"
-                value={amount}
-              />
-              <ButtonBase
-                className="w-auto"
-                disabled={disabled || !amount}
-                onClick={() => void pay('deposit')}
-                size="sm"
-                variant="secondary"
+            {fundingRequests.map((file, index) => (
+              <section
+                aria-label="Pending upload funding"
+                className="space-y-3 rounded-xl border border-border bg-surface p-4"
+                key={file.id}
+                ref={index === 0 ? pendingFundingTarget : undefined}
               >
-                Deposit USDFC
-              </ButtonBase>
-            </div>
-            <div className="scroll-mt-24 space-y-3 rounded-lg" data-setup-target="approval" ref={approvalTarget}>
+                <h3 className="text-sm font-medium">Paused · {file.fileName}</h3>
+                <p className="text-xs leading-5 text-muted">{file.upload?.error}</p>
+                <div className="flex flex-wrap gap-2">
+                  {file.upload?.funding && BigInt(file.upload.funding.depositNeeded) > 0n && (
+                    <ButtonBase
+                      className="w-auto"
+                      disabled={disabled}
+                      onClick={() =>
+                        applyDepositAmount(formatFundingAmount(BigInt(file.upload?.funding?.depositNeeded ?? '0')))
+                      }
+                      size="sm"
+                      variant="secondary"
+                    >
+                      Use upload minimum
+                    </ButtonBase>
+                  )}
+                  {tasks?.retainedIds.has(file.id) && (
+                    <ButtonBase
+                      className="w-auto"
+                      disabled={disabled}
+                      onClick={() => void tasks.resume(file.id)}
+                      size="sm"
+                    >
+                      Check funding and continue
+                    </ButtonBase>
+                  )}
+                </div>
+                <p className="text-xs text-muted">
+                  Last checked upload minimum. Rechecked before continuing; the budget below includes additional usage.
+                </p>
+              </section>
+            ))}
+            <StorageBudget disabled={disabled} onSuggestedAmount={updateSuggestedAmount}>
+              <div
+                className="scroll-mt-24 space-y-3 border-t border-border p-4 sm:p-5"
+                data-setup-target="deposit"
+                ref={depositTarget}
+              >
+                <div className="flex items-end gap-2">
+                  <label className="block min-w-0 flex-1 space-y-1.5">
+                    <span className="text-xs text-muted">Amount to deposit</span>
+                    <span className="flex items-center gap-3 rounded-lg border border-border bg-canvas/40 px-3 focus-within:ring-1 focus-within:ring-accent">
+                      <input
+                        aria-label="Deposit amount in USDFC"
+                        className="h-11 min-w-0 flex-1 bg-transparent text-sm tabular-nums outline-none placeholder:text-muted placeholder:opacity-100"
+                        disabled={disabled}
+                        min="0"
+                        onChange={(event) => setAmount(event.target.value)}
+                        placeholder="0.00"
+                        step="any"
+                        type="number"
+                        value={amount}
+                      />
+                      <span className="text-xs font-medium text-muted">USDFC</span>
+                    </span>
+                  </label>
+                  <ButtonBase
+                    className="min-h-11 w-auto shrink-0 px-3 sm:px-4"
+                    disabled={disabled || !amount || !Number.isFinite(Number(amount)) || Number(amount) <= 0}
+                    onClick={() => void pay('deposit')}
+                    size="sm"
+                    variant="secondary"
+                  >
+                    Deposit USDFC
+                  </ButtonBase>
+                </div>
+              </div>
+            </StorageBudget>
+            <div
+              className="scroll-mt-24 space-y-3 rounded-xl border border-border bg-surface p-4"
+              data-setup-target="approval"
+              ref={approvalTarget}
+            >
+              <h3 className="text-sm font-medium">Payment approval</h3>
               <label className="flex items-start gap-2.5 text-xs leading-5 text-foreground">
                 <input
                   checked={approvalConsent}
@@ -437,15 +531,6 @@ export function WalletSetup({
                   variant="secondary"
                 >
                   Approve storage payments
-                </ButtonBase>
-                <ButtonBase
-                  className="w-auto"
-                  disabled={disabled}
-                  onClick={() => void refreshWallet()}
-                  size="sm"
-                  variant="secondary"
-                >
-                  Refresh balances
                 </ButtonBase>
                 <a
                   className="inline-flex items-center gap-1 self-center text-xs text-muted hover:text-accent"

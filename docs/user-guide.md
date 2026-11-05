@@ -84,6 +84,24 @@ If saving fails, keep the page open, free browser storage and use **Retry saving
 
 After reload, Drive checks saved provider operations without uploading files again. **Check status** can refresh existing confirmations, but cannot resume unfinished transfers or submission steps. You may need to select the original file again. A timeout alone does not establish that an upload or wallet transaction failed.
 
-Wallet setup transactions that time out remain pending to prevent duplicate submissions. Use **Refresh status** to check again. If IPFS indexing checks stop, the stored file remains downloadable; **Retry indexing checks** starts another bounded round. Indexing is not a guarantee of gateway availability or replica health.
+Wallet setup transactions that time out remain pending to prevent duplicate submissions. Use **Refresh status** to check again. If IPFS indexing takes longer than usual, the stored file remains downloadable. Checks continue every 30 minutes after the first five attempts while the page is visible; **Check now** resets the cooldown. Indexing is not a guarantee of gateway availability or replica health.
+
+
+### Planning storage funds
+
+In **Wallet and Storage**, **Storage funds** estimates a top-up for an expected capacity and usage budget (defaults: 1 GiB and 30 days). The read-only SDK quote includes the selected storage copies, dataset setup, required reserves and additional runway. Existing matching datasets are reused. The card shows the SDK’s monthly storage rate, available funds and suggested top-up. Locked reserves are in **How estimates work**. It does not derive a budget total from the deposit shortfall. Many small uploads can incur more operation fees than the single-piece planning estimate. A required top-up automatically fills the deposit input; when no top-up is needed it starts empty. Manual edits are preserved when quotes refresh; **Deposit USDFC** still requires an explicit owner-wallet action. Payment approval remains separate.
+
+Before each transfer, an SDK quote checks the actual packed size against the actual selected storage contexts. Insufficient funding produces **Paused**, pauses the transfer queue and leaves wallet funding actions available. File details link to **Wallet and Storage**, which also shows the last checked upload minimum. After funding or approval, use **Check funding and continue** to recheck and resume. Original file bytes remain available in the current page; after a reload, select the original file or folder again. Other queued files wait until the blocked upload is continued or removed. Ordinary transfer failures retain the existing failure behavior.
+
+Run `node scripts/test-drive-funding.mjs` against `npm run dev` for mocked budget states, waiting-upload navigation and desktop/mobile screenshots. These checks submit no live transactions.
+
+Queued uploads and **Paused** uploads can be selected together with failed local records and removed using **Remove local records**. The selected tasks are canceled as one batch before the queue advances; original file bytes are released. Active transfers and submitted storage operations are excluded. Removing these records does not submit a chain transaction or delete stored files.
+
+
+### File list status
+
+The file list has selection, Name, Size, Uploaded and Actions columns. Status appears beside the name: a spinner for uploads or deletions in progress, a static **Paused** badge when funding or payment approval needs attention, and **Upload failed** when an unfinished upload requires recovery or retry. Open file details for the cause and available actions. Paused uploads remain selectable for **Remove local records**, including alongside queued and failed local records; removing the batch cancels those tasks before the queue advances.
+
+Stored files have no badge. At least one confirmed storage copy is enough to show **Stored** in details; remaining replication and IPFS indexing do not change that status. A provider receiving bytes or an indexed CID alone does not establish confirmed storage. Preview and share availability still follow their own checks. Copy counts, provider receipts and saved progress remain in file details under **Upload details** and **Storage copies**. The list loads automatically; reload the page to discover later remote changes, or use **Retry** if loading fails.
 
 [Back to README](../README.md)

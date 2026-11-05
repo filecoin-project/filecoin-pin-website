@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useUploadHistory } from '../../context/upload-history-context.tsx'
 import { useUploadTasks } from '../../context/upload-tasks-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
+import { formatFundingAmount } from '../../lib/filecoin-pin/upload-funding.ts'
 import { getTxExplorerLink } from '../../utils/links.ts'
 import { canRemoveUpload } from '../../utils/upload/can-remove-upload.ts'
 import { copyProgress, customerStatus, fileStatusColors } from '../../utils/upload/file-status.ts'
@@ -9,7 +10,7 @@ import { getStepLabel } from '../../utils/upload/step-utils.ts'
 import { ButtonBase as Button } from '../ui/button/button-base.tsx'
 import { FolderPicker } from './folder-picker.tsx'
 
-export function FileUploadDetails({ file }: { file: DatasetPiece }) {
+export function FileUploadDetails({ file, onOpenWallet }: { file: DatasetPiece; onOpenWallet: () => void }) {
   const tasks = useUploadTasks()
   const { mutateHistory, hasUnsavedChanges } = useUploadHistory()
   const upload = file.upload
@@ -17,7 +18,8 @@ export function FileUploadDetails({ file }: { file: DatasetPiece }) {
   const [error, setError] = useState('')
   if (!upload) return null
   const active = tasks?.activeIds.has(file.id)
-  const retryable = upload.phase === 'failed' || (upload.phase === 'interrupted' && !file.pieceCid)
+  const retryable =
+    upload.phase === 'funding' || upload.phase === 'failed' || (upload.phase === 'interrupted' && !file.pieceCid)
   const status = customerStatus(file)
   const progress = copyProgress(file)
   const removable = canRemoveUpload(file) && !active
@@ -32,6 +34,36 @@ export function FileUploadDetails({ file }: { file: DatasetPiece }) {
           {status}
         </span>
       </div>
+      {upload.phase === 'funding' && (
+        <div className="space-y-3 rounded-lg border border-border bg-surface p-4" role="status">
+          <p className="text-sm font-medium">
+            {upload.funding && BigInt(upload.funding.depositNeeded) > 0n
+              ? `Add ${formatFundingAmount(BigInt(upload.funding.depositNeeded))} USDFC to continue.`
+              : 'Approve storage payments to continue.'}
+          </p>
+          <p className="text-xs text-muted">
+            {upload.funding?.needsApproval && BigInt(upload.funding.depositNeeded) > 0n
+              ? 'Payment approval is also required. '
+              : ''}
+            Queued uploads are paused.
+          </p>
+          <button
+            className="inline-flex items-center gap-1 text-xs font-medium text-link underline decoration-border underline-offset-4 hover:text-link-hover focus:brand-outline"
+            onClick={onOpenWallet}
+            type="button"
+          >
+            {upload.funding && BigInt(upload.funding.depositNeeded) > 0n
+              ? 'Add funds in Wallet and Storage'
+              : 'Approve payments in Wallet and Storage'}
+            <span aria-hidden="true">→</span>
+          </button>
+          {!tasks?.retainedIds.has(file.id) && (
+            <p className="text-xs text-muted">
+              Select the original file again after funding; file bytes are not retained after leaving this page.
+            </p>
+          )}
+        </div>
+      )}
       {(queued || canCheck || hasUnsavedChanges || canRetry || removable) && (
         <div className="flex flex-wrap gap-2">
           {queued && (
@@ -66,7 +98,11 @@ export function FileUploadDetails({ file }: { file: DatasetPiece }) {
             </Button>
           )}
           {canRetry &&
-            (file.isDirectory ? (
+            (upload.phase === 'funding' && tasks?.retainedIds.has(file.id) ? (
+              <Button className="w-auto" onClick={() => void tasks.resume(file.id)} size="sm">
+                Check funding and continue
+              </Button>
+            ) : file.isDirectory ? (
               <details className="w-full text-xs">
                 <summary className="w-fit cursor-pointer text-link">Retry folder upload</summary>
                 <div className="mt-3">
@@ -106,12 +142,18 @@ export function FileUploadDetails({ file }: { file: DatasetPiece }) {
               className="w-auto px-3 py-1.5 text-xs sm:min-h-8"
               disabled={tasks?.checking.has(file.id)}
               onClick={() =>
-                void mutateHistory((current) => {
-                  const latest = current.find((record) => record.id === file.id)
-                  if (latest && !canRemoveUpload(latest))
-                    throw new Error('Storage status changed. Check the latest result before removing this record.')
-                  return current.filter((record) => record.id !== file.id)
-                }).catch((cause) => setError(String(cause)))
+                void (
+                  tasks?.retainedIds.has(file.id) && upload.phase === 'funding'
+                    ? tasks.cancelQueued(file.id)
+                    : mutateHistory((current) => {
+                        const latest = current.find((record) => record.id === file.id)
+                        if (latest && !canRemoveUpload(latest))
+                          throw new Error(
+                            'Storage status changed. Check the latest result before removing this record.'
+                          )
+                        return current.filter((record) => record.id !== file.id)
+                      })
+                ).catch((cause) => setError(String(cause)))
               }
               size="sm"
               variant="secondary"
@@ -121,7 +163,6 @@ export function FileUploadDetails({ file }: { file: DatasetPiece }) {
           )}
         </div>
       )}
-      {removable && <p className="text-xs text-muted">Removes this local record only.</p>}
       {error && (
         <p className="text-sm text-warning" role="alert">
           {error}

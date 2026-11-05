@@ -280,11 +280,11 @@ it('collapses internal states into the customer vocabulary', () => {
   }
   expect(customerStatus({ ...file, copyCount: 0, upload })).toBe('Uploading…')
   expect(customerStatus({ ...file, copyCount: 0, upload: { ...upload, phase: 'pending' } })).toBe('Uploading…')
-  expect(customerStatus({ ...file, copyCount: 0, upload, ipfsIndexed: true })).toBe('Stored')
+  expect(customerStatus({ ...file, copyCount: 0, upload, ipfsIndexed: true })).toBe('Uploading…')
   expect(customerStatus({ ...file, copyCount: 0, pieceCid: '', upload, ipfsIndexed: true })).toBe('Uploading…')
   expect(customerStatus({ ...file, copyCount: 0, upload: { ...upload, phase: 'failed' } })).toBe('Upload failed')
   expect(customerStatus({ ...file, copyCount: 0, upload: { ...upload, phase: 'interrupted' } })).toBe('Upload failed')
-  expect(customerStatus({ ...file, ipfsIndexed: false })).toBe('Uploading…')
+  expect(customerStatus({ ...file, ipfsIndexed: false })).toBe('Stored')
   expect(customerStatus({ ...file, ipfsIndexed: true })).toBe('Stored')
   expect(customerStatus(file)).toBe('Stored')
   expect(customerStatus({ ...file, copyCount: 1, upload: { ...upload, phase: 'pending' } })).toBe('Stored')
@@ -1116,6 +1116,7 @@ it('does not group uploads with missing piece CIDs and removes only selected saf
   setCachedPieces(scope, [
     failed,
     { ...failed, id: 'interrupted', fileName: 'interrupted.txt', upload: { ...failed.upload, phase: 'interrupted' } },
+    { ...failed, id: 'waiting', fileName: 'waiting.txt', upload: { ...failed.upload, phase: 'waiting' } },
     {
       ...failed,
       id: 'pending',
@@ -1136,9 +1137,10 @@ it('does not group uploads with missing piece CIDs and removes only selected saf
   expect(screen.getByRole('checkbox', { name: 'Select pending.txt' })).toHaveProperty('disabled', true)
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select failed.txt' }))
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select interrupted.txt' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select waiting.txt' }))
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select first.txt' }))
   expect(screen.getByRole('button', { name: 'Delete stored files (1)' })).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: 'Remove failed records (2)' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Remove local records (3)' }))
   fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove local records' }))
   await waitFor(() =>
     expect(
@@ -1148,4 +1150,68 @@ it('does not group uploads with missing piece CIDs and removes only selected saf
     ).toEqual(['first', 'pending'])
   )
   expect(mocks.submit).not.toHaveBeenCalled()
+})
+
+it('shows funding as a static Paused badge and allows selecting and removing its local record', async () => {
+  setCachedPieces(scope, [
+    {
+      ...file,
+      datasetId: '',
+      datasetIds: [],
+      pieceCid: '',
+      cid: '',
+      copyCount: 0,
+      upload: {
+        phase: 'funding',
+        expectedCopies: 2,
+        providers: [],
+        steps: [],
+        checks: 0,
+        nextCheckAt: 0,
+        funding: { depositNeeded: '645192894000747211', needsApproval: false },
+      },
+    },
+  ])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  const row = (await screen.findByRole('button', { name: 'first.txt' })).closest('tr') as HTMLElement
+  expect(within(row).getByText('Paused')).toBeTruthy()
+  expect(within(row).queryByLabelText('Uploading…')).toBeNull()
+  expect(screen.queryByRole('columnheader', { name: /Status|Copies/ })).toBeNull()
+  fireEvent.click(within(row).getByRole('checkbox', { name: 'Select first.txt' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Remove local records (1)' }))
+  fireEvent.click(
+    within(screen.getByRole('dialog', { name: 'Remove local records' })).getByRole('button', {
+      name: 'Remove local records',
+    })
+  )
+  await waitFor(() => expect(getCachedPieces(scope)).toEqual([]))
+})
+
+it('keeps chain confirmation separate from indexing and interrupted upload progress', () => {
+  const upload: NonNullable<DatasetPiece['upload']> = {
+    phase: 'interrupted',
+    expectedCopies: 2,
+    providers: [],
+    steps: [],
+    checks: 0,
+    nextCheckAt: 0,
+  }
+  expect(customerStatus({ ...file, copyCount: 1, ipfsIndexed: false, upload })).toBe('Stored')
+  expect(customerStatus({ ...file, copyCount: 0, ipfsIndexed: true, upload })).toBe('Upload failed')
+  expect(customerStatus({ ...file, copyCount: 0, ipfsIndexed: true, upload: { ...upload, phase: 'pending' } })).toBe(
+    'Uploading…'
+  )
+  expect(
+    customerStatus({
+      ...file,
+      copyCount: 0,
+      upload: { ...upload, providers: [{ providerId: '4', serviceURL: 'https://sp.example', transactionHash: hash }] },
+    })
+  ).toBe('Uploading…')
+  expect(customerStatus({ ...file, copyCount: 0, upload: { ...upload, phase: 'funding' } })).toBe('Paused')
+  expect(fileStatus({ ...file, copyCount: 0, upload: { ...upload, phase: 'funding' } })).toBe('Waiting for funding')
 })
