@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { prepareBrowserPage } from './drive-browser-fixtures.mjs'
+import { openDrive } from './drive-browser-navigation.mjs'
 
 // Exercise real shared components and their compiled CSS against npm run dev.
 const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || undefined })
@@ -196,6 +197,7 @@ try {
     await consolePage.waitForTimeout(200)
     assert.deepEqual(await audit(consolePage, 'body'), [], `${theme}: landing contrast`)
   }
+  await openDrive(consolePage)
   await consolePage.getByRole('button', { name: 'Connect wallet', exact: true }).click()
   await consolePage.getByRole('button', { name: 'report.pdf', exact: true }).waitFor()
   for (const theme of ['light', 'dark']) {

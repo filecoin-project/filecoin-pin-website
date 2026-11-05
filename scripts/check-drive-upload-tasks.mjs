@@ -29,7 +29,7 @@ export async function checkUploadTasks(browser) {
     await page.route('**/src/lib/filecoin-pin/upload-funding.ts*', (route) =>
       route.fulfill({
         contentType: 'application/javascript',
-        body: `${providers} export async function prepareUploadContexts(_synapse,_size,options){ return options.contexts ?? contexts() }`,
+        body: `${providers} export class UploadFundingRequired extends Error {} export const formatFundingAmount = amount => String(Number(amount)/1e18); export async function resolveUploadContexts(){return contexts()} export async function prepareUploadContexts(_synapse,_size,options){ return options.contexts ?? contexts() }`,
       })
     )
     await page.route('**/node_modules/.vite/deps/filecoin-pin_core_upload.js*', (route) =>

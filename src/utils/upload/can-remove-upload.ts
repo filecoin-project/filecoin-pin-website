@@ -4,7 +4,10 @@ export function canRemoveUpload(file: DatasetPiece) {
   const upload = file.upload
   return Boolean(
     upload &&
-      (upload.phase === 'failed' || upload.phase === 'interrupted') &&
+      (upload.phase === 'waiting' ||
+        upload.phase === 'funding' ||
+        upload.phase === 'failed' ||
+        upload.phase === 'interrupted') &&
       !file.copyCount &&
       !file.datasetId &&
       !file.datasetIds?.length &&

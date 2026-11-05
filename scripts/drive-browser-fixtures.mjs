@@ -3,7 +3,7 @@ import { decodeFunctionData, encodeFunctionResult, maxUint256, multicall3Abi, to
 
 export async function prepareBrowserPage(
   page,
-  { seedDirectory = true, funded = true, approved = true, indexedDirectory = false } = {}
+  { seedDirectory = true, funded = true, approved = true, indexedDirectory = false, depositedBalance } = {}
 ) {
   let remoteSdkLoads = 0
   const mockedExpiry = Math.floor(Date.now() / 1000) + 7 * 86400
@@ -121,7 +121,12 @@ export async function prepareBrowserPage(
         return encodeFunctionResult({
           abi: mainnet.contracts.filecoinPay.abi,
           functionName: 'accounts',
-          result: [funding.funded ? 10n ** 19n : 0n, 0n, 0n, 0n],
+          result: [
+            funding.depositedBalance == null ? (funding.funded ? 10n ** 19n : 0n) : BigInt(funding.depositedBalance),
+            0n,
+            0n,
+            0n,
+          ],
         })
       if (data.startsWith(toFunctionSelector('operatorApprovals(address,address,address)')))
         return encodeFunctionResult({
@@ -212,8 +217,8 @@ export async function prepareBrowserPage(
     })
   })
   await page.addInitScript(
-    ({ seedDirectory, funded, approved }) => {
-      window.__driveFunding = { funded, approved }
+    ({ seedDirectory, funded, approved, depositedBalance }) => {
+      window.__driveFunding = { funded, approved, depositedBalance }
       window.__driveAuthorized = localStorage.getItem('__mockDriveAuthorized') === 'true'
       const address = '0x1111111111111111111111111111111111111111'
       const handlers = new Map()
@@ -297,7 +302,7 @@ export async function prepareBrowserPage(
         )
       }
     },
-    { seedDirectory, funded, approved }
+    { seedDirectory, funded, approved, depositedBalance }
   )
   return { sdkLoads: () => remoteSdkLoads }
 }

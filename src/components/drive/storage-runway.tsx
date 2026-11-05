@@ -37,17 +37,14 @@ export function StorageRunway() {
         : formatRunwayDays(result.runwayDays)
       : 'Checking…'
   return (
-    <div className="rounded-lg border border-border bg-canvas/40 p-3">
+    <div className="rounded-xl border border-border bg-surface p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs">
         <span className="text-muted">Runway</span>
         <span className="font-medium text-foreground" role="status">
           {label}
         </span>
       </div>
-      <p className="mt-2 text-[11px] leading-5 text-muted">
-        Estimated time before a top-up is needed at your Filecoin Pay account’s current recurring rate. Excludes locked
-        reserves; uploads and other payment activity can change this estimate.
-      </p>
+      <p className="mt-1 text-[11px] leading-5 text-muted">Based on current charges. Excludes locked reserves.</p>
     </div>
   )
 }

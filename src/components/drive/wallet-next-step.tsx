@@ -8,9 +8,11 @@ export type SetupTarget = 'session' | 'gas' | 'deposit' | 'approval'
 export function WalletNextStep({
   onReview,
   onContinue,
+  pendingFunding = false,
 }: {
   onReview: (target: SetupTarget) => void
   onContinue: () => void
+  pendingFunding?: boolean
 }) {
   const connection = useBrowserWallet()
   const { wallet, synapse, storageSetup, refreshWallet } = useFilecoinPinContext()
@@ -65,9 +67,15 @@ export function WalletNextStep({
     description = 'Your storage account has funds. Review the approval so storage services can charge this balance.'
     action = 'Review payment approval'
     target = 'approval'
+  } else if (pendingFunding) {
+    title = 'An upload is waiting for funding'
+    description =
+      'Review the waiting upload below. After depositing or approving payments, recheck funding to continue.'
+    action = 'Review waiting upload'
+    target = 'deposit'
   } else if (synapse && wallet.status === 'ready' && storageSetup.status === 'ready') {
     title = 'Ready to upload'
-    description = 'Wallet setup complete. You can upload files.'
+    description = 'Wallet setup complete. Each upload checks its actual funding needs before transferring.'
     action = 'Continue to upload'
     ready = true
   } else {

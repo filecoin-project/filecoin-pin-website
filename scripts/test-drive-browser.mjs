@@ -149,7 +149,11 @@ try {
   await page.getByRole('button', { name: 'Close Wallet and Storage', exact: true }).click()
   await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Wallet and Storage')
   await page.getByRole('button', { name: 'Wallet and Storage', exact: true }).click()
-  await page.getByText('Wallet setup complete. You can upload files.', { exact: true }).waitFor()
+  await page
+    .getByText('Wallet setup complete. Each upload checks its actual funding needs before transferring.', {
+      exact: true,
+    })
+    .waitFor()
   await page.getByRole('button', { name: 'Continue to upload', exact: true }).click()
   await page.getByRole('textbox', { name: 'Upload location', exact: true }).waitFor()
   assert.equal(await page.getByRole('textbox', { name: 'Upload location', exact: true }).inputValue(), 'reports/2026')

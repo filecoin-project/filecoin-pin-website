@@ -27,6 +27,11 @@ vi.mock('@filoz/synapse-core/pdp-verifier', async (original) => ({
   dataSetLive: dataSetLiveMock,
 }))
 
+vi.mock('filecoin-pin/core/payments', () => ({
+  checkFILBalance: vi.fn().mockResolvedValue({ balance: 10n ** 18n, isCalibnet: false }),
+  validateGasRequirement: vi.fn().mockReturnValue({ isValid: true }),
+}))
+
 vi.mock('filecoin-pin/core/upload', () => ({
   executeUpload: executeUploadMock,
   checkUploadReadiness: checkUploadReadinessMock,
@@ -103,12 +108,9 @@ it('refuses uploads before packing when safe directory writes are unavailable', 
 })
 
 describe('useFilecoinUpload readiness', () => {
-  it('stops before uploading when the readiness check is blocked', async () => {
+  it('stops before transferring when SDK preparation fails', async () => {
     useFilecoinPinContextMock.mockReturnValue(baseContext)
-    checkUploadReadinessMock.mockResolvedValueOnce({
-      status: 'blocked',
-      validation: { errorMessage: 'Insufficient storage funds' },
-    })
+    prepareMock.mockRejectedValueOnce(new Error('Insufficient storage funds'))
 
     const { result } = renderHook(() => useFilecoinUpload())
 
@@ -168,7 +170,7 @@ describe('useFilecoinUpload dataset resume', () => {
     expect(fund).not.toHaveBeenCalled()
     expect(result.current.uploadState.stepStates.some((step) => step.status === 'in-progress')).toBe(false)
     expect(result.current.uploadState.stepStates.find((step) => step.step === 'checking-readiness')?.status).toBe(
-      'error'
+      'pending'
     )
     expect(getStoredDataSetIds('0xabc')).toEqual([42])
   })
@@ -524,4 +526,17 @@ it('does not let a pre-transfer interrupted record block unrelated uploads', asy
     await result.current.uploadFile(testFile)
   })
   expect(executeUploadMock).toHaveBeenCalledOnce()
+})
+
+it('keeps the actual quoted copy count when funding is missing', async () => {
+  useFilecoinPinContextMock.mockReturnValue(baseContext)
+  createFreshUploadContextsMock.mockResolvedValueOnce([fakeContexts[0]])
+  prepareMock.mockResolvedValueOnce({ costs: { ready: false, depositNeeded: 1n, needsFwssMaxApproval: false } })
+  const { result } = renderHook(useFilecoinUpload)
+  await act(async () => {
+    await expect(result.current.uploadFile(testFile)).rejects.toThrow('1 storage copies')
+  })
+  expect(result.current.uploadState.expectedCopies).toBe(1)
+  expect(result.current.uploadState.funding).toEqual({ depositNeeded: '1', needsApproval: false })
+  expect(executeUploadMock).not.toHaveBeenCalled()
 })
