@@ -1114,6 +1114,7 @@ it('does not group uploads with missing piece CIDs and removes only selected saf
   setCachedPieces(scope, [
     failed,
     { ...failed, id: 'interrupted', fileName: 'interrupted.txt', upload: { ...failed.upload, phase: 'interrupted' } },
+    { ...failed, id: 'waiting', fileName: 'waiting.txt', upload: { ...failed.upload, phase: 'waiting' } },
     {
       ...failed,
       id: 'pending',
@@ -1134,9 +1135,10 @@ it('does not group uploads with missing piece CIDs and removes only selected saf
   expect(screen.getByRole('checkbox', { name: 'Select pending.txt' })).toHaveProperty('disabled', true)
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select failed.txt' }))
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select interrupted.txt' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select waiting.txt' }))
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select first.txt' }))
   expect(screen.getByRole('button', { name: 'Delete stored files (1)' })).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: 'Remove failed records (2)' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Remove local records (3)' }))
   fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove local records' }))
   await waitFor(() =>
     expect(

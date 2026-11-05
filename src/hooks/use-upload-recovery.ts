@@ -29,7 +29,13 @@ export function useUploadRecovery(activeIds: ReadonlySet<string>) {
         return
       }
       const file = getLatestHistory().find((file) => file.id === id)
-      if (!file?.upload || file.upload.phase === 'complete' || file.upload.phase === 'failed') return
+      if (
+        !file?.upload ||
+        file.upload.phase === 'complete' ||
+        file.upload.phase === 'funding' ||
+        file.upload.phase === 'failed'
+      )
+        return
       inFlight.current.add(id)
       setChecking(new Set(inFlight.current))
       const controller = new AbortController()
@@ -95,6 +101,7 @@ export function useUploadRecovery(activeIds: ReadonlySet<string>) {
           !active.current.has(file.id) &&
           file.upload.phase !== 'complete' &&
           file.upload.phase !== 'failed' &&
+          file.upload.phase !== 'funding' &&
           (file.upload.phase !== 'interrupted' || Boolean(file.pieceCid)) &&
           file.upload.checks < CONFIRMATION_CHECK_LIMIT &&
           file.upload.nextCheckAt <= Date.now()

@@ -1,5 +1,5 @@
 import { File, Folder, Loader2, ShieldCheck, Wallet } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useUploadTasks } from '../../context/upload-tasks-context.tsx'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
@@ -20,6 +20,11 @@ export default function Content() {
   const [uploadFolder, setUploadFolder] = useState('')
   const [uploadKind, setUploadKind] = useState<'file' | 'folder'>('file')
   const [panel, setPanel] = useState<'wallet' | 'upload' | null>(null)
+  useEffect(() => {
+    const open = () => setPanel('wallet')
+    window.addEventListener('drive-open-wallet', open)
+    return () => window.removeEventListener('drive-open-wallet', open)
+  }, [])
   const canUpload = Boolean(
     connection.sessionStatus === 'active' && synapse && wallet.status === 'ready' && storageSetup?.status === 'ready'
   )

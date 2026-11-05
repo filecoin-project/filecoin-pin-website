@@ -86,4 +86,15 @@ After reload, Drive checks saved provider operations without uploading files aga
 
 Wallet setup transactions that time out remain pending to prevent duplicate submissions. Use **Refresh status** to check again. If IPFS indexing checks stop, the stored file remains downloadable; **Retry indexing checks** starts another bounded round. Indexing is not a guarantee of gateway availability or replica health.
 
+
+### Planning storage funds
+
+In **Wallet and Storage**, **Storage funds** estimates a top-up for an expected capacity and usage budget (defaults: 1 GiB and 30 days). The read-only SDK quote includes the selected storage copies, dataset setup, required reserves and additional runway. Existing matching datasets are reused. The card shows the SDK’s monthly storage rate, available funds and suggested top-up. Locked reserves are in **How estimates work**. It does not derive a budget total from the deposit shortfall. Many small uploads can incur more operation fees than the single-piece planning estimate. A required top-up automatically fills the deposit input; when no top-up is needed it starts empty. Manual edits are preserved when quotes refresh; **Deposit USDFC** still requires an explicit owner-wallet action. Payment approval remains separate.
+
+Before each transfer, an SDK quote checks the actual packed size against the actual selected storage contexts. Insufficient funding produces **Waiting for funding**, pauses the transfer queue and leaves wallet funding actions available. File details link to **Wallet and Storage**, which also shows the last checked upload minimum. After funding or approval, use **Check funding and continue** to recheck and resume. Original file bytes remain available in the current page; after a reload, select the original file or folder again. Other queued files wait until the blocked upload is continued or removed. Ordinary transfer failures retain the existing failure behavior.
+
+Run `node scripts/test-drive-funding.mjs` against `npm run dev` for mocked budget states, waiting-upload navigation and desktop/mobile screenshots. These checks submit no live transactions.
+
+Queued **Waiting** uploads and **Waiting for funding** uploads can be selected together with failed local records and removed using **Remove local records**. The selected tasks are canceled as one batch before the queue advances; original file bytes are released. Active transfers and submitted storage operations are excluded. Removing these records does not submit a chain transaction or delete stored files.
+
 [Back to README](../README.md)

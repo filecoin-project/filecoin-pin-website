@@ -103,3 +103,14 @@ it('shows exactly four prerequisites and distinguishes funded storage from payme
   expect(screen.getByLabelText('Storage payments not approved')).toBeTruthy()
   expect(screen.getByText('3 of 4 ready')).toBeTruthy()
 })
+
+it('keeps a waiting upload visible after wallet setup is complete', () => {
+  const review = vi.fn()
+  const proceed = vi.fn()
+  render(<WalletNextStep onContinue={proceed} onReview={review} pendingFunding />)
+  expect(screen.getByText('An upload is waiting for funding')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Continue to upload' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Review waiting upload' }))
+  expect(review).toHaveBeenCalledWith('deposit')
+  expect(proceed).not.toHaveBeenCalled()
+})

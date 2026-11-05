@@ -137,12 +137,15 @@ it('keeps the current balance visible during a refresh and reports a failed refr
         fail = reject
       })
   )
+  const budgetKey = ['drive-storage-budget', result.current?.storageScope, 0, '1', '30']
+  queryClient.setQueryData(budgetKey, { depositNeeded: 1n })
   let refresh!: Promise<void>
   await act(async () => {
     if (!result.current) throw new Error('Missing wallet context')
     refresh = result.current.refreshWallet()
   })
   await waitFor(() => expect(result.current?.wallet.status).toBe('loading'))
+  expect(queryClient.getQueryState(budgetKey)?.isInvalidated).toBe(true)
   expect(result.current?.wallet.data).toEqual(snapshot)
   await act(async () => {
     fail(new Error('RPC unavailable'))
