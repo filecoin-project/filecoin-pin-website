@@ -4,7 +4,7 @@ import { useUploadTasks } from '../../context/upload-tasks-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { getTxExplorerLink } from '../../utils/links.ts'
 import { canRemoveUpload } from '../../utils/upload/can-remove-upload.ts'
-import { copyProgress, fileStatus, fileStatusColors } from '../../utils/upload/file-status.ts'
+import { copyProgress, customerStatus, fileStatusColors } from '../../utils/upload/file-status.ts'
 import { getStepLabel } from '../../utils/upload/step-utils.ts'
 import { ButtonBase as Button } from '../ui/button/button-base.tsx'
 import { FolderPicker } from './folder-picker.tsx'
@@ -18,7 +18,7 @@ export function FileUploadDetails({ file }: { file: DatasetPiece }) {
   if (!upload) return null
   const active = tasks?.activeIds.has(file.id)
   const retryable = upload.phase === 'failed' || (upload.phase === 'interrupted' && !file.pieceCid)
-  const status = fileStatus(file)
+  const status = customerStatus(file)
   const progress = copyProgress(file)
   const removable = canRemoveUpload(file) && !active
   const queued = Boolean(tasks?.queuedIds.has(file.id))
@@ -31,22 +31,6 @@ export function FileUploadDetails({ file }: { file: DatasetPiece }) {
         <span className={`rounded px-2 py-0.5 text-[11px] font-medium ${fileStatusColors(status)}`} role="status">
           {status}
         </span>
-      </div>
-      <div className="space-y-1">
-        <p className="text-xs text-muted">
-          {file.copyCount ?? 0} of {upload.expectedCopies} copies confirmed
-        </p>
-        {progress && (
-          <p className="text-xs text-muted">
-            {progress === 'Confirming'
-              ? 'Confirming remaining copies.'
-              : progress === 'Interrupted'
-                ? 'Upload interrupted before all copies were confirmed.'
-                : progress === 'Partial' || progress === 'Failed'
-                  ? 'Fewer copies stored than requested.'
-                  : 'Uploading remaining copies.'}
-          </p>
-        )}
       </div>
       {(queued || canCheck || hasUnsavedChanges || canRetry || removable) && (
         <div className="flex flex-wrap gap-2">
@@ -145,6 +129,20 @@ export function FileUploadDetails({ file }: { file: DatasetPiece }) {
       )}
       <details className="text-xs">
         <summary className="cursor-pointer text-muted hover:text-foreground">Upload details</summary>
+        <p className="mt-3 text-xs text-muted">
+          {file.copyCount ?? 0} of {upload.expectedCopies} copies confirmed
+        </p>
+        {progress && (
+          <p className="mt-2 text-xs text-muted">
+            {progress === 'Confirming'
+              ? 'Confirming remaining copies.'
+              : progress === 'Interrupted'
+                ? 'Upload interrupted before all copies were confirmed.'
+                : progress === 'Partial' || progress === 'Failed'
+                  ? 'Fewer copies stored than requested.'
+                  : 'Uploading remaining copies.'}
+          </p>
+        )}
         <p className="mt-3 text-xs text-muted">
           File transfer · {file.pieceCid ? 'Received by provider' : 'Receipt not recorded'}
         </p>

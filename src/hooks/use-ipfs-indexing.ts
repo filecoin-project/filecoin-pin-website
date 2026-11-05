@@ -1,4 +1,5 @@
-import { checkIpniIndexer } from 'filecoin-pin/core/utils'
+import type { PDPProvider } from '@filoz/synapse-sdk'
+import { checkIpniIndexer, waitForIndexingConfirmation } from 'filecoin-pin/core/utils'
 import { CID } from 'multiformats/cid'
 import { useEffect, useRef } from 'react'
 import { withDirectoryLock } from '../lib/local-storage/directory-store.ts'
@@ -6,6 +7,8 @@ import type { DatasetPiece } from './use-dataset-pieces.ts'
 
 export const IPFS_CHECK_LIMIT = 5
 export const IPFS_CHECK_INTERVAL = 120_000
+/** After the first burst of checks, keep retrying slowly while the app is open. */
+export const IPFS_CHECK_BACKOFF_INTERVAL = 30 * 60_000
 const REQUEST_TIMEOUT = 15_000
 
 type CheckRecord = { attempts: number; nextAt: number; indexed?: boolean }
@@ -23,8 +26,10 @@ export async function reserveIndexingCheck(scope: string, cid: string, now: numb
   return withDirectoryLock(scope, () => {
     const records = readIndexingChecks(scope)
     const previous = records[cid] ?? { attempts: 0, nextAt: 0 }
-    if (previous.indexed || previous.attempts >= IPFS_CHECK_LIMIT || previous.nextAt > now) return null
-    const record = { attempts: previous.attempts + 1, nextAt: now + IPFS_CHECK_INTERVAL }
+    if (previous.indexed || previous.nextAt > now) return null
+    const attempts = previous.attempts + 1
+    const spacing = attempts >= IPFS_CHECK_LIMIT ? IPFS_CHECK_BACKOFF_INTERVAL : IPFS_CHECK_INTERVAL
+    const record = { attempts, nextAt: now + spacing }
     // Save before the request so reloads and failed requests cannot reset the budget.
     localStorage.setItem(keyFor(scope), JSON.stringify({ ...records, [cid]: record }))
     return record
@@ -69,8 +74,8 @@ export function useIpfsIndexing(
             await latest.current.update(file.cid, true, previous?.attempts ?? 0)
             continue
           }
-          if (previous?.indexed || (previous?.attempts ?? 0) >= IPFS_CHECK_LIMIT) {
-            await latest.current.update(file.cid, previous?.indexed === true, previous?.attempts ?? IPFS_CHECK_LIMIT)
+          if (previous?.indexed) {
+            await latest.current.update(file.cid, true, previous.attempts)
             continue
           }
           let record: CheckRecord | null
@@ -85,14 +90,23 @@ export function useIpfsIndexing(
           request = new AbortController()
           const timeout = window.setTimeout(() => request?.abort(), REQUEST_TIMEOUT)
           let indexed = false
+          const serviceUrls = [...new Set((file.serviceURLs ?? [file.serviceURL]).filter(Boolean))]
           try {
-            // A root-CID lookup confirms discoverability, not the number of replicas
-            // or successful retrieval of every child block.
-            indexed = await checkIpniIndexer(CID.parse(file.cid), {
-              maxAttempts: 1,
-              ipniIndexerUrl: 'https://cid.contact',
-              signal: request.signal,
-            })
+            // Prefer the storing provider's piece-status: Curio proxies the indexer
+            // sync check, so it answers quickly and a direct cid.contact lookup
+            // (which negative-caches misses) only runs as the confirming step.
+            indexed =
+              file.pieceCid && serviceUrls.length
+                ? await waitForIndexingConfirmation(CID.parse(file.cid), CID.parse(file.pieceCid), {
+                    maxAttempts: 1,
+                    expectedProviders: serviceUrls.map((serviceURL) => ({ pdp: { serviceURL } }) as PDPProvider),
+                    signal: request.signal,
+                  })
+                : await checkIpniIndexer(CID.parse(file.cid), {
+                    maxAttempts: 1,
+                    ipniIndexerUrl: 'https://cid.contact',
+                    signal: request.signal,
+                  })
           } catch {
             // A miss, timeout or network error consumes one attempt, never marks stored data failed.
           } finally {

@@ -150,7 +150,7 @@ export async function checkUploadTasks(browser) {
     }
     await start('first.txt')
     const firstRow = page.getByRole('button', { name: 'first.txt', exact: true }).locator('..').locator('..')
-    await firstRow.getByText('Confirming', { exact: true }).waitFor()
+    await firstRow.getByLabel('Uploading…').waitFor()
     assert.equal(await firstRow.getByRole('button', { name: 'Share', exact: true }).isDisabled(), true)
     const [download] = await Promise.all([
       page.waitForEvent('download'),
@@ -159,20 +159,14 @@ export async function checkUploadTasks(browser) {
     assert.equal(download.suggestedFilename(), 'first.txt')
     await start('second.txt')
     await page.evaluate(() => window.__taskUploads['second.txt'].finish())
-    await page
-      .getByRole('button', { name: 'second.txt', exact: true })
-      .locator('..')
-      .locator('..')
-      .getByText('Stored', { exact: true })
-      .waitFor()
-    await firstRow.getByText('Confirming', { exact: true }).waitFor()
+    const secondRow = page.getByRole('button', { name: 'second.txt', exact: true }).locator('..').locator('..')
+    await secondRow.getByLabel('Uploading…').waitFor({ state: 'detached' })
+    await secondRow.locator('button:not([disabled])', { hasText: 'Share' }).waitFor()
+    await firstRow.getByLabel('Uploading…').waitFor()
     await page.evaluate(() => window.__taskUploads['first.txt'].confirmPrimary())
-    await firstRow.getByText('1 / 2 confirmed', { exact: true }).waitFor()
-    await firstRow.getByText('Confirming', { exact: true }).waitFor()
-    assert.equal(
-      await firstRow.getByText(/^Stored/).evaluate((element) => element.classList.contains('text-success')),
-      true
-    )
+    await firstRow.getByLabel('Uploading…').waitFor()
+    assert.equal(await firstRow.getByText(/confirmed/).count(), 0, 'Replication counts must stay out of the list')
+    assert.equal(await firstRow.getByText('Stored', { exact: true }).count(), 0, 'Stored must not render as a badge')
     await page.screenshot({ path: '/tmp/drive-partial-copy-status.png', fullPage: true })
     assert.equal(await page.getByRole('complementary', { name: 'Upload activity' }).count(), 0)
     await page.getByRole('button', { name: 'first.txt', exact: true }).click()
@@ -212,7 +206,7 @@ export async function checkUploadTasks(browser) {
     await page.getByRole('button', { name: 'interrupted.txt', exact: true }).click()
     const interrupted = page.getByRole('dialog', { name: 'interrupted.txt', exact: true })
     await interrupted.getByRole('button', { name: 'Check status', exact: true }).click()
-    await interrupted.getByText('Upload interrupted', { exact: true }).waitFor()
+    await interrupted.getByText('Upload failed', { exact: true }).waitFor()
     assert.equal(await interrupted.getByText(/Background upload work has stopped/).isVisible(), false)
     assert.equal(
       await interrupted.getByText('File transfer · Received by provider', { exact: true }).isVisible(),
@@ -222,9 +216,9 @@ export async function checkUploadTasks(browser) {
       .getByRole('button', { name: 'interrupted.txt', exact: true, includeHidden: true })
       .locator('..')
       .locator('..')
-    await interruptedRow.getByText('Upload interrupted', { exact: true }).waitFor()
+    await interruptedRow.getByText('Upload failed', { exact: true }).waitFor()
     assert.equal(await interruptedRow.getByText('Interrupted', { exact: true }).count(), 0)
-    await interruptedRow.getByText('0 / 2 confirmed', { exact: true }).waitFor()
+    assert.equal(await interruptedRow.getByText(/confirmed/).count(), 0, 'Replication counts must stay out of the list')
     await page.screenshot({ path: '/tmp/drive-upload-status-interrupted-collapsed.png', fullPage: true })
 
     await interrupted.getByText('Upload details', { exact: true }).click()
@@ -247,10 +241,8 @@ export async function checkUploadTasks(browser) {
     await mkdir(join(folderPath, 'docs'), { recursive: true })
     await writeFile(join(folderPath, '研究.txt'), 'hello folder')
     await writeFile(join(folderPath, 'docs', 'notes.txt'), 'nested notes')
-    await page.waitForFunction(() =>
-      [...document.querySelectorAll('button')].some(
-        (button) => button.textContent.trim() === 'Load from Filecoin' && !button.disabled
-      )
+    await page.waitForFunction(
+      () => document.querySelector('section[aria-label="Files list"]')?.getAttribute('aria-busy') === 'false'
     )
     const mainSearchBox = await page.getByRole('searchbox', { name: 'Search file list', exact: true }).boundingBox()
     await page.getByRole('button', { name: 'Upload files', exact: true }).click()

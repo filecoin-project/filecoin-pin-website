@@ -37,3 +37,24 @@ export function copyProgress(file: DatasetPiece) {
   if (upload.phase === 'complete') return 'Partial'
   return 'Confirming'
 }
+
+/** Collapsed customer-facing vocabulary; everything finer-grained is developer detail. */
+export type CustomerStatus = 'Uploading…' | 'Stored' | 'Upload failed' | 'Deleting…'
+
+/**
+ * A file counts as Stored once one provider holds the bytes (pieceCid
+ * recorded) AND the root CID is announced on IPNI — the point where download
+ * and share links both resolve. Chain confirmation and replication continue
+ * in the background as internals. Records without an indexing marker
+ * (legacy or index-recovered) are Stored.
+ */
+export function customerStatus(file: DatasetPiece): CustomerStatus {
+  if (isDeletionScheduled(file) || hasRemovalProgress(file)) return 'Deleting…'
+  if (file.upload && !(file.copyCount ?? 0)) {
+    if (file.upload.phase === 'failed' || file.upload.phase === 'interrupted') return 'Upload failed'
+    if (file.pieceCid && file.ipfsIndexed === true) return 'Stored'
+    return 'Uploading…'
+  }
+  if (file.cid && file.ipfsIndexed === false) return 'Uploading…'
+  return 'Stored'
+}

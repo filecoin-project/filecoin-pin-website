@@ -34,7 +34,7 @@ import {
   getTxExplorerLink,
 } from '../../utils/links.ts'
 import { canRemoveUpload } from '../../utils/upload/can-remove-upload.ts'
-import { copyProgress, fileStatus, fileStatusColors } from '../../utils/upload/file-status.ts'
+import { customerStatus, fileStatus } from '../../utils/upload/file-status.ts'
 import { ButtonBase as Button, buttonVariants } from '../ui/button/button-base.tsx'
 import { CopyButton } from '../ui/copy-button.tsx'
 import { BatchDeleteDialog } from './batch-delete-dialog.tsx'
@@ -48,8 +48,6 @@ import { SidePanel } from './side-panel.tsx'
 import { compareValues, nameOrder, SortHeading, sizeInBytes, useFileSort } from './sort-heading.tsx'
 
 export { fileStatus } from '../../utils/upload/file-status.ts'
-
-const confirmedCopies = (file: DatasetPiece) => file.copyCount ?? (file.upload ? 0 : 1)
 
 interface Props {
   folder: string
@@ -103,7 +101,24 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
   const [error, setError] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const { deleteFile, deletingPieceCids, autoCheckingPieceCids, deletionErrors } = useFileDeletion()
-  const displayStatus = (file: DatasetPiece) => (deletingPieceCids.has(file.pieceCid) ? 'Deleting' : fileStatus(file))
+  const displayStatus = (file: DatasetPiece) =>
+    deletingPieceCids.has(file.pieceCid) ? 'Deleting…' : customerStatus(file)
+  const rowIndicator = (file: DatasetPiece) => {
+    const status = displayStatus(file)
+    if (status === 'Uploading…' || status === 'Deleting…')
+      return (
+        <span aria-label={status} className="ml-2 inline-flex align-middle text-accent" role="img" title={status}>
+          <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" size={14} />
+        </span>
+      )
+    if (status === 'Upload failed')
+      return (
+        <span className="ml-2 inline-flex items-center rounded-md bg-red-500/10 px-2 py-0.5 align-middle text-[11px] text-danger">
+          Upload failed
+        </span>
+      )
+    return null
+  }
   const { download, queuedDownloads, downloadError, enqueueDownload, cancelQueuedDownload } = useDownloadQueue(
     synapse,
     storageScope
@@ -223,10 +238,6 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
             return displayFileName(file)
           case 'size':
             return sizeInBytes(file.fileSize)
-          case 'status':
-            return displayStatus(file)
-          case 'copies':
-            return confirmedCopies(file)
           case 'uploaded':
             return file.uploadedAt || undefined
         }
@@ -310,12 +321,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
     <section className="drive-panel overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
         <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3">
-          <h2 className="flex items-center gap-2.5 text-base font-semibold">
-            Files{' '}
-            <span className="rounded-md bg-surface-raised px-2 py-0.5 text-xs font-normal tabular-nums text-muted">
-              {!visibleHistory.length && (!hasLoaded || directoryError) ? '—' : visibleHistory.length}
-            </span>
-          </h2>
+          <h2 className="flex items-center gap-2.5 text-base font-semibold">Files</h2>
         </div>
         <div className="flex w-full flex-wrap items-center justify-end gap-2 md:w-auto">
           {selectedFiles.length > 0 && (
@@ -364,16 +370,6 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
               value={search}
             />
           </label>
-          <Button
-            className="w-auto"
-            disabled={isLoading || isEditing}
-            onClick={() => refreshHistory()}
-            size="sm"
-            variant="secondary"
-          >
-            {isLoading && <Loader2 aria-hidden="true" className="animate-spin" size={14} />}
-            Load from Filecoin
-          </Button>
           {onUpload && (
             <Button
               aria-label="Upload files"
@@ -389,13 +385,25 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
         </div>
       </div>
       {directoryError && (
-        <p className="px-5 py-3 text-sm text-warning break-words sm:px-6" role="alert" title={directoryError}>
-          {!saveError && indexError
-            ? visibleHistory.length
-              ? 'Unable to load the latest file list. Your existing list is still available.'
-              : 'Unable to load your file list. Please try again.'
-            : directoryError}
-        </p>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 sm:px-6">
+          <p className="text-sm text-warning break-words" role="alert" title={directoryError}>
+            {!saveError && indexError
+              ? visibleHistory.length
+                ? 'Unable to load the latest file list. Your existing list is still available.'
+                : 'Unable to load your file list. Please try again.'
+              : directoryError}
+          </p>
+          <Button
+            className="w-auto"
+            disabled={isLoading || isEditing}
+            onClick={() => refreshHistory()}
+            size="sm"
+            variant="secondary"
+          >
+            {isLoading && <Loader2 aria-hidden="true" className="animate-spin" size={14} />}
+            Retry
+          </Button>
+        </div>
       )}
       {download && (
         <div className="border-b border-border bg-canvas/30 px-5 py-3 text-sm sm:px-6">
@@ -525,8 +533,13 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                 </nav>
               </div>
             </div>
-            <section aria-label="Files list" className="drive-file-list" key={`${folder}:${search}`}>
-              <table className={`${files.length || children.length ? 'min-w-[760px]' : ''} w-full text-left text-sm`}>
+            <section
+              aria-busy={isLoading}
+              aria-label="Files list"
+              className="drive-file-list"
+              key={`${folder}:${search}`}
+            >
+              <table className={`${files.length || children.length ? 'min-w-[560px]' : ''} w-full text-left text-sm`}>
                 <thead className="text-xs text-muted">
                   <tr>
                     <th className="w-12 px-2 py-2">
@@ -554,8 +567,6 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                     </th>
                     <SortHeading column="name" label="Name" onSort={toggleSort} sort={sort} />
                     <SortHeading column="size" label="Size" onSort={toggleSort} sort={sort} />
-                    <SortHeading column="status" label="Status" onSort={toggleSort} sort={sort} />
-                    <SortHeading column="copies" label="Copies" onSort={toggleSort} sort={sort} />
                     <SortHeading column="uploaded" label="Uploaded" onSort={toggleSort} sort={sort} />
                     <th className="px-4 py-2 font-medium">Actions</th>
                   </tr>
@@ -565,7 +576,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                     children.map((path) => (
                       <tr className="border-t border-border" key={path}>
                         <td className="px-4 py-3" />
-                        <td className="px-4 py-3 whitespace-nowrap" colSpan={6}>
+                        <td className="px-4 py-3 whitespace-nowrap" colSpan={4}>
                           <button
                             className="inline-flex items-center gap-2 align-middle text-left hover:underline"
                             onClick={() => onFolderChange(path)}
@@ -613,30 +624,9 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                             {displayFileName(file)}
                           </span>
                         </button>
+                        {rowIndicator(file)}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">{file.fileSize}</td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] ${fileStatusColors(displayStatus(file))}`}
-                        >
-                          <span className="h-1 w-1 shrink-0 rounded-full bg-current" />
-                          {displayStatus(file)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 tabular-nums text-muted">
-                        <span
-                          className="whitespace-nowrap"
-                          title={`${confirmedCopies(file)} confirmed storage ${confirmedCopies(file) === 1 ? 'copy' : 'copies'}`}
-                        >
-                          {file.upload &&
-                          (file.upload.phase !== 'complete' || confirmedCopies(file) < file.upload.expectedCopies)
-                            ? `${confirmedCopies(file)} / ${file.upload.expectedCopies} confirmed`
-                            : confirmedCopies(file)}
-                        </span>
-                        {copyProgress(file) && (
-                          <span className="mt-1 block text-[11px] text-warning">{copyProgress(file)}</span>
-                        )}
-                      </td>
                       <td className="px-4 py-3 whitespace-nowrap text-xs text-muted">
                         {file.uploadedAt
                           ? file.isDirectory &&
@@ -692,7 +682,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                   ))}
                   {files.length === 0 && (search || children.length === 0) && (
                     <tr>
-                      <td className="px-5 py-16 text-center text-muted" colSpan={7}>
+                      <td className="px-5 py-16 text-center text-muted" colSpan={5}>
                         <span
                           aria-hidden="true"
                           className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-canvas/40 text-accent"
@@ -701,18 +691,18 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                         </span>
                         <p className="mb-2 text-sm font-medium text-foreground">
                           {waitingForIndex
-                            ? 'Loading files from Filecoin…'
+                            ? 'Loading your files…'
                             : directoryError && !visibleHistory.length
-                              ? 'Unable to load files from Filecoin'
+                              ? 'Unable to load your files'
                               : search
                                 ? 'No matching files.'
                                 : 'A little space for something new'}
                         </p>
                         <p className="text-xs">
                           {waitingForIndex
-                            ? 'Checking the Filecoin index for your files.'
+                            ? 'This can take a moment.'
                             : directoryError && !visibleHistory.length
-                              ? 'Your files may still be stored on Filecoin. Retry loading the file list.'
+                              ? 'Your files are safe. Retry loading the file list.'
                               : search
                                 ? 'Try a different file name or folder.'
                                 : 'No files here yet. Upload to this folder.'}
@@ -837,7 +827,8 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                       <details className="mt-2 space-y-2">
                         <summary className="cursor-pointer text-xs text-muted">IPFS indexing</summary>
                         <p className="text-xs text-muted">
-                          Automatic indexing checks stopped after 5 attempts. Your stored file can still be downloaded.
+                          Indexing is taking longer than usual. Checks continue in the background while this app is
+                          open. Your stored file can still be downloaded.
                         </p>
                         <Button
                           disabled={disabled || !storageScope}
@@ -850,7 +841,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                           size="sm"
                           variant="secondary"
                         >
-                          Retry indexing checks
+                          Check now
                         </Button>
                       </details>
                     )}

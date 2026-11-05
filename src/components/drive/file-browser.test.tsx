@@ -9,6 +9,7 @@ import {
   mutateCachedPieces,
   setCachedPieces,
 } from '../../lib/local-storage/piece-cache.ts'
+import { customerStatus } from '../../utils/upload/file-status.ts'
 import { FileBrowser, fileStatus } from './file-browser.tsx'
 
 const mocks = vi.hoisted(() => ({
@@ -220,7 +221,8 @@ it('resumes deletion of shared content through details even when the selected re
   await within(screen.getByRole('dialog')).findByText('second provider unavailable')
   expect(getCachedPieces(scope)?.[0].deletion?.['1'].confirmed).toBe(true)
   expect(screen.getByRole('button', { name: 'second.txt', hidden: true })).toBeTruthy()
-  expect(screen.getByText('Deletion incomplete', { exact: true })).toBeTruthy()
+  expect(screen.getByText(/· Deleting…/)).toBeTruthy()
+  expect(screen.getAllByLabelText('Deleting…').length).toBeGreaterThan(0)
   const retry = screen.getByRole('button', { name: 'Continue deletion' })
   expect(retry).toHaveProperty('disabled', false)
   mocks.context.mockResolvedValue({ deletePieces: mocks.submit, getScheduledRemovals: async () => [] })
@@ -267,6 +269,29 @@ it('keeps indexing progress out of the stored-file status', () => {
   ).toBe('Deletion scheduled')
 })
 
+it('collapses internal states into the customer vocabulary', () => {
+  const upload: NonNullable<DatasetPiece['upload']> = {
+    phase: 'waiting',
+    expectedCopies: 2,
+    providers: [],
+    steps: [],
+    checks: 0,
+    nextCheckAt: 0,
+  }
+  expect(customerStatus({ ...file, copyCount: 0, upload })).toBe('Uploading…')
+  expect(customerStatus({ ...file, copyCount: 0, upload: { ...upload, phase: 'pending' } })).toBe('Uploading…')
+  expect(customerStatus({ ...file, copyCount: 0, upload, ipfsIndexed: true })).toBe('Stored')
+  expect(customerStatus({ ...file, copyCount: 0, pieceCid: '', upload, ipfsIndexed: true })).toBe('Uploading…')
+  expect(customerStatus({ ...file, copyCount: 0, upload: { ...upload, phase: 'failed' } })).toBe('Upload failed')
+  expect(customerStatus({ ...file, copyCount: 0, upload: { ...upload, phase: 'interrupted' } })).toBe('Upload failed')
+  expect(customerStatus({ ...file, ipfsIndexed: false })).toBe('Uploading…')
+  expect(customerStatus({ ...file, ipfsIndexed: true })).toBe('Stored')
+  expect(customerStatus(file)).toBe('Stored')
+  expect(customerStatus({ ...file, copyCount: 1, upload: { ...upload, phase: 'pending' } })).toBe('Stored')
+  expect(customerStatus({ ...file, deletion: {} })).toBe('Deleting…')
+  expect(customerStatus({ ...file, deletion: { '1': { confirmed: true, transactionHash: hash } } })).toBe('Deleting…')
+})
+
 it('keeps removed files hidden after restore and reload, but shows a new identical upload', async () => {
   const archived = { ...file, folderPath: 'old/nested', deletion: { '1': { confirmed: true, transactionHash: hash } } }
   setCachedPieces(scope, [archived])
@@ -280,7 +305,7 @@ it('keeps removed files hidden after restore and reload, but shows a new identic
   await screen.findByText('No files here yet. Upload to this folder.')
   expect(screen.queryByRole('button', { name: 'first.txt' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'old' })).toBeNull()
-  expect(screen.getByRole('heading', { name: 'Files 0' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Files' })).toBeTruthy()
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search file list' }), { target: { value: 'first' } })
   expect(screen.getByText('No matching files.')).toBeTruthy()
   expect(getCachedPieces(scope)?.[0].deletion).toEqual(archived.deletion)
@@ -289,7 +314,7 @@ it('keeps removed files hidden after restore and reload, but shows a new identic
   mount()
   expect(await screen.findByRole('button', { name: 'new.txt' })).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'first.txt' })).toBeNull()
-  expect(screen.getByRole('heading', { name: 'Files 1' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Files' })).toBeTruthy()
   expect(getCachedPieces(scope)).toHaveLength(2)
   expect(getCachedPieces(scope)?.find((record) => record.id === 'new-upload')?.deletion).toBeUndefined()
 })
@@ -526,7 +551,7 @@ it.each([false, true])('keeps deletion running after closing details (failure: %
   await waitFor(() => expect(mocks.submit).toHaveBeenCalledOnce())
   fireEvent.click(screen.getByRole('button', { name: 'Close details' }))
   expect(screen.queryByRole('dialog')).toBeNull()
-  expect(screen.getByText('Deleting', { exact: true })).toBeTruthy()
+  expect(screen.getByLabelText('Deleting…')).toBeTruthy()
   expect(mocks.deleting).not.toHaveBeenCalledWith(false)
   await act(async () => finish())
   if (fails) {
@@ -578,10 +603,6 @@ it.each([false, true])(
     expect(rowDownload('alias.txt')).toHaveProperty('disabled', true)
     expect(rowDownload('other.txt')).toHaveProperty('disabled', false)
     expect(screen.getByRole('button', { name: 'Upload files' })).toHaveProperty('disabled', uploadActive)
-    const refresh = screen.getByRole('button', { name: 'Load from Filecoin' })
-    expect(refresh).toHaveProperty('disabled', false)
-    fireEvent.click(refresh)
-    await waitFor(() => expect(mocks.index).toHaveBeenCalledTimes(2))
     fireEvent.click(rowDownload('other.txt'))
     await waitFor(() => expect(mocks.download).toHaveBeenCalledOnce())
     await act(async () => finish(hash))
@@ -626,7 +647,7 @@ it('shows a partially queued deletion per provider and offers continuing the rem
   expect(dialog.getByRole('link', { name: 'Removal scheduled' }).getAttribute('href')).toContain(hash)
   expect(dialog.queryByText('Deletion scheduled', { exact: true })).toBeNull()
   expect(screen.getByRole('button', { name: 'Continue deletion' })).toBeTruthy()
-  expect(screen.getByText('Deletion incomplete', { exact: true })).toBeTruthy()
+  expect(screen.getByText(/· Deleting…/)).toBeTruthy()
 })
 
 it.each([false, true])('keeps original downloads without a gateway download link (CAR: %s)', async (importedCar) => {
@@ -695,9 +716,9 @@ it('keeps the empty cache in a loading state, then offers retry after index fail
     </UploadHistoryProvider>
   )
   expect(screen.queryByText('No files here yet. Upload to this folder.')).toBeNull()
-  expect(screen.getByText('Loading files from Filecoin…')).toBeTruthy()
+  expect(screen.getByText('Loading your files…')).toBeTruthy()
   await act(async () => fail(new Error('Index temporarily unavailable')))
-  expect(screen.getByText('Unable to load files from Filecoin')).toBeTruthy()
+  expect(screen.getByText('Unable to load your files')).toBeTruthy()
   expect(screen.getByRole('alert').textContent).toBe('Unable to load your file list. Please try again.')
   expect(screen.queryByText('No files here yet. Upload to this folder.')).toBeNull()
   mocks.index.mockResolvedValueOnce([file])
@@ -714,7 +735,7 @@ it('shows a confirmed empty directory only after a successful index response', a
     </UploadHistoryProvider>
   )
   await screen.findByText('No files here yet. Upload to this folder.')
-  expect(screen.queryByText('Loading files from Filecoin…')).toBeNull()
+  expect(screen.queryByText('Loading your files…')).toBeNull()
 })
 
 it('retains files and upload access when the index is unavailable', async () => {
@@ -760,7 +781,7 @@ it('shows the save error when index retrieval succeeds but writing the cache fai
     )
     expect(screen.getByRole('alert').textContent).toContain('free browser storage and retry saving')
     write.mockRestore()
-    fireEvent.click(screen.getByRole('button', { name: 'Load from Filecoin' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
   } finally {
     write.mockRestore()
@@ -768,37 +789,31 @@ it('shows the save error when index retrieval succeeds but writing the cache fai
 })
 
 it.each([
-  ['pending', 2, 'Confirming'],
-  ['interrupted', 2, 'Interrupted'],
-  ['complete', 2, 'Partial'],
-  ['complete', 1, null],
-] as const)(
-  'separates stored-file success from %s copy progress with target %s',
-  async (phase, expectedCopies, label) => {
-    setCachedPieces(scope, [
-      {
-        ...file,
-        copyCount: 1,
-        upload: { phase, expectedCopies, providers: [], steps: [], checks: 0, nextCheckAt: 0 },
-      },
-    ])
-    render(
-      <UploadHistoryProvider>
-        <FileBrowser folder="" onFolderChange={vi.fn()} />
-      </UploadHistoryProvider>
-    )
-    const count =
-      phase === 'complete' && expectedCopies === 1
-        ? await screen.findByTitle('1 confirmed storage copy')
-        : await screen.findByText(`1 / ${expectedCopies} confirmed`)
-    const row = count.closest('tr')
-    expect(row).toBeTruthy()
-    if (!row) return
-    expect(within(row).getByText('Stored', { exact: true }).className).toContain('text-success')
-    if (label) expect(within(row).getByText(label, { exact: true })).toBeTruthy()
-    else expect(within(row).queryByText('Confirming', { exact: true })).toBeNull()
-  }
-)
+  ['pending', 'Confirming remaining copies.'],
+  ['interrupted', 'Upload interrupted before all copies were confirmed.'],
+  ['complete', 'Fewer copies stored than requested.'],
+] as const)('keeps %s replication progress out of the list and shows it in details', async (phase, detail) => {
+  setCachedPieces(scope, [
+    {
+      ...file,
+      copyCount: 1,
+      upload: { phase, expectedCopies: 2, providers: [], steps: [], checks: 0, nextCheckAt: 0 },
+    },
+  ])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  const row = (await screen.findByRole('button', { name: 'first.txt' })).closest('tr') as HTMLElement
+  expect(within(row).queryByText('Stored')).toBeNull()
+  expect(within(row).queryByText(/confirmed/)).toBeNull()
+  expect(within(row).queryByLabelText('Uploading…')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'first.txt' }))
+  const dialog = within(screen.getByRole('dialog'))
+  expect(dialog.getByText('1 of 2 copies confirmed')).toBeTruthy()
+  expect(dialog.getByText(detail)).toBeTruthy()
+})
 
 it('highlights the session requirement without deleting or closing details', async () => {
   mocks.hasSession = false
@@ -937,17 +952,15 @@ it('keeps manual continuation disabled throughout automatic checking without cha
   fireEvent.click(button)
   expect(mocks.submit).not.toHaveBeenCalled()
   expect(
-    within(screen.getByRole('button', { name: 'first.txt', hidden: true }).closest('tr') as HTMLElement).getByText(
-      'Deletion pending',
-      { exact: true }
+    within(screen.getByRole('button', { name: 'first.txt', hidden: true }).closest('tr') as HTMLElement).getByLabelText(
+      'Deleting…'
     )
   ).toBeTruthy()
   mocks.autoChecking = new Set()
   rerender(view())
   expect(
-    within(screen.getByRole('button', { name: 'first.txt', hidden: true }).closest('tr') as HTMLElement).getByText(
-      'Deletion pending',
-      { exact: true }
+    within(screen.getByRole('button', { name: 'first.txt', hidden: true }).closest('tr') as HTMLElement).getByLabelText(
+      'Deleting…'
     )
   ).toBeTruthy()
   fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
@@ -1086,17 +1099,6 @@ it('defaults to newest uploads and allows name and size sorting without persisti
   render(renderBrowser())
   await screen.findByRole('button', { name: 'file1.txt' })
   expect(names()).toEqual(['file10.txt', 'file1.txt', 'file2.txt'])
-})
-
-it('uses the same default copy count for legacy records and their tooltip', async () => {
-  setCachedPieces(scope, [{ ...file, copyCount: undefined, upload: undefined }])
-  render(
-    <UploadHistoryProvider>
-      <FileBrowser folder="" onFolderChange={vi.fn()} />
-    </UploadHistoryProvider>
-  )
-  const copies = await screen.findByTitle('1 confirmed storage copy')
-  expect(copies.textContent).toBe('1')
 })
 
 it('does not group uploads with missing piece CIDs and removes only selected safe local records', async () => {
