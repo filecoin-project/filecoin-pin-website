@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Filecoin Drive — A drive, right in your browser.</title>
+<meta name="description" content="A drive, right in your browser. Store your files on Filecoin and keep control with your wallet.">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+<link rel="preload" href="/fonts/funnel-sans-variable.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/AspektaVF.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face{font-family:'Funnel Sans';src:url('/fonts/funnel-sans-variable.woff2') format('woff2');font-weight:300 800;font-display:swap}
+@font-face{font-family:Aspekta;src:url('/fonts/AspektaVF.woff2') format('woff2');font-weight:100 900;font-display:swap}*{box-sizing:border-box}body{margin:0;color:var(--ink);background:#f2f7ff}button,a,input{-webkit-tap-highlight-color:transparent}button,a{cursor:pointer}button{font:inherit}button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--coral);outline-offset:5px}a{color:inherit;text-decoration:none}.page{height:100svh;position:relative;overflow:hidden;background:radial-gradient(ellipse at 65% 42%,#ffffff 0,#eaf2ff 62%,#e1edff 100%)}.page:after{content:'';position:absolute;inset:0;pointer-events:none;opacity:.18;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%236c9690' opacity='.16' filter='url(%23n)' d='M0 0h180v180H0z'/%3E%3C/svg%3E")}.panel,.footer,.tour{font-family:'Funnel Sans',monospace}.topbar{height:99px;position:relative;z-index:3;display:flex;align-items:center;justify-content:space-between;margin:0 3.5%;border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:13px;letter-spacing:-1px}.brand-mark{color:#eef9f6;font-size:34px;font-family:Georgia,serif;text-align:center;line-height:39px}.brand small{font-weight:400}.nav{display:flex}.nav a:hover{color:var(--coral)}.top-actions{display:flex;gap:24px;align-items:center}.network{font:9px 'Funnel Sans',monospace}.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--teal);margin-right:7px;box-shadow:0 0 0 3px #006fce10}.hero{position:absolute;left:5.2%;z-index:2;pointer-events:none}.hero>*{pointer-events:auto}h1{margin:28px 0 25px}h1 em{font-style:normal;color:var(--coral)}.hero-actions{display:flex;margin-top:29px}.primary{display:flex;gap:30px;align-items:center}#scene{position:absolute;inset:100px 0 140px;width:100%;height:calc(100% - 240px);touch-action:none;cursor:grab}#scene:active{cursor:grabbing}.side{position:absolute;right:3.5%;z-index:2}.panel{border:1px solid var(--line);font-size:8px}.panel-head{display:flex;justify-content:space-between;border-bottom:1px solid var(--line)}.panel-head span{color:#78938f}.large-number{font:500 29px 'Funnel Sans',sans-serif;letter-spacing:-1px;margin:7px 0}.large-number small{font:8px 'Funnel Sans',monospace;letter-spacing:0;color:var(--mid)}.panel-row{display:flex;justify-content:space-between;color:var(--mid)}.panel-row b{font-weight:400;color:var(--teal)}.tour{position:absolute;left:44%;bottom:90px;border:1px solid #b8cfea;z-index:3}.tour-top{display:flex;justify-content:space-between}.tour-top span:last-child{color:var(--mid)}.tour-controls{display:flex;gap:14px;align-items:center}.rail{flex:1;accent-color:var(--coral);cursor:pointer;min-width:0}.steps{margin:13px 0 0 44px}.steps button{border:0;background:none;font:8px 'Funnel Sans',monospace;color:var(--mid)}.steps button.active{color:var(--coral)}.status{position:absolute;left:5.2%}.status h2{font-weight:500;margin:10px 0 7px;letter-spacing:-.7px}.status p{color:var(--mid);margin:0}.footer{position:absolute;left:3.5%;right:3.5%;bottom:0;height:59px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;color:var(--mid)}.footer a{color:var(--ink)}.fallback{position:absolute;left:49%;top:45%;max-width:250px;font-size:13px;color:var(--mid)}dialog{border:1px solid var(--line);padding:35px;max-width:560px;width:90%;color:var(--ink)}dialog::backdrop{background:#122d5066;backdrop-filter:blur(5px)}dialog h2{font-size:30px;letter-spacing:-1px}dialog p{line-height:1.8;color:var(--mid)}dialog button{float:right;background:transparent;border:1px solid var(--line);padding:8px 12px}dialog li{line-height:1.8;margin:13px 0}#load-bar{display:flex;gap:2px;height:17px;margin-top:13px}#load-bar i{flex:1;background:#d5e3f6}#load-bar i.on{background:var(--teal)}@media(max-width:1050px){.network{display:none}.hero{left:4%}.primary{gap:18px}.tour{left:40%}}@media(max-width:820px){.topbar{height:78px}.brand-mark{line-height:32px;font-size:29px}.nav,.side{display:none}.hero{left:7%;text-align:center}h1{margin:20px 0 16px}h1 br{display:block}.intro{margin:auto}.hero-actions{justify-content:center;margin-top:21px}#scene{top:440px;height:370px;bottom:auto}.status{display:none}.tour{left:6%;bottom:82px}.footer{gap:15px;height:58px}.footer span:last-child{display:none}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+
+.brand-mark{background:none;border-radius:0;object-fit:contain}.world-map{width:100%;display:block}.panel-copy{font:11px/1.65 'Funnel Sans',sans-serif;color:var(--mid);margin:9px 0 0}.wallet-title{display:flex;align-items:center;gap:9px;font:500 14px 'Funnel Sans',sans-serif;letter-spacing:-.3px}.wallet-link{display:flex;justify-content:space-between;width:100%;border:0;border-top:1px solid var(--line);padding:11px 0 0;margin-top:12px;background:none;color:var(--ink);font:9px 'Funnel Sans',monospace}.wallet-link:hover{color:var(--coral)}.steps button{padding:4px 0}.steps button:hover{color:var(--coral)}
+@media(max-width:1050px) and (min-width:821px){.side{right:2%}}
+@media(max-width:820px){#scene{top:425px;height:410px}}
+@media(min-width:821px) and (max-height:820px){.panel-copy{margin-top:6px}.wallet-link{margin-top:8px}}h1{font-size:clamp(52px,5.2vw,80px);line-height:1.04;margin-top:0}.status p{font:11px/1.7 'Funnel Sans',sans-serif}.steps{margin-left:0}.brand-mark{width:44px;height:40px;flex-shrink:0}
+@media(max-width:820px){h1{font-size:47px}.brand-mark{width:37px;height:33px}#scene{top:425px}.steps{row-gap:8px}.tour{bottom:72px}}
+@media(min-width:821px) and (max-height:820px){h1{font-size:62px}.hero-actions{margin-top:22px}}
+
+@media(min-width:821px){#scene{inset:0;width:100%;height:100%}.topbar{background:rgba(242,247,255,.72);backdrop-filter:blur(8px)}.hero h1,.hero .intro,.status{text-shadow:0 0 10px #f2f7ff,0 0 22px #f2f7ff,0 0 35px #f2f7ff}.page:before{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(90deg,rgba(242,247,255,.9),rgba(242,247,255,.65) 28%,transparent 49%)}.status,.footer{z-index:2}}
+
+.demo-link{align-items:center;border:1px solid #85a7d0;font:500 12px 'Funnel Sans',sans-serif}.tour-top{align-items:center;gap:12px}.hero-actions{flex-wrap:wrap}
+@media(max-width:820px){.primary{gap:15px}.tour-top{flex-wrap:wrap;gap:9px}}
+
+/* Larger type and blue surfaces keep copy readable over the full-screen scene. */
+.page{min-height:900px}.brand{font-size:26px}.nav{font-size:14px;gap:25px}.network{font-size:11px;letter-spacing:.5px}.outline{font-size:14px;padding:13px 18px}.intro{font-size:18px;line-height:1.7;max-width:390px}.primary,.demo-link{font-size:15px;padding:16px 19px}.hero-actions{gap:12px}.side{width:235px;top:145px}.panel{padding:16px;margin-bottom:12px}.panel-head{font-size:12px;padding-bottom:12px;margin-bottom:12px}.panel-copy{font-size:14px;line-height:1.55}.panel-row{font-size:11px;margin-top:12px}.large-number{font-size:34px}.large-number small{font-size:10px}.wallet-title{font-size:17px}.wallet-link{font-size:13px;padding-top:12px}.world-map{height:55px}.tour{right:calc(3.5% + 250px)}.rail{height:5px;width:100%;margin:0}.steps{grid-template-columns:repeat(3,1fr)}.steps button{min-height:27px;text-align:left}.status h2{font-size:27px}.status p{font-size:16px;line-height:1.5;max-width:390px}.footer{font-size:11px}.status{bottom:115px}.hero{width:36%;top:20%}dialog p,dialog li{font-size:16px}
+@media(min-width:821px) and (max-width:1150px){.network{display:none}.nav{gap:15px;font-size:13px}.side{width:210px;right:2%}.panel{padding:13px}.panel-copy{font-size:13px}.panel-head{font-size:11px}.tour{right:calc(2% + 225px);left:39%}.hero{left:4%}.primary,.demo-link{font-size:14px;padding:14px 15px}.intro{font-size:17px}.status p{max-width:310px}}
+@media(max-width:820px){.page{min-height:1180px}.brand{font-size:21px}.outline{font-size:13px;padding:11px 13px}.hero{top:112px;left:6%;width:88%}.intro{font-size:17px;max-width:330px}.primary,.demo-link{font-size:14px;padding:14px 15px}#scene{top:460px;height:450px}.tour{left:5%;right:5%;bottom:85px}.footer{font-size:10px;line-height:1.5;gap:15px}}
+.demo-link{position:relative;flex-wrap:wrap}.demo-link small{display:block;flex-basis:100%;font:400 13px/1.5 'Funnel Sans',sans-serif;margin-top:8px}.build-link{display:inline-block;margin-top:18px;font-size:16px;color:var(--ink)}
+@media(min-width:821px){.hero .build-link{display:none}}
+/* Compact actions and a flowing mobile layout prevent copy/scene overlap. */
+.hero-actions{align-items:flex-start;flex-direction:column}
+.demo-link{display:grid;grid-template-columns:1fr auto;gap:5px 16px;width:min(100%,260px);padding:10px 12px;white-space:normal;text-align:left}
+.demo-link small{grid-column:1 / -1;margin:0;font-size:12px;line-height:1.5;color:var(--mid)}
+@media(max-width:820px){
+  .page{height:auto;min-height:100svh;display:flex;flex-direction:column;overflow:hidden}
+  .topbar{flex:none;min-height:78px;height:auto;margin:0 16px;gap:12px}
+  .brand{font-size:20px;gap:9px;white-space:nowrap;letter-spacing:-.6px}
+  .brand-mark{width:34px;height:32px}
+  .outline{font-size:12px;padding:11px 12px;white-space:nowrap}
+  .hero{position:relative;inset:auto;order:1;width:auto;margin:30px 20px 0;text-align:center}
+  .hero h1{font-size:clamp(40px,7vw,56px);letter-spacing:-2px;margin:0 0 18px}
+  .intro{font-size:16px;line-height:1.6;max-width:330px;margin:0 auto}
+  .hero-actions{width:min(100%,310px);margin:22px auto 0;gap:10px;align-items:stretch}
+  .primary{justify-content:space-between;width:100%;padding:13px 16px;font-size:14px}
+  .demo-link{width:100%;max-width:260px;margin-inline:auto;padding:10px 12px;font-size:14px}
+  .build-link{margin-top:18px;font-size:14px;min-height:44px;padding:12px 0}
+  #scene{position:relative;inset:auto;order:2;width:100%;height:clamp(330px,65vw,480px);flex:none;touch-action:pan-y}
+  .tour{position:relative;inset:auto;order:3;margin:0 20px 24px}.steps button{min-height:44px}
+  .tour-controls{min-height:24px;margin:14px 0 4px}.rail{height:20px}
+  .footer{position:relative;inset:auto;order:4;min-height:64px;height:auto;margin:0 20px;padding:15px 0;flex-wrap:wrap;gap:12px;font-size:10px}
+  .fallback{top:auto;left:20px;position:relative;order:2}
+}
+@media(max-width:360px){.brand{font-size:17px;gap:6px}.brand-mark{width:30px}.topbar{margin:0 12px;gap:8px}.outline{padding:10px;font-size:11px}.hero{margin-left:16px;margin-right:16px}}
+.file-preview{position:absolute;z-index:2;pointer-events:none;width:240px;max-width:80%;transform:translateX(-50%);border:1px solid #9fc4ee;box-shadow:0 14px 50px #175ca42b;padding:0 16px 15px;color:var(--ink);font-size:14px}.preview-paper{padding:20px 14px;border:1px solid var(--line);margin:14px 0}
+.preview-paper{display:grid;place-items:center;min-height:145px}.preview-paper img{width:120px;height:110px;object-fit:contain}.file-preview{transform-origin:center center;will-change:transform,left,top}
+.steps{display:flex;flex-wrap:nowrap;justify-content:space-between;gap:16px;overflow-x:auto;scrollbar-width:thin}.steps button{flex:none;white-space:nowrap}.file-preview:has(#finish-action:not([hidden])){pointer-events:auto}.file-preview .primary{width:100%;justify-content:space-between;font-size:14px;padding:12px 14px}@media(max-width:820px){.steps{gap:18px}.steps button{min-height:44px}.file-preview:has(#finish-action:not([hidden])) .preview-paper{min-height:80px;padding:8px}.file-preview:has(#finish-action:not([hidden])) .preview-paper img{height:70px;width:80px}}
+/* Filecoin Cloud typography and light-section button tokens from Pay Explorer. */
+:root{--ink:#09090b;--mid:#52525b;--line:#09090b26;--coral:#0090ff;--teal:#086dc5}
+body{font-family:'Funnel Sans',Arial,sans-serif}h1,h2,.brand,.large-number{font-family:Aspekta,Arial,sans-serif}h1{letter-spacing:-.04em;font-weight:500}.brand{font-weight:600}.intro,.hero .intro{color:var(--mid)}
+.primary,.outline{font-family:'Funnel Sans',Arial,sans-serif;font-weight:500;border:2px solid #0090ff;border-radius:999px;color:#09090b;min-height:44px;transition:background .15s,border-color .15s}
+.primary:hover,.outline:hover{border-color:#1ebfff}.primary span,.outline span{color:#71717a}.primary:focus-visible,.outline:focus-visible{outline:2px solid #48daff;outline-offset:2px}
+.demo-link{border-radius:10px;border-color:#e4e4e7}.demo-link:hover{border-color:#0090ff}.panel,.tour{border-radius:12px;border-color:#e4e4e7}.file-preview{border-radius:14px;overflow:hidden;border-color:#e4e4e7}.preview-paper{border-color:#e4e4e7;border-radius:8px}.panel-head,.tour-top,.footer{letter-spacing:.04em}.steps button{font-weight:500}.file-preview .primary{border-radius:999px;margin-top:16px}.file-preview:has(#finish-action:not([hidden])) .preview-paper{margin-top:16px}
+/* Keep the tour compact on wide screens and let the scene show through. */
+.tour{background:rgba(255,255,255,.65);backdrop-filter:none;border-color:rgba(156,188,230,.4);padding:18px 20px}
+.tour-top{font-size:13px}.steps button{font-size:12px}.tour-controls{margin-top:18px;margin-bottom:12px}
+@media(min-width:821px){.tour{max-width:680px}}
+@media(max-width:820px){.tour{padding:15px}.tour-top{font-size:12px}.steps button{font-size:11px}}
+.panel,.demo-link{background:rgba(255,255,255,.65);backdrop-filter:blur(3px)}
+.primary,.outline{background:rgba(255,255,255,.65)}.primary:hover,.outline:hover{background:rgba(237,251,255,.75)}.demo-link:hover{background:rgba(255,255,255,.65)}
+.file-preview{background:rgba(255,255,255,.65);backdrop-filter:blur(3px)}.preview-paper{background:rgba(255,255,255,.65)}dialog{background:rgba(243,248,255,.65)}
+.integrity-proof{margin-top:8px}
+</style>
+</head>
+<body>
+<div class="page">
+<header class="topbar"><a class="brand" href="/" aria-label="Filecoin Drive home"><img class="brand-mark" src="/filecoin-mark.svg" alt=""><span>Filecoin <small>Drive</small></span></a><nav class="nav" aria-label="Main navigation"><a href="#how-it-works" id="how-link">How it works ↗</a><a href="https://docs.filecoin.io/" target="_blank" rel="noopener">Documentation ↗</a><a href="https://github.com/filecoin-project/filecoin-pin-website/fork" target="_blank" rel="noopener">Fork &amp; build your own ↗</a></nav><div class="top-actions"><span class="network"><i class="dot"></i>POWERED BY FILECOIN</span><button class="outline launch">Open Drive ↗</button></div></header>
+<canvas id="scene" aria-label="An octopus fetches documents, folders and media from independent storage nodes around the world. Drag to rotate, use the mouse wheel to zoom, or explore each step below."></canvas>
+
+<main class="hero"><h1>A drive,<br>right in your<br><em>browser.</em></h1><p class="intro">An open-source reference app<br>for building on Filecoin.</p><div class="hero-actions"><button class="primary launch">Launch your drive <span>↗</span></button><a class="demo-link" href="https://demopin.filecoin.cloud/" target="_blank" rel="noopener noreferrer">Try the demo <span aria-hidden="true">↗</span><small>Try a quick upload on the test network.</small></a></div><a class="build-link" href="https://github.com/filecoin-project/filecoin-pin-website/fork" target="_blank" rel="noopener noreferrer">Fork &amp; build your own ↗</a></main>
+<aside class="side" aria-label="How Filecoin Drive works">
+<section class="panel"><div class="panel-head">GLOBAL STORAGE <span>01</span></div>
+<svg class="world-map" viewBox="0 0 160 68" role="img" aria-label="Illustration of connected storage nodes across the world"><g fill="#dce9fb"><path d="M7 17l17-10 23 3 7 9-10 7-4 13-10-5-7-10-11 2zM39 38l14 6 4 11-9 12-6-14zM70 14l12-5 10 6 11-5 25 2 23 11-8 13-16-3-9 9-13-12-10 3-6-12-15 5zM76 29l17 4 4 13-10 13-8-13zM128 49l15-4 11 10-8 6-16-3z"/></g><g stroke="#7daee5" stroke-width=".7" fill="none"><path d="M28 21Q80-6 87 21T130 27M28 21Q65 65 48 49M87 21L88 43 130 27 141 54M48 49Q92 12 130 27"/></g><g fill="#0073e6"><circle cx="28" cy="21" r="2.5"/><circle cx="48" cy="49" r="2.5"/><circle cx="87" cy="21" r="2.5"/><circle cx="88" cy="43" r="2.5"/><circle cx="130" cy="27" r="2.5"/><circle cx="141" cy="54" r="2.5"/></g></svg>
+<div class="panel-row"><span>STORAGE</span><b>DISTRIBUTED</b></div><div class="panel-row"><span>DRIVE APP</span><b>SERVERLESS</b></div></section>
+<section class="panel"><div class="panel-head">DATA INTEGRITY <span>02</span></div><div class="large-number" id="integrity">CID <small>CONTENT ADDRESSED</small></div><div class="large-number integrity-proof">Proof <small>STORAGE VERIFIED</small></div><div id="load-bar"></div><div class="panel-row"><span id="phase-label">CONTENT ADDRESS</span><b id="phase-state">READY</b></div></section>
+<section class="panel"><div class="panel-head">YOUR WALLET <span>03</span></div><div class="wallet-title"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M20 8V5H5a2 2 0 0 0 0 4h16v11H5a2 2 0 0 1-2-2V7m18 5h-6v5h6"/><circle cx="17" cy="14.5" r=".6"/></svg><span>You’re in control.</span></div><p class="panel-copy">Connect your wallet. Authorize your browser. Manage your own files.</p><button class="wallet-link launch">Open your drive <span>↗</span></button></section>
+</aside>
+<div id="file-preview" class="file-preview" hidden><div class="preview-paper"><img src="/filecoin-mark.svg" alt="Filecoin logo"></div><div id="finish-action" hidden><button class="primary launch">Launch your drive <span>↗</span></button></div></div>
+<section class="status"><h2 id="mode">Browse your files</h2><p id="detail">Your workspace runs in your browser.</p></section>
+<section class="tour" aria-label="Interactive storage tour"><div class="tour-top"><span><i class="dot"></i>HOW YOUR FILES MOVE</span></div><div class="tour-controls"><input aria-label="Tour playhead" id="timeline" class="rail" type="range" min="0" max="39" value="0" step="0.01"></div><div class="steps"><button data-time="0" class="active">01 BROWSER</button><button data-time="5">02 UPLOAD</button><button data-time="10">03 STORE</button><button data-time="20">04 VERIFY</button><button data-time="25">05 FETCH</button></div></section>
+<footer class="footer"><span>FILECOIN DRIVE</span><a href="https://github.com/filecoin-project/filecoin-pin-website" target="_blank" rel="noopener">Built with 💙 by FilOZ</a><span>BROWSER APP · DISTRIBUTED STORAGE</span></footer>
+<p class="fallback" id="fallback" hidden>The 3D explorer couldn’t load. You can still launch Drive and access your files.</p>
+</div>
+<dialog id="how" aria-labelledby="how-title"><button id="close-how" aria-label="Close explanation">✕</button><h2 id="how-title">How Filecoin Drive works</h2><ol><li><strong>Connect your wallet.</strong> Your browser is your workspace. Authorize a session and fund storage from Drive.</li><li><strong>Add your files.</strong> Each file gets a content identifier (CID), an address derived from its contents.</li><li><strong>Store on Filecoin.</strong> Independent storage providers hold the data, with storage proofs recorded on the network.</li><li><strong>Keep control.</strong> Browse, download and manage your files. Your content addresses work beyond this app.</li></ol></dialog>
+<script>
+document.querySelectorAll('.launch').forEach(button=>button.addEventListener('click',()=>{if(window.parent!==window)window.parent.postMessage('open-drive',location.origin);else location.href='/';}));
+document.getElementById('how-link').onclick=e=>{e.preventDefault();document.getElementById('how').showModal()};document.getElementById('close-how').onclick=()=>document.getElementById('how').close();
+</script>
+<script type="module">
+const $ = id => document.getElementById(id);
+try {
+  const moduleName = 'three';
+  const THREE = await import(/* @vite-ignore */ moduleName);
+  const geometryName = 'three/addons/utils/BufferGeometryUtils.js';
+  const { mergeGeometries } = await import(/* @vite-ignore */ geometryName);
+  const environmentName = 'three/addons/environments/RoomEnvironment.js';
+  const { RoomEnvironment } = await import(/* @vite-ignore */ environmentName);
+  const canvas = $('scene');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+  renderer.toneMapping = THREE.NeutralToneMapping;
+  renderer.toneMappingExposure = 1.02;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  const scene = new THREE.Scene();
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const room = new RoomEnvironment();
+  scene.environment = pmrem.fromScene(room).texture;
+  scene.environmentIntensity = .62;
+  room.dispose(); pmrem.dispose();
+  const camera = new THREE.PerspectiveCamera(26, 1, .1, 100);
+  const field = new THREE.Group(); scene.add(field);
+  const body = new THREE.Group(); field.add(body);
+  scene.add(new THREE.HemisphereLight(0xe4efff, 0x637fa6, .65));
+  const key = new THREE.DirectionalLight(0xffffff, 2.8); key.position.set(5,11,8);key.castShadow=true;key.shadow.mapSize.set(2048,2048);Object.assign(key.shadow.camera,{left:-7,right:7,top:7,bottom:-7,near:1,far:30});key.shadow.bias=-.0006;key.shadow.normalBias=.02;scene.add(key,key.target);
+  const fill = new THREE.DirectionalLight(0x83baff, .8); fill.position.set(-4, 1, -2); scene.add(fill);
+  const ceramic = new THREE.MeshPhysicalMaterial({ color: 0xf6f8ff, roughness: .34, clearcoat: .7 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x142a48, metalness: .7, roughness: .3 });
+  const steel = new THREE.MeshStandardMaterial({ color: 0x8fa3be, metalness: .85, roughness: .3 });
+  const coral = new THREE.MeshPhysicalMaterial({ color: 0x008cff, roughness: .32, clearcoat: .5 });
+  const aqua = new THREE.MeshPhysicalMaterial({ color: 0x56b8ff, roughness: .25, clearcoat: .7 });
+  const glass = new THREE.MeshPhysicalMaterial({ color: 0xd6eaff, roughness: .08, transparent: true, opacity: .15, side: THREE.DoubleSide, depthWrite: false });
+  glass.onBeforeCompile = shader => {
+    shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'float fr=pow(1.-abs(dot(normalize(vViewPosition),normal)),2.2);diffuseColor.a=mix(.06,.48,fr);outgoingLight+=vec3(.2,.5,.95)*fr*.15;\n#include <opaque_fragment>');
+  };
+  const V = (x=0,y=0,z=0) => new THREE.Vector3(x,y,z);
+  const clamp = x => Math.max(0,Math.min(1,x));
+  const smooth = (a,b,t) => { const v=clamp((t-a)/(b-a)); return v*v*(3-2*v); };
+  const mix=(a,b,t)=>a+(b-a)*t;
+  const sample=(keys,t)=>{if(t<=keys[0][0])return keys[0][1];for(let i=1;i<keys.length;i++){if(t<=keys[i][0])return mix(keys[i-1][1],keys[i][1],smooth(keys[i-1][0],keys[i][0],t));}return keys.at(-1)[1];};
+  const TR={
+    open:[[0,0],[4,0],[5.2,1],[15,1],[16.2,0],[24.5,0],[25.5,1],[28,1],[29,0],[30,0]],
+  };
+  // Swimming tracks and equations from the supplied Medusa JF-4 source.
+  const SWIM={
+    py:[[0,-5.2],[2.6,.25],[22.1,.25],[25,7.6]],
+    tilt:[[0,.38],[2.6,0],[22.1,0],[23.2,.3],[25,.42]],
+    roll:[[0,-.22],[2.6,0],[22.1,0],[23.2,.18]],
+    curl:[[0,.06],[1.5,.08],[3,1],[21.9,1],[23,.05],[25,.05]],
+    jet:[[0,1],[1.7,1],[2.5,0],[21.9,0],[22.4,1],[25,1]],
+  };
+  const hash=n=>{const s=Math.sin(n*127.1+311.7)*43758.5453;return s-Math.floor(s);};
+  const beat=t=>{const x=(t*1.8)%1;return x<.42?Math.sin(x/.42*Math.PI)**2:0;};
+  const windowAt = (t,a,b,c,d) => smooth(a,b,t)*(1-smooth(c,d,t));
+  function mesh(geometry, material, parent, x=0,y=0,z=0) {
+    const object = new THREE.Mesh(geometry,material);object.castShadow=material!==glass;object.receiveShadow=true; object.position.set(x,y,z); parent.add(object); return object;
+  }
+  function ring(radius, tube, material, parent, y=0) {
+    const object=mesh(new THREE.TorusGeometry(radius,tube,8,64),material,parent,0,y); object.rotation.x=Math.PI/2; return object;
+  }
+  // Each pane and its ribs share a rim pivot, as in the supplied simulator.
+  const R=1.34,H=1.62;
+  const profile=u=>[R*Math.cos(u*Math.PI/2)**.82,H*Math.sin(u*Math.PI/2)];
+  function sector(offset,a,b,u0,u1) {
+    const points=[];
+    for(let j=0;j<=26;j++){const [r,y]=profile(u0+(u1-u0)*j/26);points.push(new THREE.Vector2(r+offset,y+offset*.6));}
+    return new THREE.LatheGeometry(points,16,a,b-a);
+  }
+  const petals=[];
+  for(let i=0;i<8;i++) {
+    const angle=i*Math.PI/4,a=angle-Math.PI/8,b=angle+Math.PI/8;
+    const radial=V(Math.sin(angle),0,Math.cos(angle)), tangent=V(Math.cos(angle),0,-Math.sin(angle));
+    const pivot=new THREE.Group(); pivot.position.copy(radial).multiplyScalar(R); body.add(pivot);
+    const shell=new THREE.Group(); shell.position.copy(pivot.position).negate(); pivot.add(shell);
+    mesh(sector(0,a+.035,b-.035,.02,.93),glass,shell);
+    for(const [l,r,u,v] of [[a,a+.055,0,.94],[b-.055,b,0,.94],[a,b,0,.1],[a+.1,b-.1,.8,.88]]) mesh(sector(.016,l,r,u,v),ceramic,shell);
+    mesh(sector(.028,angle-.09,angle+.09,.04,.07),i%2?aqua:coral,shell);
+    mesh(sector(.026,a+.05,b-.05,.11,.12),dark,shell);
+    const rivetGeometry=new THREE.SphereGeometry(.013,6,5);
+    for(let j=0;j<10;j++) for(const edge of [a+.027,b-.027]) {
+      const [r,y]=profile(.05+j*.084);mesh(rivetGeometry,steel,shell,(r+.03)*Math.sin(edge),y+.025,(r+.03)*Math.cos(edge));
+    }
+    petals.push({pivot,radial,tangent});
+  }
+  ring(1.3,.045,dark,body);ring(1.24,.022,aqua,body,.04);
+  mesh(new THREE.CylinderGeometry(.78,.6,.18,48),dark,body,0,-.04);
+  ring(.7,.025,coral,body,.06);
+  const cap=mesh(new THREE.SphereGeometry(.25,24,12),ceramic,body,0,1.59);cap.scale.y=.3;
+  // The browser's payload replaces the reactor: recognisable files inside the bell.
+  const payload=new THREE.Group();body.add(payload);
+  const fileSpecs=[['Projects','FOLDER','folder'],['filecoin.svg','IMAGE','brand'],['coast.jpg','IMAGE','image'],['demo.mp4','VIDEO','video'],['designs','FOLDER','folder'],['archive.zip','ARCHIVE','doc']];
+  const logoImage=new Image();
+  await new Promise((resolve,reject)=>{logoImage.onload=resolve;logoImage.onerror=reject;logoImage.src='/filecoin-mark.svg';});
+  function fileTexture(name,kind,type) {
+    const c=document.createElement('canvas');c.width=384;c.height=300;const ctx=c.getContext('2d');
+    ctx.fillStyle='#163e6820';ctx.beginPath();ctx.roundRect(10,12,364,278,18);ctx.fill();
+    ctx.fillStyle='#ffffff';ctx.strokeStyle='#a9c8ec';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(5,5,364,278,18);ctx.fill();ctx.stroke();
+    ctx.fillStyle=type==='folder'?'#0073e6':'#006fce';ctx.strokeStyle=ctx.fillStyle;ctx.lineWidth=5;ctx.lineJoin='round';
+    if(type==='brand'){ctx.drawImage(logoImage,34,33,130,120);}
+    else if(type==='folder'){ctx.beginPath();ctx.moveTo(34,75);ctx.lineTo(34,41);ctx.lineTo(94,41);ctx.lineTo(111,60);ctx.lineTo(164,60);ctx.lineTo(164,143);ctx.lineTo(34,143);ctx.closePath();ctx.fill();ctx.fillStyle='#4eacff';ctx.fillRect(34,79,130,64);}
+    else if(type==='image'){ctx.strokeRect(34,39,132,105);ctx.beginPath();ctx.arc(135,65,12,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.moveTo(40,137);ctx.lineTo(83,82);ctx.lineTo(112,113);ctx.lineTo(132,96);ctx.lineTo(160,137);ctx.fill();}
+    else if(type==='video'){ctx.fillRect(34,39,132,105);ctx.fillStyle='#f5f9ff';ctx.beginPath();ctx.moveTo(86,65);ctx.lineTo(125,92);ctx.lineTo(86,119);ctx.fill();}
+    else{ctx.strokeRect(34,33,90,119);ctx.beginPath();ctx.moveTo(50,65);ctx.lineTo(109,65);ctx.moveTo(50,88);ctx.lineTo(109,88);ctx.moveTo(50,111);ctx.lineTo(94,111);ctx.stroke();}
+    ctx.fillStyle='#122d50';ctx.font='500 27px "Funnel Sans", sans-serif' ;ctx.fillText(name,30,204);
+    ctx.fillStyle='#4b6483';ctx.font='18px monospace';ctx.fillText(kind,30,247);
+    const texture=new THREE.CanvasTexture(c);texture.colorSpace=THREE.SRGBColorSpace;return texture;
+  }
+  await document.fonts.ready;
+  const files=fileSpecs.map((spec,i)=>{
+    const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:fileTexture(...spec),depthTest:false}));
+    sprite.renderOrder=10+i;payload.add(sprite);return sprite;
+  });
+  const optic=new THREE.Group();body.add(optic);optic.position.set(0,.34,1.15);
+  const housing=mesh(new THREE.CylinderGeometry(.25,.28,.18,32),dark,optic);housing.rotation.x=Math.PI/2;
+  const lens=mesh(new THREE.SphereGeometry(.22,24,16),new THREE.MeshPhysicalMaterial({color:0x091c36,metalness:.3,roughness:.06,clearcoat:1}),optic,0,0,.12);lens.scale.z=.4;
+  mesh(new THREE.TorusGeometry(.24,.027,8,40),coral,optic,0,0,.16);
+  const underside=new THREE.Group();body.add(underside);
+  ring(.95,.045,dark,underside,-.19);ring(.85,.025,aqua,underside,-.24);ring(.52,.018,coral,underside,-.29);
+  for(let i=0;i<8;i++){const angle=i*Math.PI/4;const spoke=mesh(new THREE.BoxGeometry(.035,.08,.72),steel,underside,Math.sin(angle)*.55,-.23,Math.cos(angle)*.55);spoke.rotation.y=angle;}
+  for(let i=0;i<3;i++){mesh(new THREE.CylinderGeometry(.3-i*.065,.27-i*.065,.2,32,1,true),i%2?dark:ceramic,underside,0,-.35-i*.16);ring(.27-i*.065,.014,aqua,underside,-.45-i*.16);}
+  for(let i=0;i<6;i++){const a=i*Math.PI/3;const flap=mesh(new THREE.BoxGeometry(.09,.19,.025),i%2?coral:ceramic,underside,Math.sin(a)*.15,-.8,Math.cos(a)*.15);flap.rotation.set(.3*Math.cos(a),a,-.3*Math.sin(a));}
+  // Mainnet provider snapshot from SP Dashboard, checked 2026-11-05.
+  const providers=[{"name":"ezpdpz-main"},{"name":"Mongo2Stor Mainnet"},{"name":"ezpdpz-main2"},{"name":"Cello"},{"name":"Bass"},{"name":"Brown Storage UK"},{"name":"ProbeLab"}];
+  const nodes=[];
+  function textSprite(text,color='#305782') {
+    const c=document.createElement('canvas');c.width=512;c.height=64;const ctx=c.getContext('2d');ctx.fillStyle=color;ctx.font='500 23px monospace';ctx.textAlign='center';ctx.fillText(text,256,40);
+    const texture=new THREE.CanvasTexture(c);texture.colorSpace=THREE.SRGBColorSpace;
+    const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,depthTest:true}));sprite.scale.set(1.9,.2375,1);sprite.renderOrder=12;return sprite;
+  }
+  for(let i=0;i<providers.length;i++) {
+    const angle=(i+.5)*Math.PI*2/providers.length;
+    const position=V(Math.sin(angle)*3.35,-1.55,Math.cos(angle)*2.65);
+    const group=new THREE.Group();group.position.copy(position);field.add(group);
+    mesh(new THREE.BoxGeometry(.48,.65,.38),ceramic,group,0,.08);
+    for(let j=0;j<3;j++) {mesh(new THREE.BoxGeometry(.38,.12,.025),dark,group,0,-.1+j*.19,.2);mesh(new THREE.SphereGeometry(.023,8,6),aqua,group,.125,-.1+j*.19,.225);}
+    const halo=ring(.4,.014,aqua,group,-.28);
+    const label=textSprite(providers[i].name);label.position.y=-.5;group.add(label);
+    // Small server halls and racks remain real geometry when the camera moves in.
+    mesh(new THREE.BoxGeometry(.92,.05,.68),steel,group,0,-.3,0);
+    for(const x of [-.34,.34]){
+      mesh(new THREE.BoxGeometry(.13,.5,.32),dark,group,x,.015,-.02);
+      for(let k=0;k<5;k++)mesh(new THREE.BoxGeometry(.095,.025,.012),aqua,group,x,-.17+k*.085,.15);
+    }
+    for(let k=0;k<6;k++)mesh(new THREE.BoxGeometry(.045,.012,.3),steel,group,-.14+k*.055,.413,0);
+    nodes.push({group,position,halo});
+  }
+  // Unlabelled background icons suggest network scale; named providers stay distinct.
+  const backgroundCount=140;
+  const backgroundRacks=new THREE.InstancedMesh(new THREE.BoxGeometry(.15,.23,.11),new THREE.MeshBasicMaterial({color:0x77a9e0,transparent:true,opacity:.28,depthWrite:false}),backgroundCount);
+  const slotGeometry=mergeGeometries([-1,0,1].map(row=>new THREE.BoxGeometry(.105,.018,.012).translate(0,row*.055,.062)));
+  const backgroundSlots=new THREE.InstancedMesh(slotGeometry,new THREE.MeshBasicMaterial({color:0x2775c5,transparent:true,opacity:.35,depthWrite:false}),backgroundCount);
+  const iconTransform=new THREE.Object3D();
+  for(let i=0;i<backgroundCount;i++){
+    const x=(hash(i*7+101)-.5)*19,y=(hash(i*11+207)-.5)*7,z=-2-hash(i*13+309)*8;
+    iconTransform.position.set(x,y,z);iconTransform.rotation.y=(hash(i+401)-.5)*.45;
+    iconTransform.scale.setScalar(.55+hash(i+503)*.8);iconTransform.updateMatrix();
+    backgroundRacks.setMatrixAt(i,iconTransform.matrix);backgroundSlots.setMatrixAt(i,iconTransform.matrix);
+  }
+  field.add(backgroundRacks,backgroundSlots);
+  // Geographic latitude and longitude lines suggest a shared global network.
+  const globe=new THREE.Group();globe.position.y=-1.6;field.add(globe);
+  const lineMat=new THREE.LineBasicMaterial({color:0x9cbce6,transparent:true,opacity:.28});
+  for(let j=-2;j<=2;j++) {
+    const lat=j*.38,points=[];
+    for(let k=0;k<=100;k++){const a=k/100*Math.PI*2;points.push(V(Math.cos(a)*3.6*Math.cos(lat),Math.sin(lat)*1.1,Math.sin(a)*2.8*Math.cos(lat)));}
+    globe.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),lineMat));
+  }
+  for(let j=0;j<6;j++) {
+    const a=j*Math.PI/6,points=[];
+    for(let k=0;k<=100;k++){const u=k/100*Math.PI*2;points.push(V(Math.sin(u)*Math.cos(a)*3.6,Math.cos(u)*1.1,Math.sin(u)*Math.sin(a)*2.8));}
+    globe.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),lineMat));
+  }
+  const links=224;
+  const sleeveProfile=[[0,-.41],[.88,-.41],[.97,-.37],[1,-.31],[1,.31],[.97,.37],[.88,.41],[0,.41]].map(p=>new THREE.Vector2(...p));
+  const struts=mergeGeometries(Array.from({length:4},(_,i)=>{const a=i*Math.PI/2+.6;return new THREE.CylinderGeometry(.05,.05,1.1,6).translate(Math.cos(a)*.5,0,Math.sin(a)*.5);}));
+  const bolts=mergeGeometries(Array.from({length:12},(_,i)=>{const a=i/12*Math.PI*2;return new THREE.SphereGeometry(.05,6,5).translate(Math.sin(a),i%2?-.22:.22,Math.cos(a));}));
+  const parts=[new THREE.LatheGeometry(sleeveProfile,24),new THREE.CylinderGeometry(.74,.74,.95,18,1,true),new THREE.TorusGeometry(1,.022,6,28).rotateX(Math.PI/2).translate(0,.26,0),struts,bolts,new THREE.BoxGeometry(.3,.24,.06).translate(0,0,.985),new THREE.BoxGeometry(.14,.5,.05).translate(.56,0,.84)].map((g,i)=>{
+    const part=new THREE.InstancedMesh(g,[ceramic,dark,aqua,steel,dark,aqua,coral][i],links);part.instanceMatrix.setUsage(THREE.DynamicDrawUsage);part.frustumCulled=false;part.castShadow=i<4;part.receiveShadow=i<4;body.add(part);return part;
+  });
+  const dummy=new THREE.Object3D(),axis=V(0,1,0),current=V(),previous=V(),tangent=V();
+  const chainRotation=new THREE.Quaternion(),bendRotation=new THREE.Quaternion(),basis=new THREE.Matrix4();
+  const ax=V(),ay=V(),az=V(),endCorrection=V(),target=V(),inverseBody=new THREE.Quaternion();
+  const chainPoints=Array.from({length:8},()=>Array.from({length:29},()=>V()));
+  const transferPoints=Array.from({length:8},()=>Array.from({length:31},()=>V()));
+  const curves=transferPoints.map(points=>new THREE.CatmullRomCurve3(points));
+  const packets=Array.from({length:8},(_,i)=>{
+    const packet=new THREE.Sprite(new THREE.SpriteMaterial({map:files[i%files.length].material.map,depthTest:false}));packet.renderOrder=9;field.add(packet);return packet;
+  });
+  const bubbles=new THREE.InstancedMesh(new THREE.SphereGeometry(1,12,10),new THREE.MeshPhysicalMaterial({color:0xffffff,roughness:.1,transparent:true,opacity:.5,envMapIntensity:1.6}),90);
+  bubbles.frustumCulled=false;field.add(bubbles);
+  const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let t=reduced?2:0,last=performance.now(),section=-1,yaw=0,pitch=0,targetYaw=0,targetPitch=0,drag=null,scrubbing=false,carryingLaunch=false,zoom=1,targetZoom=1;
+  const rail=$('timeline');
+  const modes=['Browse your files','Upload from your browser','Store on Filecoin','Verify storage','Fetch your files'];
+  const details=['Your workspace runs in your browser.','Choose documents, photos, videos, or folders.','Store your files with independent storage providers.','Storage proofs are recorded on the network.','Retrieve your files and check their content addresses.'];
+  rail.oninput=()=>{carryingLaunch=false;t=Number(rail.value);};
+  rail.onpointerdown=()=>scrubbing=true;
+  const endScrub=()=>scrubbing=false;window.addEventListener('pointerup',endScrub);window.addEventListener('pointercancel',endScrub);
+  document.querySelectorAll('[data-time]').forEach(b=>b.onclick=()=>{carryingLaunch=false;t=Number(b.dataset.time);});
+  canvas.onpointerdown=e=>{drag={x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId);};
+  canvas.onpointermove=e=>{if(!drag)return;targetYaw+=(e.clientX-drag.x)*.005;targetPitch=Math.max(-1.2,Math.min(1.2,targetPitch+(e.clientY-drag.y)*.003));drag={x:e.clientX,y:e.clientY};};
+  canvas.addEventListener('wheel',event=>{if(innerWidth<=820)return;event.preventDefault();targetZoom=Math.max(.35,Math.min(1.7,targetZoom*Math.exp(event.deltaY*.001)));},{passive:false});
+  canvas.ondblclick=()=>{targetZoom=1;targetYaw=0;targetPitch=0;};
+  canvas.onpointerup=canvas.onpointercancel=()=>drag=null;
+  let activeNodeCount=nodes.length;
+  function resize(){
+    const w=canvas.clientWidth,h=canvas.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
+    activeNodeCount=innerWidth<=480?3:innerWidth<=820?4:nodes.length;
+    nodes.forEach((node,i)=>{
+      node.group.visible=i<activeNodeCount;
+      const angle=(i+.5)*Math.PI*2/activeNodeCount;
+      node.position.set(Math.sin(angle)*4.25,-1.65+Math.cos(angle*2)*.55,Math.cos(angle)*3.6);
+    });
+    backgroundRacks.count=backgroundSlots.count=innerWidth<=480?35:innerWidth<=820?70:backgroundCount;
+  }
+  new ResizeObserver(resize).observe(canvas);resize();
+  for(let i=0;i<24;i++)$('load-bar').appendChild(document.createElement('i'));
+  const fileSources=[V(-1.7,1.95,.6),V(-.6,2.2,.7),V(.8,2.1,.6),V(1.7,1.9,.8),V(-1.2,2.2,.9),V(1.25,2.15,.9)];
+  function pose(time,dt) {
+    const opened=sample(TR.open,time);
+    yaw+=(targetYaw-yaw)*(1-Math.exp(-dt*12));pitch+=(targetPitch-pitch)*(1-Math.exp(-dt*12));
+    field.position.set(innerWidth>820?.45:0,.3,0);
+    field.scale.setScalar(innerWidth>820?.90:.60);
+    field.rotation.set(pitch,yaw-.12,0);
+    const seconds=toSeconds(t);
+    const departureStart=loopSeconds-departureSeconds;
+    const departureProgress=clamp((seconds-departureStart)/departureSeconds);
+    const swimT=t<5?2.6*seconds/arrivalSeconds:t<25?mix(2.6,21,(t-5)/20):seconds<departureStart?21:mix(21,25,departureProgress),S={};
+    for(const k in SWIM)S[k]=sample(SWIM[k],swimT);
+    S.pulse=beat(swimT)*Math.max(S.jet,.1);
+    const idle=1-S.jet;
+    // Carry speed across the offscreen wrap, easing only near the resting pose.
+    // Extra exit distance clears the trailing arms before the offscreen wrap.
+    const arrivalProgress=clamp(seconds/arrivalSeconds);
+    const arrivalY=mix(innerWidth>820?-6.6:-8.2,.25,1-(1-arrivalProgress)**2);
+    const departureY=mix(.25,11.3,departureProgress**2);
+    const travelY=seconds<arrivalSeconds?arrivalY:seconds>departureStart?departureY:S.py;
+    body.position.set(0,travelY+idle*.07*Math.sin(swimT*1.1),0);
+    body.rotation.set(S.tilt+idle*.02*Math.sin(swimT*.8),0,S.roll+idle*.02*Math.sin(swimT*.6));
+    inverseBody.copy(body.quaternion).invert();
+    const squeeze=S.pulse*(S.jet>.05?.16:.035);
+    petals.forEach(({pivot,radial,tangent})=>{
+      pivot.quaternion.setFromAxisAngle(tangent,opened*1.25-squeeze);
+      pivot.position.copy(radial).multiplyScalar(R*(1-squeeze*.35));
+    });
+    cap.position.y=1.59*(1-opened)+.1*opened;cap.scale.setScalar(1-opened*.65);cap.scale.y*=.3;
+    files.forEach((file,i)=>{
+      // Arrive empty; stagger the user's files into the open bell during Upload.
+      const dropStart=5.3+i*.25,drop=smooth(dropStart,dropStart+2.5,time);
+      file.visible=time>=dropStart&&time<10+i*.12;
+      target.set((i%3-1)*.26,.5+Math.floor(i/3)*.32,(i%2)*.1);
+      file.position.copy(fileSources[i]).lerp(target,drop);
+      file.position.y+=Math.sin(drop*Math.PI)*.25;
+      const size=mix(.65,.36,drop);file.scale.set(size,size*300/384,1);
+      file.material.rotation=(i%2?-.08:.08)*(1-drop);
+      file.material.depthTest=drop>.8;
+    });
+    for(let a=0;a<8;a++) {
+      const phi=(a+.5)*Math.PI/4,ev=a%2===0,sn=Math.sin(phi),cs=Math.cos(phi),points=chainPoints[a];
+      const a0=mix(1.42,ev?.34:.9,S.curl),c=Math.cos(a0),s=Math.sin(a0);
+      ay.set(sn*c,-s,cs*c);az.set(-cs,0,sn);ax.crossVectors(ay,az);
+      basis.makeBasis(ax,ay,az);chainRotation.setFromRotationMatrix(basis);
+      current.set(sn*.78,-.24,cs*.78);points[0].copy(current);
+      const hair=(ev?1:.8)*(.92+hash(a)*.18),sp=ev?1:-1;
+      for(let i=0;i<28;i++){
+        const u=i/27,f=mix(1,.26,u**1.15)*(ev?1:.9),L=.33*f,r=.2*f;
+        const wave=.05*Math.sin(5.5*u-swimT*1.5+a*1.7)*(.35+u);
+        const kHold=(ev?.07:.04)+.78*u**3.6*hair+.075*Math.sin(u*8.2+a*2.1+.8)*(1-u*.6)-(ev?.13:.06)*Math.exp(-(((u-.12)/.1)**2))+wave;
+        const kTrail=.012*Math.sin(a*2.1)+.09*Math.sin(6*u-swimT*6+a)*(.3+u)*(1+S.pulse*.5)+(.012+.2*u**5)*S.jet;
+        const k=mix(kTrail,kHold,S.curl);
+        if(i){bendRotation.setFromAxisAngle(V(0,0,1),k);chainRotation.multiply(bendRotation);bendRotation.setFromAxisAngle(V(1,0,0),.018*sp*Math.sin(u*5+swimT*.7+a));chainRotation.multiply(bendRotation);bendRotation.setFromAxisAngle(axis,.03*u*sp);chainRotation.multiply(bendRotation);}
+        tangent.copy(axis).applyQuaternion(chainRotation);current.addScaledVector(tangent,L*.5);
+        dummy.position.copy(current);dummy.quaternion.copy(chainRotation);dummy.scale.set(r,L,r);dummy.updateMatrix();
+        parts.forEach((part,k)=>{if((k===5&&i%4===1)||(k===6&&i%5!==2)){dummy.scale.setScalar(0);dummy.updateMatrix();part.setMatrixAt(a*28+i,dummy.matrix);dummy.scale.set(r,L,r);dummy.updateMatrix();}else part.setMatrixAt(a*28+i,dummy.matrix);});
+        current.addScaledVector(tangent,L*.5);points[i+1].copy(current);
+      }
+      // Aim the chain at its provider during transfer, retaining the authored curls.
+      if(a<activeNodeCount){
+        const reach=windowAt(time,9,12,28,30),node=nodes[a];
+        target.copy(node.position);target.y+=.25;
+        target.sub(body.position).applyQuaternion(inverseBody);
+        endCorrection.copy(target).sub(points[28]);
+        for(let j=1;j<=28;j++)points[j].addScaledVector(endCorrection,reach*(j/28)**2);
+        for(let j=0;j<28;j++){
+          parts[0].getMatrixAt(a*28+j,dummy.matrix);dummy.matrix.decompose(dummy.position,dummy.quaternion,dummy.scale);
+          tangent.copy(points[j+1]).sub(points[j]);const length=tangent.length();tangent.normalize();
+          previous.copy(axis).applyQuaternion(dummy.quaternion);bendRotation.setFromUnitVectors(previous,tangent);dummy.quaternion.premultiply(bendRotation);
+          dummy.position.copy(points[j]).add(points[j+1]).multiplyScalar(.5);dummy.scale.y=length;dummy.updateMatrix();
+          parts.forEach((part,k)=>{if(!((k===5&&j%4===1)||(k===6&&j%5!==2)))part.setMatrixAt(a*28+j,dummy.matrix);});
+        }
+      }
+      // Providers remain stationary; only files travel along the arms.
+      if(a<activeNodeCount){
+        const node=nodes[a];
+        const distribute=windowAt(time,10+a*.12,11+a*.12,13+a*.12,14+a*.12);
+        const fetch=windowAt(time,25+a*.1,25.6+a*.1,27.4+a*.1,28+a*.1);
+        node.group.scale.setScalar(mix(.52,1.05,Math.max(distribute,fetch)));
+        node.group.position.copy(node.position);
+        node.group.quaternion.identity();
+      }
+      const packet=packets[a];
+      if(a>=activeNodeCount){packet.visible=false;continue;}
+      const node=nodes[a],route=transferPoints[a];
+      route[0].copy(files[a%files.length].position).applyQuaternion(body.quaternion).add(body.position);
+      for(let j=0;j<29;j++)route[j+1].copy(points[j]).applyQuaternion(body.quaternion).add(body.position);
+      route[30].copy(node.group.position);route[30].y+=.55*node.group.scale.y;
+      const outStart=10+a*.12,outEnd=14+a*.12,fetchStart=25+a*.1,fetchEnd=28+a*.1;
+      const progress=time<fetchStart?smooth(outStart,outEnd,time):1-smooth(fetchStart,fetchEnd,time);
+      packet.visible=time>=outStart&&time<fetchEnd;
+      curves[a].getPoint(clamp(progress),packet.position);
+      const checking=windowAt(time,20+a*.1,21+a*.1,23.5+a*.1,24.5+a*.1);
+      const size=.4+checking*.1*(.5+.5*Math.sin(time*5-a));
+      packet.scale.set(size,size*300/384,1);
+      node.halo.scale.setScalar(1+checking*(.18+.12*Math.sin(time*5-a)));
+      packet.material.color.setHex(checking>.2?0xa9d9ff:0xffffff);
+
+    }
+    parts.forEach(part=>part.instanceMatrix.needsUpdate=true);
+    const nozzle=V(0,-1.2,0).applyQuaternion(body.quaternion).add(body.position),dir=V(0,-1,0).applyQuaternion(body.quaternion);
+    for(let i=0;i<90;i++){
+      const h=hash(i+3),h2=hash(i*2+9),life=(swimT*(.55+h*.4)+h2)%1,size=(S.jet>.1?1:0)*(1-life)*(.018+h*.05),angle=i*2.4,rr=life*(.3+h2*.9);
+      dummy.position.copy(nozzle).addScaledVector(dir,life*(3+h*5));dummy.position.x+=Math.cos(angle)*rr;dummy.position.z+=Math.sin(angle)*rr;dummy.position.y-=life*life*.4;
+      dummy.quaternion.identity();dummy.scale.setScalar(Math.max(size,.00001));dummy.updateMatrix();bubbles.setMatrixAt(i,dummy.matrix);
+    }
+    bubbles.instanceMatrix.needsUpdate=true;
+    const aspect=camera.aspect;
+    const distance=innerWidth<=820?Math.max(13,11.5/aspect):14.6;
+    const cameraTarget=V(0,.1,0);
+    camera.position.set(0,3.8,distance);
+    zoom+=(targetZoom-zoom)*(1-Math.exp(-dt*10));
+    camera.position.sub(cameraTarget).multiplyScalar(zoom).add(cameraTarget);
+    camera.lookAt(cameraTarget);key.target.position.copy(field.position);
+    const s=time<10?Math.floor(time/5):time<20?2:time<25?3:4;
+    if(s!==section){section=s;$('mode').textContent=modes[s];$('detail').textContent=details[s];document.querySelectorAll('[data-time]').forEach((b,i)=>{b.classList.toggle('active',i===s);b.setAttribute('aria-pressed',String(i===s));});}
+    rail.value=String(t);
+    $('phase-label').textContent=['CONTENT ADDRESS','CONTENT ADDRESS','STORAGE','STORAGE PROOF','CONTENT CHECK'][s];
+    $('phase-state').textContent=['READY','ADDRESSING',time<15?'STORING':'STORED','VERIFIED','VERIFIED'][s];
+    const verified=smooth(20,23,time);Array.from($('load-bar').children).forEach((bar,i)=>bar.classList.toggle('on',i<(time<20?6+smooth(5,15,time)*7:13+verified*11)));
+    if(t>=3.5)carryingLaunch=false;
+    const preview=$('file-preview');preview.hidden=time<28.1&&!carryingLaunch;
+    $('finish-action').hidden=preview.hidden;
+    if(!preview.hidden){
+      const rect=canvas.getBoundingClientRect(),focus=carryingLaunch?1:smooth(28.1,30,time);
+      // Start at the bell's center, then enlarge only the fetched file into view.
+      const origin=V(0,.7,0).applyQuaternion(body.quaternion).add(V(0,sample(SWIM.py,21)+.07*Math.sin(21*1.1),0));
+      field.updateWorldMatrix(true,false);origin.applyMatrix4(field.matrixWorld).project(camera);
+      const startX=rect.left+(origin.x+1)*rect.width/2,startY=rect.top+scrollY+(1-origin.y)*rect.height/2;
+      const sideRect=document.querySelector('.side').getBoundingClientRect();
+      // Measure painted text/buttons, not the left column's unused layout width.
+      const leftEdges=[...document.querySelectorAll('.hero h1,.hero .intro,.hero-actions>*')].map(element=>{
+        if(element.matches('h1,.intro')){const range=document.createRange();range.selectNodeContents(element);return range.getBoundingClientRect().right;}
+        return element.getBoundingClientRect().right;
+      });
+      const contentRight=Math.max(...leftEdges);
+      const centerBetweenColumns=sideRect.width>0&&sideRect.left-contentRight>=preview.offsetWidth+32;
+      const endX=centerBetweenColumns?(contentRight+sideRect.left)/2:rect.left+rect.width*.5,endY=rect.top+scrollY+rect.height*.5;
+      preview.style.left=mix(startX,endX,focus)+'px';preview.style.top=mix(startY,endY,focus)+'px';
+      preview.style.transform='translate(-50%,-50%) scale('+mix(.25,1,focus)+')';preview.style.opacity=String(carryingLaunch?1-smooth(1.5,3.5,t):smooth(28.1,28.5,time));
+    }
+    renderer.render(scene,camera);
+  }
+  // Keep travel speeds matched, with minimal travel beyond the viewport edges.
+  // Combine transfer and storage into one stage; retain the calm departure and CTA hold.
+  const arrivalSeconds=innerWidth>820?1.95:2.4,departureSeconds=3.15,uploadSeconds=1.5,storeSeconds=2;
+  const storageStart=arrivalSeconds+uploadSeconds,verificationStart=storageStart+storeSeconds;
+  const finishStart=verificationStart+16/3,loopSeconds=finishStart+3;
+  const toSeconds=value=>value<5?value*arrivalSeconds/5:value<10?arrivalSeconds+(value-5)*uploadSeconds/5:value<20?storageStart+(value-10)*storeSeconds/10:value<30?verificationStart+(value-20)*8/15:finishStart+(value-30)/3;
+  const toPlayhead=seconds=>seconds<arrivalSeconds?seconds*5/arrivalSeconds:seconds<storageStart?5+(seconds-arrivalSeconds)*5/uploadSeconds:seconds<verificationStart?10+(seconds-storageStart)*10/storeSeconds:seconds<finishStart?20+(seconds-verificationStart)*15/8:30+(seconds-finishStart)*3;
+  document.addEventListener('visibilitychange',()=>{last=performance.now();});
+  function frame(now){const dt=(now-last)/1000;last=now;if(!reduced&&!scrubbing&&!document.hidden&&!$('how').open){const next=toSeconds(t)+dt;if(next>=loopSeconds)carryingLaunch=true;t=toPlayhead(next%loopSeconds);}pose(Math.min(t,30),Math.min(dt,.05));requestAnimationFrame(frame);}
+  requestAnimationFrame(frame);
+} catch(error) {
+  $('fallback').hidden=false;
+  $('timeline').disabled=true;
+  console.error('Storage explorer unavailable',error);
+}
+
+</script>
+</body>
+</html>

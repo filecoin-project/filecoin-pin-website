@@ -13,7 +13,7 @@ function App() {
   const identity = `${connection.network}:${connection.address ?? 'disconnected'}`
   return (
     <div className="min-h-screen bg-canvas text-foreground">
-      <WalletControls />
+      {connection.address && <WalletControls />}
       {isSecureContext ? (
         connection.address ? (
           <FilecoinPinProvider key={identity}>

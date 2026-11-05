@@ -52,20 +52,6 @@ export function WalletControls() {
           >
             {theme === 'dark' ? <Sun aria-hidden="true" size={18} /> : <Moon aria-hidden="true" size={18} />}
           </button>
-          <label className="sr-only" htmlFor="network">
-            Network
-          </label>
-          <Select
-            containerClassName="min-w-[190px] flex-1 sm:flex-none"
-            disabled={wallet.busy || wallet.uploading || wallet.deleting || wallet.restoring}
-            id="network"
-            leadingIcon={<span className="h-1.5 w-1.5 rounded-full bg-brand-500" />}
-            onChange={(event) => void wallet.switchNetwork(event.target.value as 'mainnet' | 'calibration')}
-            value={wallet.network}
-          >
-            <option value="mainnet">Filecoin Mainnet</option>
-            <option value="calibration">Calibration Testnet</option>
-          </Select>
           {wallet.address ? (
             <>
               <span
