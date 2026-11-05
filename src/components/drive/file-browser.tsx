@@ -676,13 +676,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                                   ? 'Download ZIP'
                                   : 'Download'}
                           </button>
-                          <ShareFileButton
-                            disabled={
-                              deletingPieceCids.has(file.pieceCid) ||
-                              Boolean(file.upload && file.upload.phase !== 'complete')
-                            }
-                            file={file}
-                          />
+                          <ShareFileButton disabled={deletingPieceCids.has(file.pieceCid)} file={file} />
                           <button
                             aria-label="Details"
                             className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-raised hover:text-foreground"
@@ -892,9 +886,9 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                           ? 'Queued · Cancel'
                           : 'Download'}
                     </Button>
-                    {(selected.isDirectory || canPreviewFile(selected)) &&
-                    (!selected.upload || selected.upload.phase === 'complete') &&
-                    fileStatus(selected) !== 'Deletion scheduled' ? (
+                    {(selected.isDirectory
+                      ? Boolean(selected.cid && selected.pieceCid) && selected.ipfsIndexed !== false
+                      : canPreviewFile(selected)) && fileStatus(selected) !== 'Deletion scheduled' ? (
                       <a
                         className={buttonVariants({ variant: 'secondary', size: 'sm' })}
                         href={getIpfsGatewayPreviewLink(
@@ -912,7 +906,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                       <Button
                         disabled
                         size="sm"
-                        title="Preview is unavailable for this file type or storage state."
+                        title="Preview is unavailable for imported CAR archives, or until a storage copy is confirmed and announced to the IPFS indexer."
                         variant="secondary"
                       >
                         <Eye aria-hidden="true" size={14} />

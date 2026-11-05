@@ -29,7 +29,7 @@ Selecting several files creates independent uploads. Transfers run one at a time
 
 Choose **Upload**, select files and an upload location, then start the upload. Each ordinary upload targets two copies on different providers, but may finish with fewer copies if a provider fails. Check the confirmed copy count in the file list.
 
-Keep the tab open while uploads are running. **Stored** means at least one copy is confirmed; other copies may still be processing. Share and Preview become available when storage processing finishes.
+Keep the tab open while uploads are running. **Stored** means at least one copy is confirmed; other copies may still be processing. Share and Preview become available as soon as one copy is confirmed and announced to the IPFS indexer, even while further copies are still processing.
 
 ### Names and upload location
 
@@ -56,7 +56,7 @@ The search field stays in the Files toolbar beside Load from Filecoin and Upload
 
 ## Downloads, previews and sharing
 
-Use **Download** to retrieve the original file from a recorded storage provider. File details offer gateway previews for common browser-supported formats; playback depends on the browser and encoding.
+Use **Download** to retrieve the original file from a recorded storage provider. File details offer gateway previews for every downloadable file; whether the browser displays or saves it depends on the format, browser and encoding.
 
 Gateway links use the external `inbrowser.link` browser gateway. Gateway availability is separate from IPNI indexing: an indexed CID does not guarantee successful gateway retrieval.
 

@@ -383,6 +383,51 @@ it('retries the two-copy target on every upload when no additional provider is r
   expect(getStoredDataSetIds(scope)).toEqual([44585])
 })
 
+it('completes the announce step on the first provider sync and keeps later announce failures from downgrading it', async () => {
+  useFilecoinPinContextMock.mockReturnValue(baseContext)
+  executeUploadMock.mockImplementationOnce(async (_synapse, _car, _root, options) => {
+    options.onProgress?.({
+      type: 'pieceSyncStatus:providerSynced',
+      data: { serviceURL: 'https://a.example', providerIndex: 1, providerCount: 2 },
+    })
+    options.onProgress?.({
+      type: 'pieceSyncStatus:failed',
+      data: { error: new Error('not synced on https://b.example after 20 attempts'), providerCount: 2 },
+    })
+    options.onProgress?.({
+      type: 'indexingConfirmation:mismatch',
+      data: { error: new Error('indexer lookup disagreed') },
+    })
+    return { copies: [], network: 'calibration' }
+  })
+  const { result } = renderHook(useFilecoinUpload)
+  await act(async () => {
+    await result.current.uploadFile(testFile)
+  })
+  expect(result.current.uploadState.stepStates.find((step) => step.step === 'announcing-cids')).toMatchObject({
+    status: 'completed',
+    progress: 100,
+  })
+})
+
+it('reports an announce failure when no authoritative indexing signal passed', async () => {
+  useFilecoinPinContextMock.mockReturnValue(baseContext)
+  executeUploadMock.mockImplementationOnce(async (_synapse, _car, _root, options) => {
+    options.onProgress?.({
+      type: 'pieceSyncStatus:failed',
+      data: { error: new Error('not synced anywhere'), providerCount: 1 },
+    })
+    return { copies: [], network: 'calibration' }
+  })
+  const { result } = renderHook(useFilecoinUpload)
+  await act(async () => {
+    await result.current.uploadFile(testFile)
+  })
+  expect(result.current.uploadState.stepStates.find((step) => step.step === 'announcing-cids')).toMatchObject({
+    status: 'error',
+  })
+})
+
 it('keeps the selected copy count while only the first provider has submitted', async () => {
   useFilecoinPinContextMock.mockReturnValue(baseContext)
   let complete!: () => void

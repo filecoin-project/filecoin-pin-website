@@ -243,6 +243,8 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
         // resume retry below leaves the stored dataset ids in place.
         let sawBytesStored = false
         const transactionsByProvider = new Map<string, string>()
+        // First authoritative indexing signal; later announce failures never downgrade it.
+        let announceConfirmed = false
         let executionContexts: Awaited<ReturnType<typeof prepareUploadContexts>> = []
         const baseOptions: UploadExecutionOptions = {
           logger,
@@ -378,38 +380,52 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
                 break
               }
 
+              case 'pieceSyncStatus:providerSynced': {
+                console.debug('[FilecoinUpload] Advertisement confirmed indexed on provider:', event.data.serviceURL)
+                announceConfirmed = true
+                updateStepState('announcing-cids', { status: 'completed', progress: 100 })
+                break
+              }
+
               case 'pieceSyncStatus:failed': {
                 console.warn('[FilecoinUpload] Piece sync check failed:', event.data.error.message)
-                updateStepState('announcing-cids', {
-                  status: 'error',
-                  progress: 0,
-                  error: INPI_ERROR_MESSAGE,
-                })
+                if (!announceConfirmed) {
+                  updateStepState('announcing-cids', {
+                    status: 'error',
+                    progress: 0,
+                    error: INPI_ERROR_MESSAGE,
+                  })
+                }
                 break
               }
 
               case 'indexingConfirmation:mismatch': {
                 console.warn('[FilecoinUpload] Indexer mismatch:', event.data.error.message)
-                updateStepState('announcing-cids', {
-                  status: 'error',
-                  progress: 0,
-                  error: INPI_ERROR_MESSAGE,
-                })
+                if (!announceConfirmed) {
+                  updateStepState('announcing-cids', {
+                    status: 'error',
+                    progress: 0,
+                    error: INPI_ERROR_MESSAGE,
+                  })
+                }
                 break
               }
 
               case 'ipniProviderResults:failed': {
                 console.warn('[FilecoinUpload] IPNI check failed:', event.data.error.message)
-                updateStepState('announcing-cids', {
-                  status: 'error',
-                  progress: 0,
-                  error: INPI_ERROR_MESSAGE,
-                })
+                if (!announceConfirmed) {
+                  updateStepState('announcing-cids', {
+                    status: 'error',
+                    progress: 0,
+                    error: INPI_ERROR_MESSAGE,
+                  })
+                }
                 break
               }
 
               case 'ipniProviderResults:complete': {
                 console.debug('[FilecoinUpload] IPNI check succeeded')
+                announceConfirmed = true
                 updateStepState('announcing-cids', { status: 'completed', progress: 100 })
                 break
               }

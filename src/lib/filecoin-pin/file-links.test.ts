@@ -18,13 +18,27 @@ it('shares previewable files on an isolated inbrowser origin without the IPLD in
   expect(url.searchParams.has('download')).toBe(false)
 })
 
-it('lets the gateway handle unsupported formats without forcing a download', () => {
+it('previews any stored format and lets the gateway serve it without forcing a download', () => {
   const archive = { ...file, fileName: 'installer.dmg' }
-  expect(canPreviewFile(archive)).toBe(false)
+  expect(canPreviewFile(archive)).toBe(true)
   const url = new URL(fileShareLink(archive) as string)
   expect(url.hostname).toBe(`${cid}.ipfs.inbrowser.link`)
   expect(url.searchParams.has('download')).toBe(false)
   expect(url.searchParams.get('filename')).toBe(archive.fileName)
+})
+
+it('withholds preview until both the root CID and a stored piece are known', () => {
+  expect(canPreviewFile({ ...file, cid: '' })).toBe(false)
+  expect(canPreviewFile({ ...file, pieceCid: '' })).toBe(false)
+  expect(canPreviewFile({ ...file, isDirectory: true })).toBe(false)
+})
+
+it('withholds gateway links while the root CID is known-unindexed, keeping CAR shares provider-direct', () => {
+  const unindexed = { ...file, ipfsIndexed: false }
+  expect(canPreviewFile(unindexed)).toBe(false)
+  expect(fileShareLink(unindexed)).toBeUndefined()
+  expect(fileShareLink({ ...unindexed, importedCar: true })).toBe('https://sp.example/piece/bafk-piece')
+  expect(canPreviewFile({ ...file, ipfsIndexed: true })).toBe(true)
 })
 
 it('shares the exact CAR piece rather than reconstructing its first IPFS root', () => {

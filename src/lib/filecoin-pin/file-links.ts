@@ -3,23 +3,18 @@ import { isCopyRemovalScheduled, isDeletionScheduled } from '../../utils/file-de
 import { getIpfsGatewayPreviewLink } from '../../utils/links.ts'
 import { displayFileName } from './drive-api.ts'
 
-// Inline rendering also depends on the browser and media codecs.
+// Gateway previews need a stored piece and a root CID not known-unindexed on IPNI.
 export const canPreviewFile = (file: DatasetPiece) =>
-  Boolean(file.cid) &&
-  !file.importedCar &&
-  !file.isDirectory &&
-  /\.(avif|bmp|gif|ico|jpe?g|png|svg|webp|pdf|txt|md|markdown|json|html?|mp3|wav|ogg|mp4|webm)$/i.test(
-    displayFileName(file)
-  )
+  Boolean(file.cid && file.pieceCid) && file.ipfsIndexed !== false && !file.importedCar && !file.isDirectory
 
 export function fileShareLink(file: DatasetPiece): string | undefined {
-  if (isDeletionScheduled(file) || (file.upload && file.upload.phase !== 'complete')) return undefined
+  if (isDeletionScheduled(file) || !file.pieceCid) return undefined
   if (!file.importedCar) {
-    if (!file.cid) return undefined
+    // Gateway links need an IPNI-indexed root; CAR shares below are provider-direct.
+    if (!file.cid || file.ipfsIndexed === false) return undefined
     if (file.isDirectory) return getIpfsGatewayPreviewLink(file.cid, '')
     return getIpfsGatewayPreviewLink(file.cid, displayFileName(file))
   }
-  if (!file.pieceCid) return undefined
   const datasetIds = file.datasetIds ?? [file.datasetId]
   for (const [index, serviceURL] of (file.serviceURLs ?? [file.serviceURL]).entries()) {
     if (isCopyRemovalScheduled(file, datasetIds[index])) continue
