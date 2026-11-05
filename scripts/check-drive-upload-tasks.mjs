@@ -8,6 +8,7 @@ import { unzipSync } from 'fflate'
 import { CID } from 'multiformats/cid'
 import { decodeFunctionData, encodeFunctionResult, toFunctionSelector } from 'viem'
 import { prepareBrowserPage } from './drive-browser-fixtures.mjs'
+import { openDrive } from './drive-browser-navigation.mjs'
 
 /** Exercise the real task UI/persistence and SDK recovery readers without submitting transactions. */
 export async function checkUploadTasks(browser) {
@@ -115,6 +116,7 @@ export async function checkUploadTasks(browser) {
       })
     })
     await page.goto(process.env.DRIVE_TEST_URL || 'http://127.0.0.1:5173/')
+    await openDrive(page)
     await page.getByRole('button', { name: 'Connect wallet', exact: true }).click()
     await page.getByRole('button', { name: 'Wallet and Storage', exact: true }).click()
     await page
