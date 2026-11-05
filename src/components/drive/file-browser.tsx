@@ -251,9 +251,8 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
   const selectableFiles = files.filter(canSelect)
   const selectedFiles = selectableFiles.filter((file) => selectedFileIds.has(file.id))
   const removableFiles = selectedFiles.filter(canSelectForRemoval)
-  const batchTargets = [
-    ...new Map(selectedFiles.filter(canSelectForDeletion).map((file) => [file.pieceCid, file])).values(),
-  ]
+  const storedFiles = selectedFiles.filter(canSelectForDeletion)
+  const batchTargets = [...new Map(storedFiles.map((file) => [file.pieceCid, file])).values()]
   const batchAliases = visibleHistory.filter((file) => batchTargets.some((target) => target.pieceCid === file.pieceCid))
   const toggleSelection = (file: DatasetPiece) =>
     setSelectedFileIds((current) => {
@@ -324,12 +323,13 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
               <span className="text-xs text-muted">{selectedFiles.length} selected</span>
               {removableFiles.length > 0 && (
                 <Button
+                  className="w-auto"
                   disabled={isEditing || connection.busy}
                   onClick={() => setBatchRemoveOpen(true)}
                   size="sm"
                   variant="secondary"
                 >
-                  Remove local records ({removableFiles.length})
+                  Remove failed records ({removableFiles.length})
                 </Button>
               )}
               {batchTargets.length > 0 && (
@@ -341,7 +341,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                   variant="danger"
                 >
                   <Trash2 aria-hidden="true" size={14} />
-                  Delete selected
+                  Delete stored files ({storedFiles.length})
                 </Button>
               )}
             </>
@@ -748,7 +748,10 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
         open={batchRemoveOpen}
         title="Remove local records"
       >
-        <ul aria-label="Local records to remove" className="space-y-2 text-sm">
+        <ul
+          aria-label="Local records to remove"
+          className="max-h-72 space-y-2 overflow-y-auto rounded-lg border border-border p-3 text-sm"
+        >
           {removableFiles.map((file) => (
             <li className="break-words" key={file.id}>
               {displayFileName(file)}
