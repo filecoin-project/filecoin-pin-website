@@ -4,6 +4,9 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Filecoin Drive — A drive, right in your browser.</title>
 <meta name="description" content="A drive, right in your browser. Store your files on Filecoin and keep control with your wallet.">
+<script>
+try { document.documentElement.dataset.theme = window.parent !== window ? window.parent.document.documentElement.dataset.theme : localStorage.getItem('filecoin-drive-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); } catch {}
+</script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
 <link rel="preload" href="/fonts/funnel-sans-variable.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/AspektaVF.woff2" as="font" type="font/woff2" crossorigin>
@@ -71,11 +74,28 @@ body{font-family:'Funnel Sans',Arial,sans-serif}h1,h2,.brand,.large-number{font-
 .primary,.outline{background:rgba(255,255,255,.65)}.primary:hover,.outline:hover{background:rgba(237,251,255,.75)}.demo-link:hover{background:rgba(255,255,255,.65)}
 .file-preview{background:rgba(255,255,255,.65);backdrop-filter:blur(3px)}.preview-paper{background:rgba(255,255,255,.65)}dialog{background:rgba(243,248,255,.65)}
 .integrity-proof{margin-top:8px}
+/* Reuse the app theme; only the landing scene and its surfaces need local tokens. */
+.theme-toggle{display:grid;place-items:center;width:40px;height:40px;flex:none;border:1px solid var(--line);border-radius:50%;background:rgba(255,255,255,.65);color:var(--ink)}.theme-toggle svg{width:20px;height:20px}.theme-toggle .sun{display:none}.network:hover{color:var(--coral)}
+[data-theme="dark"]{color-scheme:dark;--ink:#f1f6ff;--mid:#b0bfd5;--line:#8bbcf226;--coral:#39a8ff;--teal:#67b9ff}
+[data-theme="dark"] body{background:#020810}
+[data-theme="dark"] .page{background:radial-gradient(ellipse at 62% 48%,#0a253b 0,#041322 43%,#01060d 100%)}
+[data-theme="dark"] .page:before{background:linear-gradient(90deg,#020a14ed,#020a14a6 28%,transparent 55%)}
+[data-theme="dark"] .topbar{background:rgba(2,8,16,.72)}
+[data-theme="dark"] .hero h1,[data-theme="dark"] .hero .intro,[data-theme="dark"] .status{text-shadow:0 0 14px #020810,0 0 28px #020810}
+[data-theme="dark"] :is(.panel,.tour,.demo-link,.file-preview,.preview-paper,.primary,.outline,.theme-toggle,dialog){background:rgba(4,16,29,.65);color:var(--ink);border-color:var(--line)}
+[data-theme="dark"] :is(.primary,.outline){border-color:var(--coral)}
+[data-theme="dark"] :is(.primary,.outline,.demo-link,.theme-toggle):hover{background:rgba(12,37,58,.8);border-color:var(--coral)}
+[data-theme="dark"] :is(.primary span,.outline span,.panel-head span){color:var(--mid)}
+[data-theme="dark"] .world-map>g:first-child{fill:#244a75}
+[data-theme="dark"] #load-bar i{background:#253e5d}[data-theme="dark"] #load-bar i.on{background:var(--teal)}
+[data-theme="dark"] .theme-toggle .moon{display:none}[data-theme="dark"] .theme-toggle .sun{display:block}
+@media(max-width:820px){.top-actions{gap:8px}.theme-toggle{width:36px;height:36px}}
+@media(max-width:360px){.topbar{gap:5px}.brand{font-size:16px;gap:5px}.brand-mark{width:26px}.top-actions{gap:5px}.outline{padding:8px;font-size:10px}}
 </style>
 </head>
 <body>
 <div class="page">
-<header class="topbar"><a class="brand" href="/" aria-label="Filecoin Drive home"><img class="brand-mark" src="/filecoin-mark.svg" alt=""><span>Filecoin <small>Drive</small></span></a><nav class="nav" aria-label="Main navigation"><a href="#how-it-works" id="how-link">How it works ↗</a><a href="https://docs.filecoin.io/" target="_blank" rel="noopener">Documentation ↗</a><a href="https://github.com/filecoin-project/filecoin-pin-website/fork" target="_blank" rel="noopener">Fork &amp; build your own ↗</a></nav><div class="top-actions"><span class="network"><i class="dot"></i>POWERED BY FILECOIN</span><button class="outline launch">Open Drive ↗</button></div></header>
+<header class="topbar"><a class="brand" href="/" aria-label="Filecoin Drive home"><img class="brand-mark" src="/filecoin-mark.svg" alt=""><span>Filecoin <small>Drive</small></span></a><nav class="nav" aria-label="Main navigation"><a href="#how-it-works" id="how-link">How it works ↗</a><a href="https://docs.filecoin.io/" target="_blank" rel="noopener">Documentation ↗</a><a href="https://github.com/filecoin-project/filecoin-pin-website/fork" target="_blank" rel="noopener">Fork &amp; build your own ↗</a></nav><div class="top-actions"><button class="theme-toggle" id="theme-toggle" aria-label="Switch to dark theme" title="Switch to dark theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path class="moon" d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/><g class="sun"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.4 1.4m11.2 11.2L19 19M5 19l1.4-1.4M17.6 6.4L19 5"/></g></svg></button><a class="network" href="https://filecoin.io/" target="_blank" rel="noopener noreferrer"><i class="dot"></i>POWERED BY FILECOIN ↗</a><button class="outline launch">Open Drive ↗</button></div></header>
 <canvas id="scene" aria-label="An octopus fetches documents, folders and media from independent storage nodes around the world. Drag to rotate, use the mouse wheel to zoom, or explore each step below."></canvas>
 
 <main class="hero"><h1>A drive,<br>right in your<br><em>browser.</em></h1><p class="intro">An open-source reference app<br>for building on Filecoin.</p><div class="hero-actions"><button class="primary launch">Launch your drive <span>↗</span></button><a class="demo-link" href="https://demopin.filecoin.cloud/" target="_blank" rel="noopener noreferrer">Try the demo <span aria-hidden="true">↗</span><small>Try a quick upload on the test network.</small></a></div><a class="build-link" href="https://github.com/filecoin-project/filecoin-pin-website/fork" target="_blank" rel="noopener noreferrer">Fork &amp; build your own ↗</a></main>
@@ -94,6 +114,20 @@ body{font-family:'Funnel Sans',Arial,sans-serif}h1,h2,.brand,.large-number{font-
 </div>
 <dialog id="how" aria-labelledby="how-title"><button id="close-how" aria-label="Close explanation">✕</button><h2 id="how-title">How Filecoin Drive works</h2><ol><li><strong>Connect your wallet.</strong> Your browser is your workspace. Authorize a session and fund storage from Drive.</li><li><strong>Add your files.</strong> Each file gets a content identifier (CID), an address derived from its contents.</li><li><strong>Store on Filecoin.</strong> Independent storage providers hold the data, with storage proofs recorded on the network.</li><li><strong>Keep control.</strong> Browse, download and manage your files. Your content addresses work beyond this app.</li></ol></dialog>
 <script>
+function setLandingTheme(theme) {
+  if(theme!=='light'&&theme!=='dark')return;
+  document.documentElement.dataset.theme=theme;
+  document.querySelectorAll('.brand-mark,.preview-paper img').forEach(img=>{img.src='/filecoin-mark.svg'+(theme==='dark'?'#dark':'');});
+  const label='Switch to '+(theme==='dark'?'light':'dark')+' theme',button=document.getElementById('theme-toggle');
+  button.setAttribute('aria-label',label);button.title=label;
+  dispatchEvent(new Event('drive-theme-change'));
+}
+setLandingTheme(document.documentElement.dataset.theme||'light');
+addEventListener('message',event=>{if(event.origin===location.origin&&event.source===parent&&event.data?.type==='drive-theme')setLandingTheme(event.data.theme);});
+document.getElementById('theme-toggle').onclick=()=>{
+  if(parent!==window)parent.postMessage('toggle-theme',location.origin);
+  else {const theme=document.documentElement.dataset.theme==='dark'?'light':'dark';setLandingTheme(theme);try{localStorage.setItem('filecoin-drive-theme',theme);}catch{}}
+};
 document.querySelectorAll('.launch').forEach(button=>button.addEventListener('click',()=>{if(window.parent!==window)window.parent.postMessage('open-drive',location.origin);else location.href='/';}));
 document.getElementById('how-link').onclick=e=>{e.preventDefault();document.getElementById('how').showModal()};document.getElementById('close-how').onclick=()=>document.getElementById('how').close();
 </script>
@@ -122,7 +156,7 @@ try {
   const camera = new THREE.PerspectiveCamera(26, 1, .1, 100);
   const field = new THREE.Group(); scene.add(field);
   const body = new THREE.Group(); field.add(body);
-  scene.add(new THREE.HemisphereLight(0xe4efff, 0x637fa6, .65));
+  const ambient = new THREE.HemisphereLight(0xe4efff, 0x637fa6, .65); scene.add(ambient);
   const key = new THREE.DirectionalLight(0xffffff, 2.8); key.position.set(5,11,8);key.castShadow=true;key.shadow.mapSize.set(2048,2048);Object.assign(key.shadow.camera,{left:-7,right:7,top:7,bottom:-7,near:1,far:30});key.shadow.bias=-.0006;key.shadow.normalBias=.02;scene.add(key,key.target);
   const fill = new THREE.DirectionalLight(0x83baff, .8); fill.position.set(-4, 1, -2); scene.add(fill);
   const ceramic = new THREE.MeshPhysicalMaterial({ color: 0xf6f8ff, roughness: .34, clearcoat: .7 });
@@ -131,8 +165,11 @@ try {
   const coral = new THREE.MeshPhysicalMaterial({ color: 0x008cff, roughness: .32, clearcoat: .5 });
   const aqua = new THREE.MeshPhysicalMaterial({ color: 0x56b8ff, roughness: .25, clearcoat: .7 });
   const glass = new THREE.MeshPhysicalMaterial({ color: 0xd6eaff, roughness: .08, transparent: true, opacity: .15, side: THREE.DoubleSide, depthWrite: false });
+  const glassOpacity={value:new THREE.Vector2(.06,.48)};
   glass.onBeforeCompile = shader => {
-    shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'float fr=pow(1.-abs(dot(normalize(vViewPosition),normal)),2.2);diffuseColor.a=mix(.06,.48,fr);outgoingLight+=vec3(.2,.5,.95)*fr*.15;\n#include <opaque_fragment>');
+    shader.uniforms.glassOpacity=glassOpacity;
+    shader.fragmentShader='uniform vec2 glassOpacity;\n'+shader.fragmentShader;
+    shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', 'float fr=pow(1.-abs(dot(normalize(vViewPosition),normal)),2.2);diffuseColor.a=mix(glassOpacity.x,glassOpacity.y,fr);outgoingLight+=vec3(.2,.5,.95)*fr*.15;\n#include <opaque_fragment>');
   };
   const V = (x=0,y=0,z=0) => new THREE.Vector3(x,y,z);
   const clamp = x => Math.max(0,Math.min(1,x));
@@ -223,7 +260,7 @@ try {
   // Mainnet provider snapshot from SP Dashboard, checked 2026-11-05.
   const providers=[{"name":"ezpdpz-main"},{"name":"Mongo2Stor Mainnet"},{"name":"ezpdpz-main2"},{"name":"Cello"},{"name":"Bass"},{"name":"Brown Storage UK"},{"name":"ProbeLab"}];
   const nodes=[];
-  function textSprite(text,color='#305782') {
+  function textSprite(text,color='#ffffff') {
     const c=document.createElement('canvas');c.width=512;c.height=64;const ctx=c.getContext('2d');ctx.fillStyle=color;ctx.font='500 23px monospace';ctx.textAlign='center';ctx.fillText(text,256,40);
     const texture=new THREE.CanvasTexture(c);texture.colorSpace=THREE.SRGBColorSpace;
     const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,depthTest:true}));sprite.scale.set(1.9,.2375,1);sprite.renderOrder=12;return sprite;
@@ -243,7 +280,7 @@ try {
       for(let k=0;k<5;k++)mesh(new THREE.BoxGeometry(.095,.025,.012),aqua,group,x,-.17+k*.085,.15);
     }
     for(let k=0;k<6;k++)mesh(new THREE.BoxGeometry(.045,.012,.3),steel,group,-.14+k*.055,.413,0);
-    nodes.push({group,position,halo});
+    nodes.push({group,position,halo,label});
   }
   // Unlabelled background icons suggest network scale; named providers stay distinct.
   const backgroundCount=140;
@@ -289,6 +326,23 @@ try {
   });
   const bubbles=new THREE.InstancedMesh(new THREE.SphereGeometry(1,12,10),new THREE.MeshPhysicalMaterial({color:0xffffff,roughness:.1,transparent:true,opacity:.5,envMapIntensity:1.6}),90);
   bubbles.frustumCulled=false;field.add(bubbles);
+  function updateSceneTheme(){
+    const night=document.documentElement.dataset.theme==='dark';
+    glassOpacity.value.set(night?.24:.06,night?.78:.48);
+    renderer.toneMappingExposure=night?.9:1.02;scene.environmentIntensity=night?.6:.62;key.intensity=night?2.4:2.8;
+    ambient.intensity=night?.35:.65;fill.intensity=night?2:.8;
+    fill.color.setHex(night?0x52caff:0x83baff);
+    ceramic.roughness=night?.18:.34;ceramic.clearcoat=night?1:.7;
+    steel.roughness=night?.18:.3;
+    ceramic.emissive.setHex(night?0x08284a:0x000000);ceramic.emissiveIntensity=night?.2:0;
+    aqua.emissive.setHex(night?0x39c9ff:0x000000);aqua.emissiveIntensity=night?1.5:0;
+    coral.emissive.setHex(night?0x008cff:0x000000);coral.emissiveIntensity=night?.85:0;
+    backgroundRacks.material.color.setHex(night?0x469bd9:0x77a9e0);backgroundRacks.material.opacity=night?.3:.28;
+    backgroundSlots.material.color.setHex(night?0x8de8ff:0x2775c5);backgroundSlots.material.opacity=night?.8:.35;
+    lineMat.opacity=night?.08:.28;
+    nodes.forEach(node=>node.label.material.color.set(night?'#c1eaff':'#305782'));
+  }
+  addEventListener('drive-theme-change',updateSceneTheme);updateSceneTheme();
   const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let t=reduced?2:0,last=performance.now(),section=-1,yaw=0,pitch=0,targetYaw=0,targetPitch=0,drag=null,scrubbing=false,carryingLaunch=false,zoom=1,targetZoom=1;
   const rail=$('timeline');

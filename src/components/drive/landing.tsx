@@ -1,30 +1,34 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
+import { useTheme } from '../../context/theme-provider.tsx'
 import { ButtonBase } from '../ui/button/button-base.tsx'
 import { WalletControls } from './wallet-controls.tsx'
 
 export function Landing() {
   const frame = useRef<HTMLIFrameElement>(null)
   const wallet = useBrowserWallet()
+  const { theme, toggleTheme } = useTheme()
+  const syncTheme = useCallback(() => {
+    frame.current?.contentWindow?.postMessage({ type: 'drive-theme', theme }, location.origin)
+  }, [theme])
+  useEffect(syncTheme, [syncTheme])
   const [open, setOpen] = useState(false)
   useEffect(() => {
     const receive = (event: MessageEvent) => {
-      if (
-        event.origin === location.origin &&
-        event.source === frame.current?.contentWindow &&
-        event.data === 'open-drive'
-      ) {
-        setOpen(true)
+      if (event.origin === location.origin && event.source === frame.current?.contentWindow) {
+        if (event.data === 'open-drive') setOpen(true)
+        if (event.data === 'toggle-theme') toggleTheme()
       }
     }
     window.addEventListener('message', receive)
     return () => window.removeEventListener('message', receive)
-  }, [])
+  }, [toggleTheme])
   return (
     <main>
       <iframe
         className="block h-dvh w-full border-0"
+        onLoad={syncTheme}
         ref={frame}
         src="/drive-field.html"
         title="Filecoin Drive — interactive storage explorer"

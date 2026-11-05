@@ -34,7 +34,11 @@ export function WalletControls() {
     <header className="border-b border-border bg-canvas">
       <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-x-6 gap-y-4 px-5 py-5 sm:px-8 lg:px-12">
         <div className="flex shrink-0 items-center gap-3">
-          <img alt="Filecoin" className="h-10 w-10 shrink-0" src="/filecoin-mark.svg" />
+          <img
+            alt="Filecoin"
+            className="h-10 w-10 shrink-0"
+            src={theme === 'dark' ? '/filecoin-mark.svg#dark' : '/filecoin-mark.svg'}
+          />
           <div>
             <p className="text-lg font-semibold tracking-tight">
               Filecoin <span className="font-normal text-muted">Drive</span>
