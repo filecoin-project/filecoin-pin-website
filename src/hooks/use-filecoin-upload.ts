@@ -243,12 +243,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
         // resume retry below leaves the stored dataset ids in place.
         let sawBytesStored = false
         const transactionsByProvider = new Map<string, string>()
-        // Completes the announce step on the first authoritative pass: any
-        // provider's piece-status reporting synced means the IPNI instance
-        // confirmed it fully processed that provider's advertisement, and the
-        // direct indexer lookup carries the same authority. Later per-provider
-        // timeouts or confirming-lookup mismatches never downgrade a confirmed
-        // announcement.
+        // First authoritative indexing signal; later announce failures never downgrade it.
         let announceConfirmed = false
         let executionContexts: Awaited<ReturnType<typeof prepareUploadContexts>> = []
         const baseOptions: UploadExecutionOptions = {
