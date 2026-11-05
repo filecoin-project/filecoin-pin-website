@@ -34,7 +34,11 @@ export function WalletControls() {
     <header className="border-b border-border bg-canvas">
       <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-x-6 gap-y-4 px-5 py-5 sm:px-8 lg:px-12">
         <div className="flex shrink-0 items-center gap-3">
-          <img alt="Filecoin" className="h-10 w-10 shrink-0" src="/filecoin-mark.svg" />
+          <img
+            alt="Filecoin"
+            className="h-10 w-10 shrink-0"
+            src={theme === 'dark' ? '/filecoin-mark.svg#dark' : '/filecoin-mark.svg'}
+          />
           <div>
             <p className="text-lg font-semibold tracking-tight">
               Filecoin <span className="font-normal text-muted">Drive</span>
@@ -52,20 +56,6 @@ export function WalletControls() {
           >
             {theme === 'dark' ? <Sun aria-hidden="true" size={18} /> : <Moon aria-hidden="true" size={18} />}
           </button>
-          <label className="sr-only" htmlFor="network">
-            Network
-          </label>
-          <Select
-            containerClassName="min-w-[190px] flex-1 sm:flex-none"
-            disabled={wallet.busy || wallet.uploading || wallet.deleting || wallet.restoring}
-            id="network"
-            leadingIcon={<span className="h-1.5 w-1.5 rounded-full bg-brand-500" />}
-            onChange={(event) => void wallet.switchNetwork(event.target.value as 'mainnet' | 'calibration')}
-            value={wallet.network}
-          >
-            <option value="mainnet">Filecoin Mainnet</option>
-            <option value="calibration">Calibration Testnet</option>
-          </Select>
           {wallet.address ? (
             <>
               <span
