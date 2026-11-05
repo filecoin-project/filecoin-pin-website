@@ -35,7 +35,7 @@ Disconnecting a WalletConnect wallet also ends its remote connection session. Wa
 - File table with search across file names and folder paths, dates, copy counts and storage status. File contents are not searched.
 - Folder tree and breadcrumbs derived from file paths recorded at upload. Names and paths are immutable in Drive; standalone empty folders are not supported.
 - File details with IPFS root CID, piece CID, providers, datasets and transaction links.
-- Original-file download: retrieve and validate the CAR from a recorded provider, then extract the UnixFS file in the browser. File details also offer a new-tab gateway preview for common browser-supported formats; media playback depends on the browser and encoding.
+- Original-file download: retrieve and validate the CAR from a recorded provider, then extract the UnixFS file in the browser. File details also offer a new-tab gateway preview for every downloadable file; whether the browser renders or saves it depends on the format, browser and encoding.
 
 - Scheduling deletion across recorded copies, with persisted transaction checkpoints for partial failures and retries.
 

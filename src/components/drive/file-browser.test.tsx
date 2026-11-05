@@ -645,6 +645,30 @@ it.each([false, true])('keeps original downloads without a gateway download link
   expect(screen.queryByText(/The gateway exports a new CAR/)).toBeNull()
 })
 
+it('keeps a stored copy previewable and shareable while replication is still confirming', async () => {
+  setCachedPieces(scope, [
+    {
+      ...file,
+      fileName: 'FiSuite.mp4',
+      copyCount: 1,
+      upload: { phase: 'pending', expectedCopies: 2, providers: [], steps: [], checks: 0, nextCheckAt: 0 },
+    },
+  ])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  const row = (await screen.findByRole('button', { name: 'FiSuite.mp4' })).closest('tr')
+  expect(row).toBeTruthy()
+  if (!row) return
+  expect(within(row).getByRole('button', { name: 'Share' })).toHaveProperty('disabled', false)
+  fireEvent.click(within(row).getByRole('button', { name: 'FiSuite.mp4' }))
+  const dialog = within(screen.getByRole('dialog'))
+  expect(dialog.getByRole('button', { name: 'Download original file' })).toHaveProperty('disabled', false)
+  expect(dialog.getByRole('link', { name: 'Preview' }).getAttribute('href')).toContain('.ipfs.inbrowser.link')
+})
+
 it('keeps the empty cache in a loading state, then offers retry after index failure', async () => {
   setCachedPieces(scope, [])
   let fail!: (error: Error) => void

@@ -208,8 +208,7 @@ export function DirectoryBrowser({
                 })
                 .map((item) => {
                   const child = selection(item)
-                  const preview =
-                    !item.isDirectory && canPreviewFile(child) && (!file.upload || file.upload.phase === 'complete')
+                  const preview = !item.isDirectory && canPreviewFile(child)
                   return (
                     <tr className="border-t border-border hover:bg-surface" key={item.path}>
                       <td className="pl-16 pr-4 py-3">

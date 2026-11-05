@@ -3,23 +3,22 @@ import { isCopyRemovalScheduled, isDeletionScheduled } from '../../utils/file-de
 import { getIpfsGatewayPreviewLink } from '../../utils/links.ts'
 import { displayFileName } from './drive-api.ts'
 
-// Inline rendering also depends on the browser and media codecs.
+// Preview mirrors download availability: once a provider holds the piece and the
+// root CID is known, the gateway can serve the bytes and the browser decides
+// whether to render or save them. Imported CARs stay excluded: traversing one
+// root cannot reproduce the archive's other roots or extra blocks.
 export const canPreviewFile = (file: DatasetPiece) =>
-  Boolean(file.cid) &&
-  !file.importedCar &&
-  !file.isDirectory &&
-  /\.(avif|bmp|gif|ico|jpe?g|png|svg|webp|pdf|txt|md|markdown|json|html?|mp3|wav|ogg|mp4|webm)$/i.test(
-    displayFileName(file)
-  )
+  Boolean(file.cid && file.pieceCid) && !file.importedCar && !file.isDirectory
 
+// Share mirrors download availability: a link exists once a provider holds the
+// piece, regardless of remaining replication or indexing work.
 export function fileShareLink(file: DatasetPiece): string | undefined {
-  if (isDeletionScheduled(file) || (file.upload && file.upload.phase !== 'complete')) return undefined
+  if (isDeletionScheduled(file) || !file.pieceCid) return undefined
   if (!file.importedCar) {
     if (!file.cid) return undefined
     if (file.isDirectory) return getIpfsGatewayPreviewLink(file.cid, '')
     return getIpfsGatewayPreviewLink(file.cid, displayFileName(file))
   }
-  if (!file.pieceCid) return undefined
   const datasetIds = file.datasetIds ?? [file.datasetId]
   for (const [index, serviceURL] of (file.serviceURLs ?? [file.serviceURL]).entries()) {
     if (isCopyRemovalScheduled(file, datasetIds[index])) continue
