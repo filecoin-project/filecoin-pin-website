@@ -87,7 +87,7 @@ npm run build
 
 For browser regression checks, run `npm run dev` in another terminal, install Chromium with `npx playwright install chromium`, then run `npm run test:drive`. If Chrome is installed, use `PLAYWRIGHT_CHANNEL=chrome npm run test:drive`. `PLAYWRIGHT_CHANNEL=chrome npm run test:drive:theme` checks both themes, shared component contrast, focus/hover states, and rendered console details. `DRIVE_TEST_URL` can select another local dev-server URL. Wallet requests and external RPCs are mocked.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for source layout and contribution conventions. Core code lives in [the wallet provider](src/context/browser-wallet-provider.tsx), [the upload hook](src/hooks/use-filecoin-upload.ts), and [the drive components](src/components/drive/).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for source layout and contribution conventions, and the [release process](docs/RELEASE.md) for staging validation and promotion to production. Core code lives in [the wallet provider](src/context/browser-wallet-provider.tsx), [the upload hook](src/hooks/use-filecoin-upload.ts), and [the drive components](src/components/drive/).
 
 Pending IPFS root CIDs receive at most five additional background indexing checks, two minutes apart. The browser saves the attempt count and cooldown per wallet/network and CID, so reloads and reconnects do not restart the budget. Checks pause while the page is hidden. When the budget is exhausted, the file remains stored and downloadable; its status becomes `Stored · IPFS indexing unconfirmed`. File details offer `Retry indexing checks` to explicitly start another bounded round. This checks root-CID discoverability in IPNI, not full-file retrieval or replica health.
 

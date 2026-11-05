@@ -1,0 +1,91 @@
+name: Deploy Website
+
+# Use the team token so deployment does not depend on the commit author's
+# Vercel role. Vercel builds remotely; do not run repository code with this token.
+on:
+  pull_request:
+  push:
+    branches: [main, staging]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy
+    if: >
+      github.actor != 'dependabot[bot]' &&
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'Production' || 'Preview' }}
+      url: ${{ steps.alias.outputs.url || steps.deploy.outputs.url }}
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      STAGING_DOMAIN: ${{ vars.STAGING_DOMAIN }}
+      PREVIEW_DOMAIN: ${{ vars.PREVIEW_DOMAIN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # Deploy the event's exact commit, even if the branch advances in queue.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Validate configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in VERCEL_ORG_ID VERCEL_PROJECT_ID VERCEL_TOKEN; do
+            if [ -z "${!key}" ]; then
+              echo "::error::Missing deployment secret: $key"
+              exit 1
+            fi
+          done
+          if [ "$GITHUB_REF" = 'refs/heads/staging' ] && [ -z "$STAGING_DOMAIN" ]; then
+            echo '::error::Set STAGING_DOMAIN to the fixed staging hostname.'
+            exit 1
+          fi
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@60.0.0
+
+      - name: Deploy
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "$GITHUB_REF" = 'refs/heads/main' ]; then
+            args+=(--prod)
+          fi
+          url=$(vercel deploy "${args[@]}" --yes --token="$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Alias preview
+        id: alias
+        if: >
+          github.ref == 'refs/heads/staging' ||
+          (github.event_name == 'pull_request' && vars.PREVIEW_DOMAIN != '')
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = 'pull_request' ]; then
+            alias_host="pr-${PR_NUMBER}.${PREVIEW_DOMAIN}"
+          else
+            alias_host="$STAGING_DOMAIN"
+          fi
+          vercel alias set "$DEPLOYMENT_URL" "$alias_host" --token="$VERCEL_TOKEN"
+          echo "url=https://$alias_host" >> "$GITHUB_OUTPUT"

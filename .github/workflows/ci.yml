@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
   pull_request:
-    branches: [main]
+    branches: [main, staging]
 
 jobs:
   test:
@@ -63,6 +63,11 @@ jobs:
   # This runs after test completes and reuses the build artifacts
   filecoin-upload:
     needs: test
+    # Fork and Dependabot runs cannot access the upload wallet secret.
+    if: >
+      github.actor != 'dependabot[bot]' &&
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository)
     permissions:
       contents: read
       checks: write
