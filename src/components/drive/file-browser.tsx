@@ -886,8 +886,9 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                           ? 'Queued · Cancel'
                           : 'Download'}
                     </Button>
-                    {(selected.isDirectory ? Boolean(selected.cid && selected.pieceCid) : canPreviewFile(selected)) &&
-                    fileStatus(selected) !== 'Deletion scheduled' ? (
+                    {(selected.isDirectory
+                      ? Boolean(selected.cid && selected.pieceCid) && selected.ipfsIndexed !== false
+                      : canPreviewFile(selected)) && fileStatus(selected) !== 'Deletion scheduled' ? (
                       <a
                         className={buttonVariants({ variant: 'secondary', size: 'sm' })}
                         href={getIpfsGatewayPreviewLink(
@@ -905,7 +906,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                       <Button
                         disabled
                         size="sm"
-                        title="Preview is unavailable for imported CAR archives or until a storage copy is confirmed."
+                        title="Preview is unavailable for imported CAR archives, or until a storage copy is confirmed and announced to the IPFS indexer."
                         variant="secondary"
                       >
                         <Eye aria-hidden="true" size={14} />

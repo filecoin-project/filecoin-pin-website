@@ -33,6 +33,14 @@ it('withholds preview until both the root CID and a stored piece are known', () 
   expect(canPreviewFile({ ...file, isDirectory: true })).toBe(false)
 })
 
+it('withholds gateway links while the root CID is known-unindexed, keeping CAR shares provider-direct', () => {
+  const unindexed = { ...file, ipfsIndexed: false }
+  expect(canPreviewFile(unindexed)).toBe(false)
+  expect(fileShareLink(unindexed)).toBeUndefined()
+  expect(fileShareLink({ ...unindexed, importedCar: true })).toBe('https://sp.example/piece/bafk-piece')
+  expect(canPreviewFile({ ...file, ipfsIndexed: true })).toBe(true)
+})
+
 it('shares the exact CAR piece rather than reconstructing its first IPFS root', () => {
   const car = { ...file, importedCar: true, serviceURLs: ['', 'bad url', 'https://sp.example/piece/old'] }
   expect(canPreviewFile(car)).toBe(false)
