@@ -439,7 +439,7 @@ export function WalletSetup({
                 key={file.id}
                 ref={index === 0 ? pendingFundingTarget : undefined}
               >
-                <h3 className="text-sm font-medium">Waiting for funding · {file.fileName}</h3>
+                <h3 className="text-sm font-medium">Paused · {file.fileName}</h3>
                 <p className="text-xs leading-5 text-muted">{file.upload?.error}</p>
                 <div className="flex flex-wrap gap-2">
                   {file.upload?.funding && BigInt(file.upload.funding.depositNeeded) > 0n && (

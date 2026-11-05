@@ -127,7 +127,7 @@ try {
     .locator('input[type=file]')
     .setInputFiles({ name: 'Zoom_Light.png', mimeType: 'image/png', buffer: Buffer.from('example file') })
   await upload.getByRole('button', { name: 'Upload', exact: true }).click()
-  await page.getByText('Waiting for funding', { exact: true }).waitFor()
+  await page.getByText('Paused', { exact: true }).waitFor()
   await page.screenshot({ path: `${output}/waiting-list.png`, animations: 'disabled' })
   await page.getByRole('button', { name: 'Zoom_Light.png', exact: true }).click()
   await page.getByRole('button', { name: 'Check funding and continue', exact: true }).waitFor()

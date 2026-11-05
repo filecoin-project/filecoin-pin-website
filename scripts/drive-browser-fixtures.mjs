@@ -296,7 +296,7 @@ export async function prepareBrowserPage(
               pieceId: 1,
               copyCount: 1,
               folderPath: '',
-              ipfsIndexed: false,
+              ipfsIndexed: true,
             },
           ])
         )

@@ -25,7 +25,7 @@ export function fileStatus(file: DatasetPiece) {
 export function fileStatusColors(status: string) {
   if (status === 'Stored') return 'bg-emerald-500/10 text-success'
   if (status === 'Upload failed') return 'bg-red-500/10 text-danger'
-  if (status === 'Metadata missing') return 'bg-surface-raised text-muted'
+  if (status === 'Waiting' || status === 'Metadata missing') return 'bg-surface-raised text-muted'
   return 'bg-amber-500/10 text-warning'
 }
 
@@ -37,4 +37,25 @@ export function copyProgress(file: DatasetPiece) {
   if (upload.phase === 'failed') return 'Failed'
   if (upload.phase === 'complete') return 'Partial'
   return 'Confirming'
+}
+
+/** Presentation only: storage confirmation, indexing and recovery retain their own states. */
+export type CustomerStatus = 'Waiting' | 'Uploading…' | 'Stored' | 'Paused' | 'Upload failed' | 'Deleting…'
+
+/** One confirmed copy is stored; replication and gateway indexing are separate progress. */
+export function customerStatus(file: DatasetPiece): CustomerStatus {
+  if (isDeletionScheduled(file) || hasRemovalProgress(file)) return 'Deleting…'
+  if (file.upload && !(file.copyCount ?? 0)) {
+    if (file.upload.phase === 'waiting') return 'Waiting'
+    if (file.upload.phase === 'funding') return 'Paused'
+    if (file.upload.phase === 'failed') return 'Upload failed'
+    if (file.upload.phase === 'interrupted') {
+      const pendingSubmission = file.upload.providers.some(
+        (provider) => provider.transactionHash && !provider.confirmed && !provider.rejected
+      )
+      return pendingSubmission ? 'Uploading…' : 'Upload failed'
+    }
+    return 'Uploading…'
+  }
+  return 'Stored'
 }

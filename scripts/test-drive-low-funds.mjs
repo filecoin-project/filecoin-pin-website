@@ -86,7 +86,23 @@ try {
         }))
       )
       await upload.getByRole('button', { name: 'Upload 3 files', exact: true }).click()
-      await page.getByText('Waiting for funding', { exact: true }).waitFor()
+      await page.getByText('Paused', { exact: true }).waitFor()
+      await page.getByTitle('Uploads or deletions in progress', { exact: true }).waitFor({ state: 'detached' })
+      const pausedRow = page.getByRole('button', { name: 'example.png', exact: true }).locator('..').locator('..')
+      assert.equal(
+        await pausedRow.getByLabel('Uploading…').count(),
+        0,
+        'Paused uploads must not show an uploading spinner'
+      )
+      assert.equal(await page.getByRole('columnheader', { name: /Status|Copies/ }).count(), 0)
+      for (const name of ['notes.txt', 'receipt.csv']) {
+        const row = page.getByRole('button', { name, exact: true }).locator('..').locator('..')
+        await row.getByRole('img', { name: 'Waiting to upload', exact: true }).waitFor()
+        assert.equal(await row.getByText('Waiting', { exact: true }).count(), 0)
+        assert.equal(await row.getByLabel('Uploading…').count(), 0, 'Queued uploads must not show a spinner')
+        assert.equal(await row.getByRole('checkbox', { name: `Select ${name}`, exact: true }).isEnabled(), true)
+      }
+
       await page.getByRole('button', { name: 'example.png', exact: true }).click()
       await page.getByRole('button', { name: 'Check funding and continue', exact: true }).waitFor()
       await page

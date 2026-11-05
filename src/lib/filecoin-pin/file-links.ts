@@ -7,6 +7,8 @@ import { displayFileName } from './drive-api.ts'
 export const canPreviewFile = (file: DatasetPiece) =>
   Boolean(file.cid && file.pieceCid) && file.ipfsIndexed !== false && !file.importedCar && !file.isDirectory
 
+// Share mirrors download availability: a link exists once a provider holds the
+// piece, regardless of remaining replication or indexing work.
 export function fileShareLink(file: DatasetPiece): string | undefined {
   if (isDeletionScheduled(file) || !file.pieceCid) return undefined
   if (!file.importedCar) {

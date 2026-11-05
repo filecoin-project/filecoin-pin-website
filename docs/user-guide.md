@@ -52,13 +52,13 @@ Choose **Folder** in the upload panel to store an entire folder as one UnixFS di
 
 An organizing folder groups independent uploads. An uploaded folder stores its contents together: its children share the folder’s upload time and cannot be added, renamed or deleted individually. Delete the uploaded folder from its details to remove its storage copies. Icons and folder information distinguish these two kinds of folder. Known name collisions are rejected before a folder upload starts.
 
-The search field stays in the Files toolbar beside Load from Filecoin and Upload. **Search file list** matches names and paths in the wallet’s file records, without searching inside uploaded folders. Inside an uploaded folder, **Search this folder** matches names across all pages of the current directory (not file contents or nested directories), up to 10,000 entries. Opening Upload from an uploaded folder leaves Upload location empty and starts at Files root because uploaded folders cannot be appended to. Opening Upload from an organizing folder pre-fills its current path.
+The search field stays in the Files toolbar beside Upload. **Search file list** matches names and paths in the wallet’s file records, without searching inside uploaded folders. Inside an uploaded folder, **Search this folder** matches names across all pages of the current directory (not file contents or nested directories), up to 10,000 entries. Opening Upload from an uploaded folder leaves Upload location empty and starts at Files root because uploaded folders cannot be appended to. Opening Upload from an organizing folder pre-fills its current path.
 
 ## Downloads, previews and sharing
 
 Use **Download** to retrieve the original file from a recorded storage provider. File details offer gateway previews for every downloadable file; whether the browser displays or saves it depends on the format, browser and encoding.
 
-Gateway links use the external `inbrowser.link` browser gateway. Gateway availability is separate from IPNI indexing: an indexed CID does not guarantee successful gateway retrieval.
+Gateway links use the external `inbrowser.link` browser gateway. One confirmed provider with a synced piece and an advertised root CID is enough to enable gateway links; remaining replicas continue their own upload checks. Gateway availability is separate from IPNI indexing: an indexed CID does not guarantee successful gateway retrieval.
 
 Original-file downloads can run alongside an upload. Additional downloads are queued and run one at a time; repeated requests for the same file record are deduplicated. Queued files show **Queued · Cancel** in the list and details. Expand the queue above the file list to manage pending downloads across folders. Pending downloads can be cancelled; an active download cannot be cancelled. A failed download reports its file name and the queue continues. The queue is kept only in the current page and is cleared on reload or a wallet/network change; an already running download may still finish. Closing file details keeps downloads running.
 
@@ -76,25 +76,36 @@ Larger deletions may require **Continue deletion** after the provider’s remova
 
 Deletion is scheduled for provider processing, rather than immediate erasure. IPFS caches may retain content. Piece removal does not terminate the whole dataset or immediately end every storage charge.
 
+A stopped partial upload with at least one confirmed copy can be deleted once no provider has an unresolved submission or an unconfirmed stored-file checkpoint. Active uploads remain protected by content locks. Use **Check status** to reconcile missing confirmations; missing API entries alone do not prove failure. Deletion schedules removal of the recorded stored copies, not cancellation of unknown operations.
+
+Upload transaction links are shown only for the dataset whose hash is recorded. API recovery can restore confirmed copies without restoring the original transaction hash; no empty or borrowed transaction links are generated.
+
 ## Refresh and recover
 
-Connect the same wallet on another browser to discover indexed Drive files. Recent uploads may take time to appear; use **Load from Filecoin** to retry. Older datasets without Drive metadata may only remain available in the browser that cached them.
+Connect the same wallet on another browser to discover indexed Drive files. Recent uploads may take time to appear; reload the page to fetch the latest list. If loading fails, use **Retry**. Older datasets without Drive metadata may only remain available in the browser that cached them.
 
 If saving fails, keep the page open, free browser storage and use **Retry saving**. Clearing site data loses unindexed checkpoints and local-only metadata.
 
 After reload, Drive checks saved provider operations without uploading files again. **Check status** can refresh existing confirmations, but cannot resume unfinished transfers or submission steps. You may need to select the original file again. A timeout alone does not establish that an upload or wallet transaction failed.
 
-Wallet setup transactions that time out remain pending to prevent duplicate submissions. Use **Refresh status** to check again. If IPFS indexing checks stop, the stored file remains downloadable; **Retry indexing checks** starts another bounded round. Indexing is not a guarantee of gateway availability or replica health.
+Wallet setup transactions that time out remain pending to prevent duplicate submissions. Use **Refresh status** to check again. If IPFS indexing takes longer than usual, the stored file remains downloadable. Checks continue every 30 minutes after the first five attempts while the page is visible; **Check now** resets the cooldown. Indexing is not a guarantee of gateway availability or replica health.
 
 
 ### Planning storage funds
 
 In **Wallet and Storage**, **Storage funds** estimates a top-up for an expected capacity and usage budget (defaults: 1 GiB and 30 days). The read-only SDK quote includes the selected storage copies, dataset setup, required reserves and additional runway. Existing matching datasets are reused. The card shows the SDK’s monthly storage rate, available funds and suggested top-up. Locked reserves are in **How estimates work**. It does not derive a budget total from the deposit shortfall. Many small uploads can incur more operation fees than the single-piece planning estimate. A required top-up automatically fills the deposit input; when no top-up is needed it starts empty. Manual edits are preserved when quotes refresh; **Deposit USDFC** still requires an explicit owner-wallet action. Payment approval remains separate.
 
-Before each transfer, an SDK quote checks the actual packed size against the actual selected storage contexts. Insufficient funding produces **Waiting for funding**, pauses the transfer queue and leaves wallet funding actions available. File details link to **Wallet and Storage**, which also shows the last checked upload minimum. After funding or approval, use **Check funding and continue** to recheck and resume. Original file bytes remain available in the current page; after a reload, select the original file or folder again. Other queued files wait until the blocked upload is continued or removed. Ordinary transfer failures retain the existing failure behavior.
+Before each transfer, an SDK quote checks the actual packed size against the actual selected storage contexts. Insufficient funding produces **Paused**, pauses the transfer queue and leaves wallet funding actions available. File details link to **Wallet and Storage**, which also shows the last checked upload minimum. After funding or approval, use **Check funding and continue** to recheck and resume. Original file bytes remain available in the current page; after a reload, select the original file or folder again. Other queued files wait until the blocked upload is continued or removed. Ordinary transfer failures retain the existing failure behavior.
 
 Run `node scripts/test-drive-funding.mjs` against `npm run dev` for mocked budget states, waiting-upload navigation and desktop/mobile screenshots. These checks submit no live transactions.
 
-Queued **Waiting** uploads and **Waiting for funding** uploads can be selected together with failed local records and removed using **Remove local records**. The selected tasks are canceled as one batch before the queue advances; original file bytes are released. Active transfers and submitted storage operations are excluded. Removing these records does not submit a chain transaction or delete stored files.
+Queued uploads and **Paused** uploads can be selected together with failed local records and removed using **Remove local records**. The selected tasks are canceled as one batch before the queue advances; original file bytes are released. Active transfers and submitted storage operations are excluded. Removing these records does not submit a chain transaction or delete stored files.
+
+
+### File list status
+
+The file list has selection, Name, Size, Uploaded and Actions columns. Status appears beside the name: a static muted clock for queued uploads that have not started (hover or an accessible label identifies **Waiting to upload**), a spinner for uploads or deletions in progress, a static **Paused** badge when funding or payment approval needs attention, and **Upload failed** when an unfinished upload requires recovery or retry. Open file details for the cause and available actions. Paused uploads remain selectable for **Remove local records**, including alongside queued and failed local records; removing the batch cancels those tasks before the queue advances.
+
+Stored files have no badge. At least one confirmed storage copy is enough to show **Stored** in details; remaining replication and IPFS indexing do not change that status. A provider receiving bytes or an indexed CID alone does not establish confirmed storage. Preview and share availability still follow their own checks. Copy counts, provider receipts and saved progress remain in file details under **Upload details** and **Storage copies**. The list loads automatically; reload the page to discover later remote changes, or use **Retry** if loading fails.
 
 [Back to README](../README.md)

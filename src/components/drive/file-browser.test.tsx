@@ -9,6 +9,7 @@ import {
   mutateCachedPieces,
   setCachedPieces,
 } from '../../lib/local-storage/piece-cache.ts'
+import { customerStatus } from '../../utils/upload/file-status.ts'
 import { FileBrowser, fileStatus } from './file-browser.tsx'
 
 const mocks = vi.hoisted(() => ({
@@ -220,7 +221,8 @@ it('resumes deletion of shared content through details even when the selected re
   await within(screen.getByRole('dialog')).findByText('second provider unavailable')
   expect(getCachedPieces(scope)?.[0].deletion?.['1'].confirmed).toBe(true)
   expect(screen.getByRole('button', { name: 'second.txt', hidden: true })).toBeTruthy()
-  expect(screen.getByText('Deletion incomplete', { exact: true })).toBeTruthy()
+  expect(screen.getByText(/· Deleting…/)).toBeTruthy()
+  expect(screen.getAllByLabelText('Deleting…').length).toBeGreaterThan(0)
   const retry = screen.getByRole('button', { name: 'Continue deletion' })
   expect(retry).toHaveProperty('disabled', false)
   mocks.context.mockResolvedValue({ deletePieces: mocks.submit, getScheduledRemovals: async () => [] })
@@ -267,6 +269,29 @@ it('keeps indexing progress out of the stored-file status', () => {
   ).toBe('Deletion scheduled')
 })
 
+it('collapses internal states into the customer vocabulary', () => {
+  const upload: NonNullable<DatasetPiece['upload']> = {
+    phase: 'waiting',
+    expectedCopies: 2,
+    providers: [],
+    steps: [],
+    checks: 0,
+    nextCheckAt: 0,
+  }
+  expect(customerStatus({ ...file, copyCount: 0, upload })).toBe('Waiting')
+  expect(customerStatus({ ...file, copyCount: 0, upload: { ...upload, phase: 'pending' } })).toBe('Uploading…')
+  expect(customerStatus({ ...file, copyCount: 0, upload, ipfsIndexed: true })).toBe('Waiting')
+  expect(customerStatus({ ...file, copyCount: 0, pieceCid: '', upload, ipfsIndexed: true })).toBe('Waiting')
+  expect(customerStatus({ ...file, copyCount: 0, upload: { ...upload, phase: 'failed' } })).toBe('Upload failed')
+  expect(customerStatus({ ...file, copyCount: 0, upload: { ...upload, phase: 'interrupted' } })).toBe('Upload failed')
+  expect(customerStatus({ ...file, ipfsIndexed: false })).toBe('Stored')
+  expect(customerStatus({ ...file, ipfsIndexed: true })).toBe('Stored')
+  expect(customerStatus(file)).toBe('Stored')
+  expect(customerStatus({ ...file, copyCount: 1, upload: { ...upload, phase: 'pending' } })).toBe('Stored')
+  expect(customerStatus({ ...file, deletion: {} })).toBe('Deleting…')
+  expect(customerStatus({ ...file, deletion: { '1': { confirmed: true, transactionHash: hash } } })).toBe('Deleting…')
+})
+
 it('keeps removed files hidden after restore and reload, but shows a new identical upload', async () => {
   const archived = { ...file, folderPath: 'old/nested', deletion: { '1': { confirmed: true, transactionHash: hash } } }
   setCachedPieces(scope, [archived])
@@ -280,7 +305,7 @@ it('keeps removed files hidden after restore and reload, but shows a new identic
   await screen.findByText('No files here yet. Upload to this folder.')
   expect(screen.queryByRole('button', { name: 'first.txt' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'old' })).toBeNull()
-  expect(screen.getByRole('heading', { name: 'Files 0' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Files' })).toBeTruthy()
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search file list' }), { target: { value: 'first' } })
   expect(screen.getByText('No matching files.')).toBeTruthy()
   expect(getCachedPieces(scope)?.[0].deletion).toEqual(archived.deletion)
@@ -289,7 +314,7 @@ it('keeps removed files hidden after restore and reload, but shows a new identic
   mount()
   expect(await screen.findByRole('button', { name: 'new.txt' })).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'first.txt' })).toBeNull()
-  expect(screen.getByRole('heading', { name: 'Files 1' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Files' })).toBeTruthy()
   expect(getCachedPieces(scope)).toHaveLength(2)
   expect(getCachedPieces(scope)?.find((record) => record.id === 'new-upload')?.deletion).toBeUndefined()
 })
@@ -526,7 +551,7 @@ it.each([false, true])('keeps deletion running after closing details (failure: %
   await waitFor(() => expect(mocks.submit).toHaveBeenCalledOnce())
   fireEvent.click(screen.getByRole('button', { name: 'Close details' }))
   expect(screen.queryByRole('dialog')).toBeNull()
-  expect(screen.getByText('Deleting', { exact: true })).toBeTruthy()
+  expect(screen.getByLabelText('Deleting…')).toBeTruthy()
   expect(mocks.deleting).not.toHaveBeenCalledWith(false)
   await act(async () => finish())
   if (fails) {
@@ -578,10 +603,6 @@ it.each([false, true])(
     expect(rowDownload('alias.txt')).toHaveProperty('disabled', true)
     expect(rowDownload('other.txt')).toHaveProperty('disabled', false)
     expect(screen.getByRole('button', { name: 'Upload files' })).toHaveProperty('disabled', uploadActive)
-    const refresh = screen.getByRole('button', { name: 'Load from Filecoin' })
-    expect(refresh).toHaveProperty('disabled', false)
-    fireEvent.click(refresh)
-    await waitFor(() => expect(mocks.index).toHaveBeenCalledTimes(2))
     fireEvent.click(rowDownload('other.txt'))
     await waitFor(() => expect(mocks.download).toHaveBeenCalledOnce())
     await act(async () => finish(hash))
@@ -626,7 +647,7 @@ it('shows a partially queued deletion per provider and offers continuing the rem
   expect(dialog.getByRole('link', { name: 'Removal scheduled' }).getAttribute('href')).toContain(hash)
   expect(dialog.queryByText('Deletion scheduled', { exact: true })).toBeNull()
   expect(screen.getByRole('button', { name: 'Continue deletion' })).toBeTruthy()
-  expect(screen.getByText('Deletion incomplete', { exact: true })).toBeTruthy()
+  expect(screen.getByText(/· Deleting…/)).toBeTruthy()
 })
 
 it.each([false, true])('keeps original downloads without a gateway download link (CAR: %s)', async (importedCar) => {
@@ -695,9 +716,9 @@ it('keeps the empty cache in a loading state, then offers retry after index fail
     </UploadHistoryProvider>
   )
   expect(screen.queryByText('No files here yet. Upload to this folder.')).toBeNull()
-  expect(screen.getByText('Loading files from Filecoin…')).toBeTruthy()
+  expect(screen.getByText('Loading your files…')).toBeTruthy()
   await act(async () => fail(new Error('Index temporarily unavailable')))
-  expect(screen.getByText('Unable to load files from Filecoin')).toBeTruthy()
+  expect(screen.getByText('Unable to load your files')).toBeTruthy()
   expect(screen.getByRole('alert').textContent).toBe('Unable to load your file list. Please try again.')
   expect(screen.queryByText('No files here yet. Upload to this folder.')).toBeNull()
   mocks.index.mockResolvedValueOnce([file])
@@ -714,7 +735,7 @@ it('shows a confirmed empty directory only after a successful index response', a
     </UploadHistoryProvider>
   )
   await screen.findByText('No files here yet. Upload to this folder.')
-  expect(screen.queryByText('Loading files from Filecoin…')).toBeNull()
+  expect(screen.queryByText('Loading your files…')).toBeNull()
 })
 
 it('retains files and upload access when the index is unavailable', async () => {
@@ -760,7 +781,7 @@ it('shows the save error when index retrieval succeeds but writing the cache fai
     )
     expect(screen.getByRole('alert').textContent).toContain('free browser storage and retry saving')
     write.mockRestore()
-    fireEvent.click(screen.getByRole('button', { name: 'Load from Filecoin' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
   } finally {
     write.mockRestore()
@@ -768,37 +789,31 @@ it('shows the save error when index retrieval succeeds but writing the cache fai
 })
 
 it.each([
-  ['pending', 2, 'Confirming'],
-  ['interrupted', 2, 'Interrupted'],
-  ['complete', 2, 'Partial'],
-  ['complete', 1, null],
-] as const)(
-  'separates stored-file success from %s copy progress with target %s',
-  async (phase, expectedCopies, label) => {
-    setCachedPieces(scope, [
-      {
-        ...file,
-        copyCount: 1,
-        upload: { phase, expectedCopies, providers: [], steps: [], checks: 0, nextCheckAt: 0 },
-      },
-    ])
-    render(
-      <UploadHistoryProvider>
-        <FileBrowser folder="" onFolderChange={vi.fn()} />
-      </UploadHistoryProvider>
-    )
-    const count =
-      phase === 'complete' && expectedCopies === 1
-        ? await screen.findByTitle('1 confirmed storage copy')
-        : await screen.findByText(`1 / ${expectedCopies} confirmed`)
-    const row = count.closest('tr')
-    expect(row).toBeTruthy()
-    if (!row) return
-    expect(within(row).getByText('Stored', { exact: true }).className).toContain('text-success')
-    if (label) expect(within(row).getByText(label, { exact: true })).toBeTruthy()
-    else expect(within(row).queryByText('Confirming', { exact: true })).toBeNull()
-  }
-)
+  ['pending', 'Confirming remaining copies.'],
+  ['interrupted', 'Upload interrupted before all copies were confirmed.'],
+  ['complete', 'Fewer copies stored than requested.'],
+] as const)('keeps %s replication progress out of the list and shows it in details', async (phase, detail) => {
+  setCachedPieces(scope, [
+    {
+      ...file,
+      copyCount: 1,
+      upload: { phase, expectedCopies: 2, providers: [], steps: [], checks: 0, nextCheckAt: 0 },
+    },
+  ])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  const row = (await screen.findByRole('button', { name: 'first.txt' })).closest('tr') as HTMLElement
+  expect(within(row).queryByText('Stored')).toBeNull()
+  expect(within(row).queryByText(/confirmed/)).toBeNull()
+  expect(within(row).queryByLabelText('Uploading…')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'first.txt' }))
+  const dialog = within(screen.getByRole('dialog'))
+  expect(dialog.getByText('1 of 2 copies confirmed')).toBeTruthy()
+  expect(dialog.getByText(detail)).toBeTruthy()
+})
 
 it('highlights the session requirement without deleting or closing details', async () => {
   mocks.hasSession = false
@@ -937,17 +952,15 @@ it('keeps manual continuation disabled throughout automatic checking without cha
   fireEvent.click(button)
   expect(mocks.submit).not.toHaveBeenCalled()
   expect(
-    within(screen.getByRole('button', { name: 'first.txt', hidden: true }).closest('tr') as HTMLElement).getByText(
-      'Deletion pending',
-      { exact: true }
+    within(screen.getByRole('button', { name: 'first.txt', hidden: true }).closest('tr') as HTMLElement).getByLabelText(
+      'Deleting…'
     )
   ).toBeTruthy()
   mocks.autoChecking = new Set()
   rerender(view())
   expect(
-    within(screen.getByRole('button', { name: 'first.txt', hidden: true }).closest('tr') as HTMLElement).getByText(
-      'Deletion pending',
-      { exact: true }
+    within(screen.getByRole('button', { name: 'first.txt', hidden: true }).closest('tr') as HTMLElement).getByLabelText(
+      'Deleting…'
     )
   ).toBeTruthy()
   fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
@@ -1001,7 +1014,7 @@ it('selects only eligible records in the current file list', async () => {
 
 it('shows folder activity on every ancestor without marking similarly named folders', async () => {
   const checkpoint = {
-    phase: 'waiting' as const,
+    phase: 'uploading' as const,
     expectedCopies: 2,
     providers: [],
     steps: [],
@@ -1088,17 +1101,6 @@ it('defaults to newest uploads and allows name and size sorting without persisti
   expect(names()).toEqual(['file10.txt', 'file1.txt', 'file2.txt'])
 })
 
-it('uses the same default copy count for legacy records and their tooltip', async () => {
-  setCachedPieces(scope, [{ ...file, copyCount: undefined, upload: undefined }])
-  render(
-    <UploadHistoryProvider>
-      <FileBrowser folder="" onFolderChange={vi.fn()} />
-    </UploadHistoryProvider>
-  )
-  const copies = await screen.findByTitle('1 confirmed storage copy')
-  expect(copies.textContent).toBe('1')
-})
-
 it('does not group uploads with missing piece CIDs and removes only selected safe local records', async () => {
   const failed = {
     ...file,
@@ -1148,4 +1150,347 @@ it('does not group uploads with missing piece CIDs and removes only selected saf
     ).toEqual(['first', 'pending'])
   )
   expect(mocks.submit).not.toHaveBeenCalled()
+})
+
+it('shows funding as a static Paused badge and allows selecting and removing its local record', async () => {
+  setCachedPieces(scope, [
+    {
+      ...file,
+      datasetId: '',
+      datasetIds: [],
+      pieceCid: '',
+      cid: '',
+      copyCount: 0,
+      upload: {
+        phase: 'funding',
+        expectedCopies: 2,
+        providers: [],
+        steps: [],
+        checks: 0,
+        nextCheckAt: 0,
+        funding: { depositNeeded: '645192894000747211', needsApproval: false },
+      },
+    },
+  ])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  const row = (await screen.findByRole('button', { name: 'first.txt' })).closest('tr') as HTMLElement
+  expect(within(row).getByText('Paused')).toBeTruthy()
+  expect(within(row).queryByLabelText('Uploading…')).toBeNull()
+  expect(screen.queryByRole('columnheader', { name: /Status|Copies/ })).toBeNull()
+  fireEvent.click(within(row).getByRole('checkbox', { name: 'Select first.txt' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Remove local records (1)' }))
+  fireEvent.click(
+    within(screen.getByRole('dialog', { name: 'Remove local records' })).getByRole('button', {
+      name: 'Remove local records',
+    })
+  )
+  await waitFor(() => expect(getCachedPieces(scope)).toEqual([]))
+})
+
+it('keeps chain confirmation separate from indexing and interrupted upload progress', () => {
+  const upload: NonNullable<DatasetPiece['upload']> = {
+    phase: 'interrupted',
+    expectedCopies: 2,
+    providers: [],
+    steps: [],
+    checks: 0,
+    nextCheckAt: 0,
+  }
+  expect(customerStatus({ ...file, copyCount: 1, ipfsIndexed: false, upload })).toBe('Stored')
+  expect(customerStatus({ ...file, copyCount: 0, ipfsIndexed: true, upload })).toBe('Upload failed')
+  expect(customerStatus({ ...file, copyCount: 0, ipfsIndexed: true, upload: { ...upload, phase: 'pending' } })).toBe(
+    'Uploading…'
+  )
+  expect(
+    customerStatus({
+      ...file,
+      copyCount: 0,
+      upload: { ...upload, providers: [{ providerId: '4', serviceURL: 'https://sp.example', transactionHash: hash }] },
+    })
+  ).toBe('Uploading…')
+  expect(customerStatus({ ...file, copyCount: 0, upload: { ...upload, phase: 'funding' } })).toBe('Paused')
+  expect(fileStatus({ ...file, copyCount: 0, upload: { ...upload, phase: 'funding' } })).toBe('Waiting for funding')
+})
+
+it.each(['waiting', 'uploading', 'confirming', 'pending'] as const)(
+  'distinguishes queued records from uploads in progress (%s)',
+  async (phase) => {
+    setCachedPieces(scope, [
+      {
+        ...file,
+        datasetId: '',
+        datasetIds: [],
+        pieceCid: '',
+        cid: '',
+        copyCount: 0,
+        upload: { phase, expectedCopies: 2, providers: [], steps: [], checks: 0, nextCheckAt: 0 },
+      },
+    ])
+    render(
+      <UploadHistoryProvider>
+        <FileBrowser folder="" onFolderChange={vi.fn()} />
+      </UploadHistoryProvider>
+    )
+    const row = (await screen.findByRole('button', { name: 'first.txt' })).closest('tr') as HTMLElement
+    const selection = within(row).getByRole('checkbox', { name: 'Select first.txt' })
+    if (phase === 'waiting') {
+      expect(within(row).getByRole('img', { name: 'Waiting to upload' }).getAttribute('title')).toBe(
+        'Waiting to upload'
+      )
+      expect(within(row).queryByText('Waiting')).toBeNull()
+      expect(within(row).queryByLabelText('Uploading…')).toBeNull()
+      expect(selection).toHaveProperty('disabled', false)
+      expect(screen.queryAllByTitle('Uploads or deletions in progress')).toHaveLength(0)
+    } else {
+      expect(within(row).queryByText('Waiting')).toBeNull()
+      expect(within(row).getByLabelText('Uploading…')).toBeTruthy()
+      expect(selection).toHaveProperty('disabled', true)
+    }
+  }
+)
+
+it('keeps a deletion-pending row unselectable while its deletion spinner is shown', async () => {
+  setCachedPieces(scope, [{ ...file, deletion: { '1': { transactionHash: hash, confirmed: false } } }])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  const row = (await screen.findByRole('button', { name: 'first.txt' })).closest('tr') as HTMLElement
+  expect(within(row).getByLabelText('Deleting…')).toBeTruthy()
+  expect(within(row).getByRole('checkbox', { name: 'Select first.txt' })).toHaveProperty('disabled', true)
+})
+
+it.each(['table', 'details'] as const)(
+  'deletes a confirmed partial upload after refresh stopped its remaining copy (%s)',
+  async (entry) => {
+    const partial: DatasetPiece = {
+      ...file,
+      copyCount: 1,
+      upload: {
+        phase: 'interrupted',
+        expectedCopies: 2,
+        steps: [],
+        checks: 20,
+        nextCheckAt: 0,
+        providers: [
+          { providerId: '1', serviceURL: 'https://first.example', dataSetId: '1', pieceId: '1', confirmed: true },
+          { providerId: '32', serviceURL: 'https://second.example' },
+        ],
+      },
+    }
+    setCachedPieces(scope, [partial])
+    mocks.context.mockResolvedValue({ deletePieces: mocks.submit, getScheduledRemovals: async () => [] })
+    render(
+      <UploadHistoryProvider>
+        <FileBrowser folder="" onFolderChange={vi.fn()} />
+      </UploadHistoryProvider>
+    )
+    const name = await screen.findByRole('button', { name: 'first.txt' })
+    expect(screen.getByRole('checkbox', { name: 'Select first.txt' })).toHaveProperty('disabled', false)
+    if (entry === 'details') {
+      fireEvent.click(name)
+      expect(screen.getByText(/Your confirmed copies remain stored/)).toBeTruthy()
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Delete all recorded copies of this content.' }))
+      const deletion = screen.getByRole('button', { name: 'Schedule deletion' })
+      expect(deletion).toHaveProperty('disabled', false)
+      fireEvent.click(deletion)
+    } else {
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select first.txt' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Delete stored files (1)' }))
+      const dialog = within(screen.getByRole('dialog'))
+      fireEvent.click(dialog.getByRole('checkbox'))
+      fireEvent.click(dialog.getByRole('button', { name: 'Delete selected files' }))
+    }
+    await waitFor(() => expect(mocks.submit).toHaveBeenCalledOnce())
+    await waitFor(() => expect(getCachedPieces(scope)?.[0].deletion?.['1'].confirmed).toBe(true))
+  }
+)
+
+it.each(['transaction', 'stored', 'active'] as const)(
+  'keeps deletion blocked for an uncertain or active secondary upload (%s)',
+  async (kind) => {
+    setCachedPieces(scope, [
+      {
+        ...file,
+        copyCount: 1,
+        upload: {
+          phase: kind === 'active' ? 'confirming' : 'interrupted',
+          expectedCopies: 2,
+          providers: [
+            { providerId: '1', serviceURL: '', confirmed: true, dataSetId: '1', pieceId: '1' },
+            {
+              providerId: '32',
+              serviceURL: '',
+              ...(kind === 'transaction' ? { transactionHash: hash } : kind === 'stored' ? { stored: true } : {}),
+            },
+          ],
+          steps: [],
+          checks: 0,
+          nextCheckAt: 0,
+        },
+      },
+    ])
+    render(
+      <UploadHistoryProvider>
+        <FileBrowser folder="" onFolderChange={vi.fn()} />
+      </UploadHistoryProvider>
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'first.txt' }))
+    expect(screen.getByRole('button', { name: 'Schedule deletion' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('checkbox', { name: 'Select first.txt', hidden: true })).toHaveProperty('disabled', true)
+    expect(mocks.submit).not.toHaveBeenCalled()
+  }
+)
+
+it.each([
+  { primary: hash, hashes: ['', ''], expected: [hash, null] },
+  { primary: hash, hashes: ['', `0x${'b'.repeat(64)}`], expected: [hash, `0x${'b'.repeat(64)}`] },
+  { primary: '', hashes: ['', `0x${'b'.repeat(64)}`], expected: [null, `0x${'b'.repeat(64)}`] },
+])('only links the transaction actually recorded for each dataset (%j)', async ({ primary, hashes, expected }) => {
+  setCachedPieces(scope, [
+    {
+      ...file,
+      datasetIds: ['1', '2'],
+      providerIds: ['1', '5'],
+      copyCount: 2,
+      transactionHash: primary,
+      transactionHashes: hashes,
+    },
+  ])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'first.txt' }))
+  const storage = within(screen.getByRole('heading', { name: 'Storage copies' }).parentElement as HTMLElement)
+  for (const [index, id] of ['1', '2'].entries()) {
+    const card = within(
+      storage.getByRole('link', { name: `Dataset ${id}` }).parentElement?.parentElement as HTMLElement
+    )
+    const link = card.queryByRole('link', { name: 'Upload transaction' })
+    if (expected[index])
+      expect(link?.getAttribute('href')).toBe(`https://filecoin.blockscout.com/tx/${expected[index]}`)
+    else expect(link).toBeNull()
+  }
+  expect(screen.queryAllByRole('link').some((link) => link.getAttribute('href')?.endsWith('/tx/'))).toBe(false)
+})
+
+it('uses a matching confirmed provider receipt when its per-copy transaction cache is empty', async () => {
+  setCachedPieces(scope, [
+    {
+      ...file,
+      copyCount: 1,
+      transactionHashes: [''],
+      upload: {
+        phase: 'complete',
+        expectedCopies: 1,
+        steps: [],
+        checks: 0,
+        nextCheckAt: 0,
+        providers: [{ providerId: '1', serviceURL: '', dataSetId: '1', confirmed: true, transactionHash: hash }],
+      },
+    },
+  ])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'first.txt' }))
+  expect(screen.getByRole('link', { name: 'Upload transaction' }).getAttribute('href')).toBe(
+    `https://filecoin.blockscout.com/tx/${hash}`
+  )
+})
+
+it('does not assign a pending providers hash to a different API-recovered dataset', async () => {
+  const { mergeIndexedFiles } = await import('../../lib/filecoin-pin/drive-api.ts')
+  const pending: DatasetPiece = {
+    ...file,
+    datasetId: '',
+    datasetIds: [],
+    pieceId: undefined,
+    copyCount: 0,
+    transactionHash: hash,
+    transactionHashes: [],
+    upload: {
+      phase: 'pending',
+      expectedCopies: 2,
+      steps: [],
+      checks: 0,
+      nextCheckAt: 0,
+      providers: [
+        { providerId: '1', serviceURL: '', transactionHash: hash, stored: true },
+        { providerId: '5', serviceURL: '' },
+      ],
+    },
+  }
+  const recovered: DatasetPiece = {
+    ...file,
+    id: 'indexed-2-1',
+    datasetId: '2',
+    datasetIds: ['2'],
+    providerId: '5',
+    uploadedAt: 2,
+    transactionHash: '',
+  }
+  const merged = mergeIndexedFiles([pending], [recovered])
+  expect(merged).toHaveLength(1)
+  setCachedPieces(scope, merged)
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'first.txt' }))
+  const storage = within(screen.getByRole('heading', { name: 'Storage copies' }).parentElement as HTMLElement)
+  expect(storage.getByRole('link', { name: 'Dataset 2' })).toBeTruthy()
+  expect(storage.queryByRole('link', { name: 'Upload transaction' })).toBeNull()
+})
+
+it('permits deleting stored content despite a failed rejected alias with no copies', async () => {
+  setCachedPieces(scope, [
+    { ...file, copyCount: 1 },
+    {
+      ...file,
+      id: 'old-failed',
+      fileName: 'failed.txt',
+      datasetId: '',
+      datasetIds: [],
+      copyCount: 0,
+      upload: {
+        phase: 'failed',
+        expectedCopies: 2,
+        steps: [],
+        checks: 0,
+        nextCheckAt: 0,
+        providers: [{ providerId: '1', serviceURL: '', transactionHash: hash, stored: true, rejected: true }],
+      },
+    },
+  ])
+  mocks.context.mockResolvedValue({ deletePieces: mocks.submit, getScheduledRemovals: async () => [] })
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  await screen.findByRole('button', { name: 'first.txt' })
+  expect(screen.getByRole('checkbox', { name: 'Select first.txt' })).toHaveProperty('disabled', false)
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select all files in this list' }))
+  expect(screen.getByRole('button', { name: 'Remove local records (1)' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Delete stored files (1)' }))
+  const dialog = within(screen.getByRole('dialog', { name: 'Delete selected files' }))
+  expect(dialog.queryByText('failed.txt')).toBeNull()
+  fireEvent.click(dialog.getByRole('checkbox'))
+  fireEvent.click(dialog.getByRole('button', { name: 'Delete selected files' }))
+  await waitFor(() => expect(mocks.submit).toHaveBeenCalledOnce())
+  await waitFor(() =>
+    expect(getCachedPieces(scope)?.find((record) => record.id === file.id)?.deletion?.['1'].confirmed).toBe(true)
+  )
+  expect(getCachedPieces(scope)?.find((record) => record.id === 'old-failed')?.deletion).toBeUndefined()
 })

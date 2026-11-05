@@ -4,6 +4,7 @@ import { calibration } from '@filoz/synapse-sdk'
 import { chromium } from 'playwright'
 import { createPublicClient, createWalletClient, erc20Abi, formatEther, http, parseEther } from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
+import { openDrive } from './drive-browser-navigation.mjs'
 
 // Calibration only. Never import an existing personal wallet into this harness.
 const keyPath = new URL('../.drive-calibration-wallet.local', import.meta.url)
@@ -97,6 +98,7 @@ async function newWalletPage() {
   })
   await page.goto(appUrl)
   await page.getByLabel('Network', { exact: true }).selectOption('calibration')
+  await openDrive(page)
   await page.getByRole('button', { name: 'Connect wallet', exact: true }).click()
   return page
 }
@@ -209,7 +211,7 @@ try {
     }
     console.log('Real provider upload and original-file retrieval verified')
     const restoredPage = await newWalletPage()
-    await restoredPage.getByRole('button', { name: 'Load from Filecoin', exact: true }).click()
+    // The file list loads from Filecoin automatically on mount.
     await restoredPage.getByRole('button', { name: fileName, exact: true }).waitFor()
     const [restoredDownload] = await Promise.all([
       restoredPage.waitForEvent('download', { timeout: 300_000 }),

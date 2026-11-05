@@ -77,3 +77,46 @@ it('does not inspect a task still owned by another tab', async () => {
   await act(async () => result.current.check(file.id))
   expect(mocks.recover).toHaveBeenCalledOnce()
 })
+
+it('manual Check status recovers an API-only second copy after the automatic check budget expires', async () => {
+  const partial: DatasetPiece = {
+    ...file,
+    datasetId: '1879',
+    datasetIds: ['1879'],
+    pieceId: 4,
+    providerId: '1',
+    copyCount: 1,
+    upload: {
+      phase: 'interrupted',
+      expectedCopies: 2,
+      steps: [],
+      checks: 20,
+      nextCheckAt: 0,
+      providers: [
+        { providerId: '1', serviceURL: '', dataSetId: '1879', pieceId: '4', confirmed: true },
+        { providerId: '32', serviceURL: '' },
+      ],
+    },
+  }
+  mocks.load.mockResolvedValue([])
+  setCachedPieces(scope, [partial])
+  const { result } = renderHook(() => useUploadRecovery(new Set()), { wrapper: UploadHistoryProvider })
+  await act(async () => undefined)
+  mocks.load.mockResolvedValue([
+    {
+      ...file,
+      id: 'indexed-1881-0',
+      datasetId: '1881',
+      datasetIds: ['1881'],
+      pieceId: 0,
+      providerId: '32',
+      copyCount: 1,
+      uploadedAt: 2000,
+      upload: undefined,
+    },
+  ])
+  await act(async () => result.current.check(file.id))
+  expect(getCachedPieces(scope)?.[0].copyCount).toBe(2)
+  expect(getCachedPieces(scope)?.[0].upload?.phase).toBe('complete')
+  expect(mocks.recover).not.toHaveBeenCalled()
+})

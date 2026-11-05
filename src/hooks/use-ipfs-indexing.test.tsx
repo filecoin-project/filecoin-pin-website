@@ -1,8 +1,9 @@
 import { act, renderHook } from '@testing-library/react'
-import { checkIpniIndexer } from 'filecoin-pin/core/utils'
+import { checkIpniIndexer, waitForIndexingConfirmation } from 'filecoin-pin/core/utils'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { DatasetPiece } from './use-dataset-pieces.ts'
 import {
+  IPFS_CHECK_BACKOFF_INTERVAL,
   IPFS_CHECK_INTERVAL,
   readIndexingChecks,
   reserveIndexingCheck,
@@ -10,12 +11,13 @@ import {
   useIpfsIndexing,
 } from './use-ipfs-indexing.ts'
 
-vi.mock('filecoin-pin/core/utils', () => ({ checkIpniIndexer: vi.fn() }))
+vi.mock('filecoin-pin/core/utils', () => ({ checkIpniIndexer: vi.fn(), waitForIndexingConfirmation: vi.fn() }))
 const cid = 'bafkreig4nl6nqu64xpwqfimx5bwhcntmpbgbjnly7dzs6u6zkeqfkimtfe'
 const file = { id: 'one', cid, ipfsIndexed: false } as DatasetPiece
 beforeEach(() => {
   vi.useFakeTimers()
   vi.mocked(checkIpniIndexer).mockReset().mockResolvedValue(false)
+  vi.mocked(waitForIndexingConfirmation).mockReset().mockResolvedValue(false)
 })
 afterEach(() => vi.useRealTimers())
 
@@ -27,10 +29,12 @@ it('persists five attempts and cooldown across reloads and isolates wallets', as
   }
   expect(await reserveIndexingCheck('wallet-a', cid, 1_000_000)).toBeNull()
   expect(readIndexingChecks('wallet-a')[cid].attempts).toBe(5)
+  const backoff = await reserveIndexingCheck('wallet-a', cid, 4 * IPFS_CHECK_INTERVAL + IPFS_CHECK_BACKOFF_INTERVAL)
+  expect(backoff?.attempts).toBe(6)
   expect((await reserveIndexingCheck('wallet-b', cid, 1_000_000))?.attempts).toBe(1)
 })
 
-it('stops after five misses, including network errors, and does not restart on remount', async () => {
+it('backs off to slow checks after five misses instead of stopping', async () => {
   vi.mocked(checkIpniIndexer).mockRejectedValue(new Error('network unavailable'))
   const update = vi.fn()
   const hook = renderHook(() => useIpfsIndexing('wallet-a', [file, { ...file, id: 'duplicate' }], update))
@@ -45,6 +49,27 @@ it('stops after five misses, including network errors, and does not restart on r
     await vi.advanceTimersByTimeAsync(3 * IPFS_CHECK_INTERVAL)
   })
   expect(checkIpniIndexer).toHaveBeenCalledTimes(5)
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(IPFS_CHECK_BACKOFF_INTERVAL)
+  })
+  expect(checkIpniIndexer).toHaveBeenCalledTimes(6)
+})
+
+it('asks the storing provider first when the record names one', async () => {
+  vi.mocked(waitForIndexingConfirmation).mockResolvedValue(true)
+  const update = vi.fn()
+  const stored = {
+    ...file,
+    pieceCid: 'bafkzcibcd4bdomn3tgwgrh3g532zopskstnbrd2n3sxfqbze7rxt7vqn7veigmy',
+    serviceURL: 'https://sp4.example',
+  } as DatasetPiece
+  renderHook(() => useIpfsIndexing('wallet-a', [stored], update))
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1_000)
+  })
+  expect(waitForIndexingConfirmation).toHaveBeenCalledOnce()
+  expect(checkIpniIndexer).not.toHaveBeenCalled()
+  expect(update).toHaveBeenCalledWith(cid, true, 1)
 })
 
 it('updates duplicate records by CID, remembers success and stops checking', async () => {
@@ -88,7 +113,7 @@ it('skips deleted records and aborts outstanding requests when switching wallets
   expect(update).not.toHaveBeenCalled()
 })
 
-it('allows a new bounded round only when checks are explicitly reset', async () => {
+it('allows an immediate recheck when checks are explicitly reset', async () => {
   for (let i = 0; i < 5; i++) await reserveIndexingCheck('wallet-a', cid, i * IPFS_CHECK_INTERVAL)
   expect(await reserveIndexingCheck('wallet-a', cid, 1_000_000)).toBeNull()
   await resetIndexingChecks('wallet-a', cid)
@@ -125,4 +150,117 @@ it('reuses an already confirmed CID for a duplicate record without downgrading i
   })
   expect(checkIpniIndexer).not.toHaveBeenCalled()
   expect(update).toHaveBeenCalledWith(cid, true, 0)
+})
+
+it('accepts an available replica without waiting for an unavailable provider', async () => {
+  let canceled = false
+  vi.mocked(waitForIndexingConfirmation).mockImplementation(async (_root, _piece, options) => {
+    const urls = options?.expectedProviders?.map((provider) => provider.pdp.serviceURL)
+    expect(urls).toHaveLength(1)
+    if (urls?.[0] === 'https://slow.example') {
+      return new Promise<boolean>((_resolve, reject) => {
+        options?.signal?.addEventListener('abort', () => {
+          canceled = true
+          reject(new Error('Aborted'))
+        })
+      })
+    }
+    return true
+  })
+  const update = vi.fn()
+  renderHook(() =>
+    useIpfsIndexing(
+      'wallet-a',
+      [
+        {
+          ...file,
+          copyCount: 2,
+          pieceCid: 'bafkzcibcd4bdomn3tgwgrh3g532zopskstnbrd2n3sxfqbze7rxt7vqn7veigmy',
+          serviceURLs: ['https://slow.example', 'https://ready.example'],
+        },
+      ],
+      update
+    )
+  )
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1000)
+  })
+  expect(update).toHaveBeenCalledWith(cid, true, 1)
+  expect(canceled).toBe(true)
+  expect(readIndexingChecks('wallet-a')[cid].indexed).toBe(true)
+})
+
+it.each([false, true])('only marks indexed when at least one provider succeeds (available: %s)', async (available) => {
+  vi.mocked(waitForIndexingConfirmation)
+    .mockRejectedValueOnce(new Error('provider unavailable'))
+    .mockResolvedValueOnce(available)
+  const update = vi.fn()
+  renderHook(() =>
+    useIpfsIndexing(
+      'wallet-a',
+      [
+        {
+          ...file,
+          copyCount: 2,
+          pieceCid: 'bafkzcibcd4bdomn3tgwgrh3g532zopskstnbrd2n3sxfqbze7rxt7vqn7veigmy',
+          serviceURLs: ['https://down.example', 'https://other.example'],
+        },
+      ],
+      update
+    )
+  )
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1000)
+  })
+  expect(update).toHaveBeenCalledWith(cid, available, 1)
+  expect(checkIpniIndexer).not.toHaveBeenCalled()
+})
+
+it('uses the primary provider when a historical record has an empty provider array', async () => {
+  vi.mocked(waitForIndexingConfirmation).mockResolvedValue(true)
+  const update = vi.fn()
+  renderHook(() =>
+    useIpfsIndexing(
+      'wallet-a',
+      [
+        {
+          ...file,
+          serviceURLs: [],
+          serviceURL: 'https://primary.example',
+          pieceCid: 'bafkzcibcd4bdomn3tgwgrh3g532zopskstnbrd2n3sxfqbze7rxt7vqn7veigmy',
+        },
+      ],
+      update
+    )
+  )
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1000)
+  })
+  expect(waitForIndexingConfirmation).toHaveBeenCalledOnce()
+  expect(checkIpniIndexer).not.toHaveBeenCalled()
+  expect(update).toHaveBeenCalledWith(cid, true, 1)
+})
+
+it('checks providers across duplicate root records rather than letting the first unavailable alias block them', async () => {
+  vi.mocked(waitForIndexingConfirmation)
+    .mockRejectedValueOnce(new Error('first alias provider unavailable'))
+    .mockResolvedValueOnce(true)
+  const update = vi.fn()
+  const pieceCid = 'bafkzcibcd4bdomn3tgwgrh3g532zopskstnbrd2n3sxfqbze7rxt7vqn7veigmy'
+  renderHook(() =>
+    useIpfsIndexing(
+      'wallet-a',
+      [
+        { ...file, pieceCid, serviceURL: 'https://down.example' },
+        { ...file, id: 'alias', pieceCid, serviceURL: 'https://ready.example' },
+      ],
+      update
+    )
+  )
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1000)
+  })
+  expect(waitForIndexingConfirmation).toHaveBeenCalledTimes(2)
+  expect(update).toHaveBeenCalledOnce()
+  expect(update).toHaveBeenCalledWith(cid, true, 1)
 })
