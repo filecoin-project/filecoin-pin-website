@@ -80,6 +80,14 @@ function Harness() {
           Cancel queued upload
         </button>
       ))}
+      <button
+        onClick={() =>
+          void tasks.startMany([new File(['ok'], 'valid.txt'), new File(['bad'], `${'中'.repeat(33)}.txt`)], '')
+        }
+        type="button"
+      >
+        Invalid batch
+      </button>
       <output>{history.map((file) => `${file.fileName}:${file.upload?.phase}:${file.copyCount}`).join('|')}</output>
     </>
   )
@@ -198,4 +206,18 @@ it('advances the queue after a file fails before reaching a provider', async () 
   expect(getCachedPieces(scope)?.find((file) => file.fileName === 'second.txt')?.upload?.phase).toBe('uploading')
   await act(async () => operations[0].reject(new Error('Stopped test fixture')))
   await waitFor(() => expect(mocks.setUploading).toHaveBeenLastCalledWith(false))
+})
+
+it('rejects a batch with an overlong UTF-8 file name before creating records or starting transfers', async () => {
+  render(
+    <UploadHistoryProvider>
+      <UploadTasksProvider>
+        <Harness />
+      </UploadTasksProvider>
+    </UploadHistoryProvider>
+  )
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Invalid batch' })))
+  expect(getCachedPieces(scope)).toEqual([])
+  expect(mocks.execute).not.toHaveBeenCalled()
+  expect(mocks.setUploading).toHaveBeenLastCalledWith(false)
 })

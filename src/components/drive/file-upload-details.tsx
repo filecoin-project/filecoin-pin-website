@@ -3,22 +3,11 @@ import { useUploadHistory } from '../../context/upload-history-context.tsx'
 import { useUploadTasks } from '../../context/upload-tasks-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { getTxExplorerLink } from '../../utils/links.ts'
+import { canRemoveUpload } from '../../utils/upload/can-remove-upload.ts'
 import { copyProgress, fileStatus, fileStatusColors } from '../../utils/upload/file-status.ts'
 import { getStepLabel } from '../../utils/upload/step-utils.ts'
 import { ButtonBase as Button } from '../ui/button/button-base.tsx'
 import { FolderPicker } from './folder-picker.tsx'
-
-function canRemoveUpload(file: DatasetPiece) {
-  const upload = file.upload
-  return Boolean(
-    upload &&
-      (upload.phase === 'failed' || upload.phase === 'interrupted') &&
-      !file.copyCount &&
-      !file.datasetId &&
-      !file.datasetIds?.length &&
-      upload.providers.every((provider) => !provider.confirmed && (!provider.transactionHash || provider.rejected))
-  )
-}
 
 export function FileUploadDetails({ file }: { file: DatasetPiece }) {
   const tasks = useUploadTasks()

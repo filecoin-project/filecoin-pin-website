@@ -33,6 +33,7 @@ import {
   getPieceExplorerLink,
   getTxExplorerLink,
 } from '../../utils/links.ts'
+import { canRemoveUpload } from '../../utils/upload/can-remove-upload.ts'
 import { copyProgress, fileStatus, fileStatusColors } from '../../utils/upload/file-status.ts'
 import { ButtonBase as Button, buttonVariants } from '../ui/button/button-base.tsx'
 import { CopyButton } from '../ui/copy-button.tsx'
@@ -43,6 +44,7 @@ import { FileUploadDetails } from './file-upload-details.tsx'
 import { FolderInfo } from './folder-info.tsx'
 import { ProviderLink } from './provider-link.tsx'
 import { ShareFileButton } from './share-file-button.tsx'
+import { SidePanel } from './side-panel.tsx'
 import { compareValues, nameOrder, SortHeading, sizeInBytes, useFileSort } from './sort-heading.tsx'
 
 export { fileStatus } from '../../utils/upload/file-status.ts'
@@ -59,6 +61,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
   const {
     history,
     updateUpload,
+    mutateHistory,
     refreshHistory,
     isLoading,
     hasLoaded,
@@ -72,6 +75,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
     selectionScope.current = storageScope
     setSelectedFileIds(new Set())
     setBatchDeleteOpen(false)
+    setBatchRemoveOpen(false)
   }, [storageScope])
   const connection = useBrowserWallet()
   const [search, setSearch] = useState('')
@@ -80,6 +84,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
   const [sessionHintAttempt, setSessionHintAttempt] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedFileIds, setSelectedFileIds] = useState<ReadonlySet<string>>(new Set())
+  const [batchRemoveOpen, setBatchRemoveOpen] = useState(false)
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
   const [directoryId, setDirectoryId] = useState<string | null>(null)
   const openDirectory = (id: string) => {
@@ -191,7 +196,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
     : Object.entries(deletionErrors)
         .map(([cid, message]) => `${history.find((file) => file.pieceCid === cid)?.fileName ?? cid}: ${message}`)
         .join('\n')
-  const selectedAliases = selected ? history.filter((file) => file.pieceCid === selected.pieceCid) : []
+  const selectedAliases = selected?.pieceCid ? history.filter((file) => file.pieceCid === selected.pieceCid) : []
   const allAliasesScheduled =
     selectedAliases.length > 0 && selectedAliases.every((file) => fileStatus(file) === 'Deletion scheduled')
   const affectedAliases = selectedAliases.filter((file) => !isDeletionScheduled(file))
@@ -240,9 +245,15 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
         !deletingPieceCids.has(file.pieceCid) &&
         !autoCheckingPieceCids.has(file.pieceCid)
     )
-  const selectableFiles = files.filter(canSelectForDeletion)
+  const canSelectForRemoval = (file: DatasetPiece) =>
+    canRemoveUpload(file) && !uploadTasks?.activeIds.has(file.id) && !uploadTasks?.checking.has(file.id)
+  const canSelect = (file: DatasetPiece) => canSelectForDeletion(file) || canSelectForRemoval(file)
+  const selectableFiles = files.filter(canSelect)
   const selectedFiles = selectableFiles.filter((file) => selectedFileIds.has(file.id))
-  const batchTargets = [...new Map(selectedFiles.map((file) => [file.pieceCid, file])).values()]
+  const removableFiles = selectedFiles.filter(canSelectForRemoval)
+  const batchTargets = [
+    ...new Map(selectedFiles.filter(canSelectForDeletion).map((file) => [file.pieceCid, file])).values(),
+  ]
   const batchAliases = visibleHistory.filter((file) => batchTargets.some((target) => target.pieceCid === file.pieceCid))
   const toggleSelection = (file: DatasetPiece) =>
     setSelectedFileIds((current) => {
@@ -311,16 +322,28 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
           {selectedFiles.length > 0 && (
             <>
               <span className="text-xs text-muted">{selectedFiles.length} selected</span>
-              <Button
-                className="w-auto"
-                disabled={connection.busy}
-                onClick={() => setBatchDeleteOpen(true)}
-                size="sm"
-                variant="danger"
-              >
-                <Trash2 aria-hidden="true" size={14} />
-                Delete selected
-              </Button>
+              {removableFiles.length > 0 && (
+                <Button
+                  disabled={isEditing || connection.busy}
+                  onClick={() => setBatchRemoveOpen(true)}
+                  size="sm"
+                  variant="secondary"
+                >
+                  Remove local records ({removableFiles.length})
+                </Button>
+              )}
+              {batchTargets.length > 0 && (
+                <Button
+                  className="w-auto"
+                  disabled={connection.busy}
+                  onClick={() => setBatchDeleteOpen(true)}
+                  size="sm"
+                  variant="danger"
+                >
+                  <Trash2 aria-hidden="true" size={14} />
+                  Delete selected
+                </Button>
+              )}
             </>
           )}
           <label className="relative w-full md:w-64">
@@ -563,9 +586,9 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                         <label className="flex h-8 w-8 cursor-pointer items-center justify-center">
                           <input
                             aria-label={`Select ${displayFileName(file)}`}
-                            checked={selectedFileIds.has(file.id) && canSelectForDeletion(file)}
+                            checked={selectedFileIds.has(file.id) && canSelect(file)}
                             className="drive-selection-checkbox"
-                            disabled={!canSelectForDeletion(file)}
+                            disabled={!canSelect(file)}
                             onChange={() => toggleSelection(file)}
                             type="checkbox"
                           />
@@ -719,6 +742,44 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
           </div>
         )}
       </div>
+      <SidePanel
+        description="Only the listed local upload records will be removed. This does not delete stored content or cancel transactions."
+        onOpenChange={setBatchRemoveOpen}
+        open={batchRemoveOpen}
+        title="Remove local records"
+      >
+        <ul aria-label="Local records to remove" className="space-y-2 text-sm">
+          {removableFiles.map((file) => (
+            <li className="break-words" key={file.id}>
+              {displayFileName(file)}
+            </li>
+          ))}
+        </ul>
+        <Button
+          disabled={isEditing || connection.busy || !removableFiles.length}
+          onClick={() =>
+            void act(async () => {
+              const ids = new Set(removableFiles.map((file) => file.id))
+              await mutateHistory((current) => {
+                if (current.some((file) => ids.has(file.id) && !canSelectForRemoval(file)))
+                  throw new Error('Storage status changed. Check the latest result before removing these records.')
+                return current.filter((file) => !ids.has(file.id))
+              })
+              setSelectedFileIds(new Set())
+              setBatchRemoveOpen(false)
+            })
+          }
+          size="sm"
+          variant="danger"
+        >
+          Remove local records
+        </Button>
+        {error && (
+          <p className="text-sm text-warning" role="alert">
+            {error}
+          </p>
+        )}
+      </SidePanel>
       <BatchDeleteDialog
         aliases={batchAliases}
         authorized={Boolean(connection.session)}
@@ -963,95 +1024,97 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                     )
                   })}
                 </section>
-                <section className="space-y-3 border-t border-border pt-5">
-                  <h3 className="flex items-center gap-2 font-medium">
-                    <Trash2 aria-hidden="true" className="text-danger" size={16} />
-                    Delete from Filecoin
-                  </h3>
-                  <p className="text-sm text-muted">
-                    Delete this file and its stored copies. Removal may take some time.
-                  </p>
-                  <details className="text-xs text-muted">
-                    <summary className="w-fit cursor-pointer hover:text-foreground">How deletion works</summary>
-                    <p className="mt-2 leading-relaxed">
-                      Other instances of the same content in the datasets being processed will also be removed, even if
-                      they are not shown in this file list. Other datasets are not affected.
+                {selected.pieceCid && (
+                  <section className="space-y-3 border-t border-border pt-5">
+                    <h3 className="flex items-center gap-2 font-medium">
+                      <Trash2 aria-hidden="true" className="text-danger" size={16} />
+                      Delete from Filecoin
+                    </h3>
+                    <p className="text-sm text-muted">
+                      Delete this file and its stored copies. Removal may take some time.
                     </p>
-                    <p className="mt-2 leading-relaxed">
-                      Storage providers remove copies during their next proving period. Cached copies may remain
-                      accessible through IPFS. Deleting files does not close your storage datasets or immediately stop
-                      all charges. Large deletions may require you to continue once the provider’s queue has space.
-                    </p>
-                  </details>
-                  {affectedAliases.length > 1 && (
-                    <div className="text-sm text-warning">
-                      <p>These files contain identical content. Deletion affects all listed records:</p>
-                      <ul className="mt-2 list-disc pl-5">
-                        {affectedAliases.map((file) => (
-                          <li className="break-words" key={file.id}>
-                            {[file.folderPath, displayFileName(file)].filter(Boolean).join('/')}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  <label className="flex items-start gap-2 text-sm">
-                    <input
-                      checked={deleteConsent}
-                      disabled={disabled}
-                      onChange={(event) => setDeleteConsent(event.target.checked)}
-                      type="checkbox"
-                    />
-                    Delete all recorded copies of this content.
-                  </label>
-                  <Button
-                    aria-describedby={connection.session ? undefined : 'delete-session-hint'}
-                    aria-disabled={!connection.session || undefined}
-                    className={connection.session ? undefined : 'opacity-50 cursor-not-allowed'}
-                    disabled={
-                      disabled ||
-                      (Boolean(connection.session) && !deleteConsent) ||
-                      allAliasesScheduled ||
-                      Boolean(selected.upload && selected.upload.phase !== 'complete')
-                    }
-                    onClick={() => {
-                      if (connection.session) {
-                        void deleteSelectedFile()
-                      } else {
-                        setSessionHintAttempt((attempt) => attempt + 1)
+                    <details className="text-xs text-muted">
+                      <summary className="w-fit cursor-pointer hover:text-foreground">How deletion works</summary>
+                      <p className="mt-2 leading-relaxed">
+                        Other instances of the same content in the datasets being processed will also be removed, even
+                        if they are not shown in this file list. Other datasets are not affected.
+                      </p>
+                      <p className="mt-2 leading-relaxed">
+                        Storage providers remove copies during their next proving period. Cached copies may remain
+                        accessible through IPFS. Deleting files does not close your storage datasets or immediately stop
+                        all charges. Large deletions may require you to continue once the provider’s queue has space.
+                      </p>
+                    </details>
+                    {affectedAliases.length > 1 && (
+                      <div className="text-sm text-warning">
+                        <p>These files contain identical content. Deletion affects all listed records:</p>
+                        <ul className="mt-2 list-disc pl-5">
+                          {affectedAliases.map((file) => (
+                            <li className="break-words" key={file.id}>
+                              {[file.folderPath, displayFileName(file)].filter(Boolean).join('/')}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <label className="flex items-start gap-2 text-sm">
+                      <input
+                        checked={deleteConsent}
+                        disabled={disabled}
+                        onChange={(event) => setDeleteConsent(event.target.checked)}
+                        type="checkbox"
+                      />
+                      Delete all recorded copies of this content.
+                    </label>
+                    <Button
+                      aria-describedby={connection.session ? undefined : 'delete-session-hint'}
+                      aria-disabled={!connection.session || undefined}
+                      className={connection.session ? undefined : 'opacity-50 cursor-not-allowed'}
+                      disabled={
+                        disabled ||
+                        (Boolean(connection.session) && !deleteConsent) ||
+                        allAliasesScheduled ||
+                        Boolean(selected.upload && selected.upload.phase !== 'complete')
                       }
-                    }}
-                    size="sm"
-                    variant="danger"
-                  >
-                    <Trash2 aria-hidden="true" size={14} />
-                    {autoCheckingDeletion
-                      ? 'Checking deletion status…'
-                      : working && !download
-                        ? 'Processing…'
-                        : hasDeletionProgress
-                          ? 'Continue deletion'
-                          : 'Schedule deletion'}
-                  </Button>
-                  {selected.upload && selected.upload.phase !== 'complete' && (
-                    <p className="text-sm text-muted">Wait for the upload to finish before deleting this content.</p>
-                  )}
-                  {waitingForDeletion && !working && (
-                    <p className="text-sm text-muted" role="status">
-                      Waiting for deletion confirmation.
-                    </p>
-                  )}
-                  {!connection.session && (
-                    <p
-                      className={`rounded-md text-sm text-muted ${sessionHintAttempt ? 'animate-session-hint' : ''}`}
-                      id="delete-session-hint"
-                      key={sessionHintAttempt}
-                      role={sessionHintAttempt ? 'alert' : undefined}
+                      onClick={() => {
+                        if (connection.session) {
+                          void deleteSelectedFile()
+                        } else {
+                          setSessionHintAttempt((attempt) => attempt + 1)
+                        }
+                      }}
+                      size="sm"
+                      variant="danger"
                     >
-                      Authorize a browser session in Wallet setup first.
-                    </p>
-                  )}
-                </section>
+                      <Trash2 aria-hidden="true" size={14} />
+                      {autoCheckingDeletion
+                        ? 'Checking deletion status…'
+                        : working && !download
+                          ? 'Processing…'
+                          : hasDeletionProgress
+                            ? 'Continue deletion'
+                            : 'Schedule deletion'}
+                    </Button>
+                    {selected.upload && selected.upload.phase !== 'complete' && (
+                      <p className="text-sm text-muted">Wait for the upload to finish before deleting this content.</p>
+                    )}
+                    {waitingForDeletion && !working && (
+                      <p className="text-sm text-muted" role="status">
+                        Waiting for deletion confirmation.
+                      </p>
+                    )}
+                    {!connection.session && (
+                      <p
+                        className={`rounded-md text-sm text-muted ${sessionHintAttempt ? 'animate-session-hint' : ''}`}
+                        id="delete-session-hint"
+                        key={sessionHintAttempt}
+                        role={sessionHintAttempt ? 'alert' : undefined}
+                      >
+                        Authorize a browser session in Wallet setup first.
+                      </p>
+                    )}
+                  </section>
+                )}
                 {(error || deletionError) && (
                   <p className="px-5 py-3 text-sm text-warning break-words sm:px-6" role="alert">
                     {error || deletionError}
