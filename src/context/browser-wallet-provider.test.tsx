@@ -399,25 +399,21 @@ describe('BYOW browser sessions', () => {
   })
 })
 
-it('remembers a manually selected network after remount and uses it when connecting', async () => {
+it('migrates a saved Calibration preference to Mainnet on remount and connects on Mainnet', async () => {
+  localStorage.setItem('filecoin-drive-network', 'calibration')
+  chainId = '0x4cb2f'
   const first = renderHook(useBrowserWallet, { wrapper })
   expect(first.result.current.network).toBe('mainnet')
-  await act(async () => first.result.current.switchNetwork('calibration'))
+  expect(localStorage.getItem('filecoin-drive-network')).toBe('mainnet')
+  expect(request).not.toHaveBeenCalled()
+  await act(async () => first.result.current.connect())
+  expect(request).toHaveBeenCalledWith({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x13a' }] })
+  await act(async () => first.result.current.disconnect())
   first.unmount()
-  const second = renderHook(useBrowserWallet, { wrapper })
-  expect(second.result.current.network).toBe('calibration')
-  await act(async () => second.result.current.connect())
-  expect(request).toHaveBeenCalledWith({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x4cb2f' }] })
-  await act(async () => second.result.current.disconnect())
-  second.unmount()
-  const third = renderHook(useBrowserWallet, { wrapper })
-  expect(third.result.current.network).toBe('calibration')
-  await act(async () => third.result.current.switchNetwork('mainnet'))
-  third.unmount()
   expect(renderHook(useBrowserWallet, { wrapper }).result.current.network).toBe('mainnet')
 })
 
-it('keeps the last successful network choice when the wallet rejects a switch', async () => {
+it('keeps the current network on rejected switches, then migrates Calibration on remount', async () => {
   const first = renderHook(useBrowserWallet, { wrapper })
   await act(async () => first.result.current.switchNetwork('calibration'))
   await act(async () => first.result.current.connect())
@@ -426,7 +422,7 @@ it('keeps the last successful network choice when the wallet rejects a switch', 
   expect(first.result.current.network).toBe('calibration')
   expect(first.result.current.error).toContain('User rejected')
   first.unmount()
-  expect(renderHook(useBrowserWallet, { wrapper }).result.current.network).toBe('calibration')
+  expect(renderHook(useBrowserWallet, { wrapper }).result.current.network).toBe('mainnet')
 })
 
 it('defaults to Mainnet when the saved network is invalid or browser storage is blocked', () => {
@@ -473,6 +469,21 @@ it('returns to explicit Connect for a locked wallet without requesting accounts 
   expect(result.current.error).toBeNull()
   expect(request.mock.calls.map(([call]) => call.method)).toEqual(expect.arrayContaining(['eth_accounts']))
   expect(request.mock.calls.every(([call]) => ['eth_accounts', 'eth_chainId'].includes(call.method))).toBe(true)
+})
+
+it('migrates an old testnet preference during silent reconnect without switching the wallet chain', async () => {
+  saveWalletPreference({ type: 'injected' })
+  localStorage.setItem('filecoin-drive-network', 'calibration')
+  chainId = '0x4cb2f'
+  const { result } = renderHook(useBrowserWallet, { wrapper })
+  await waitFor(() => expect(result.current.restoring).toBe(false))
+  expect(result.current.network).toBe('mainnet')
+  expect(result.current.address).toBe(ALICE)
+  expect(mocks.load).toHaveBeenCalledWith(`314:${ALICE}`)
+  expect(mocks.load).not.toHaveBeenCalledWith(`314159:${ALICE}`)
+  expect(request.mock.calls.every(([call]) => ['eth_accounts', 'eth_chainId'].includes(call.method))).toBe(true)
+  expect(chainId).toBe('0x4cb2f')
+  expect(mocks.write).not.toHaveBeenCalled()
 })
 
 it('restores the selected EIP-6963 wallet by rdns even when its per-page UUID changes', async () => {
