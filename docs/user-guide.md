@@ -6,15 +6,15 @@ Filecoin Drive connects your wallet to browser-based file storage. See the [READ
 
 Open **Drive** from the landing page, then choose **Connect wallet** or **WalletConnect**.
 
-First-time visitors default to **Filecoin Mainnet**. **Calibration** is available for development and testing. A successful manual network selection is remembered in this browser across reloads and disconnects; reconnecting requests that selected network from the wallet. A rejected wallet switch leaves the previous selection unchanged. Wallet sessions, datasets, files and folders are isolated by chain ID and wallet address. No shared deployment wallet or private key is required.
+Drive defaults to **Filecoin Mainnet**. The current interface does not offer a network selector. Wallet sessions, datasets, files and folders remain scoped by chain ID and wallet address internally. No shared deployment wallet or private key is required.
 
-Disconnecting a WalletConnect wallet also ends its remote connection session. Wallets must support Filecoin's EVM network and transaction requests. Both networks are requested when pairing; if a wallet only approves one, switching to the other may require a new connection.
+Disconnecting a WalletConnect wallet also ends its remote connection session. Your wallet must support Filecoin Mainnet's EVM network and transaction requests.
 
 After a successful connection, the app remembers the chosen wallet type (and the injected wallet's stable discovery ID when available). On reload it silently restores an already authorized injected account, or reuses a valid WalletConnect session approved for the selected network. It does not automatically request account access, switch wallet networks, or start QR pairing. Locked wallets, expired WalletConnect sessions, or unavailable providers return to explicit Connect. An expired storage authorization requires renewal in Wallet setup, independently of the wallet connection. Disconnect clears this reconnect preference; it does not clear the directory or revoke the storage session key.
 
 ## Authorize and fund storage
 
-1. Connect your wallet and select a network.
+1. Connect a wallet compatible with Filecoin Mainnet.
 2. Choose a session lifetime of 1, 7 or 30 days and review its permissions. New browser authorizations can create datasets, upload pieces and schedule piece removals. Service termination is not requested. Authorize it with your wallet.
 3. Deposit USDFC into Filecoin Pay and approve Warm Storage payments if needed. Payment approval uses unlimited rate and lockup allowances and requires explicit consent. These setup actions require owner-wallet confirmations.
 4. Upload files with the session key. Before sending file bytes, the app checks chain permissions and obtains a read-only funding quote for the actual selected storage copies, including dataset creation, operation fees and lockups. If more funds are needed, it displays the additional USDFC amount; deposits and payment approvals remain separate owner-wallet actions. Reauthorize expired or revoked sessions in Wallet setup.

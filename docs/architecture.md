@@ -4,6 +4,8 @@ Implementation notes for contributors. For everyday operations, see the [user gu
 
 ## Wallet connections and session credentials
 
+On startup, `readNetworkPreference` migrates a saved Calibration preference to Mainnet and attempts to persist that choice. If the write fails, the current page still uses Mainnet and a later startup retries the migration. Other cached records and session credentials remain scoped to their original network. Migration does not prompt for account access, pairing, signing or a wallet chain switch; explicit connection and transaction flows retain their chain checks.
+
 Wallet discovery, connector account events and chain switching use wagmi. Both connection buttons connect directly when one browser wallet is available, or open the same wallet-selection interface when several are available. Announced wallet icons are used when valid; the unnamed legacy Browser wallet entry is not displayed.
 
 The existing lazy WalletConnect provider is adapted to a wagmi injected connector to preserve mobile namespace account resolution and explicit pairing. Injected-wallet connection attempts stop waiting after 45 seconds and restore page controls. An unresolved request blocks another connection attempt to that wallet until it settles; other wallets remain available. Reload after restarting an unresponsive extension. A late response does not sign the user in automatically. WalletConnect pairing keeps its existing interactive wait.

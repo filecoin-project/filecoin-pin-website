@@ -19,11 +19,11 @@ npm run dev
 
 Open `http://localhost:5173`, choose **Open Drive**, and connect an Ethereum-compatible wallet. HTTPS or localhost is required for browser cryptography and storage coordination.
 
-First visits default to **Filecoin Mainnet**. Select **Calibration** for development and testing. No deployment wallet or private key is required.
+Drive defaults to **Filecoin Mainnet**; the current interface does not offer a network selector. No deployment wallet or private key is required.
 
 ## Start using Drive
 
-1. Connect a wallet and select a network.
+1. Connect a Filecoin Mainnet-compatible wallet.
 2. In **Wallet and Storage**, review and authorize a browser session.
 3. Deposit USDFC and approve storage payments when needed. These actions require owner-wallet confirmation.
 4. Upload files or folders, then monitor their storage status and confirmed copies.

@@ -6,7 +6,12 @@ const NETWORK_KEY = 'filecoin-drive-network'
 export function readNetworkPreference(): DriveNetwork {
   try {
     const saved = localStorage.getItem(NETWORK_KEY)
-    return saved === 'mainnet' || saved === 'calibration' ? saved : DEFAULT_NETWORK
+    if (saved === 'calibration') {
+      // The current UI has no switcher; migrate its old testnet selection on startup.
+      saveNetworkPreference('mainnet')
+      return 'mainnet'
+    }
+    return saved === 'mainnet' ? saved : DEFAULT_NETWORK
   } catch {
     return DEFAULT_NETWORK
   }

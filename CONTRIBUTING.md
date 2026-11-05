@@ -12,7 +12,7 @@ npm install
 
 ### 2. Browser Wallet Authentication
 
-The app uses the connected browser wallet and defaults to Filecoin Mainnet on first visit. Successful manual network selections are saved in the browser and restored on reload. Calibration is available in the network selector. It does not use deployment private keys or a shared session key.
+The app uses the connected browser wallet and defaults to Filecoin Mainnet on first visit. The current interface does not expose a network selector. Internal wallet/network scoping and Calibration support remain covered by unit tests. On startup, a saved Calibration preference is migrated to Mainnet. This does not delete testnet data or automatically switch the connected wallet’s chain. It does not use deployment private keys or a shared session key.
 
 Connect an Ethereum-compatible browser wallet. Reloads silently restore the selected wallet's existing permission or WalletConnect session; they never initiate a new account-access prompt, network switch or QR pairing. Explicit Disconnect disables automatic reconnection. In Wallet setup, authorize a browser session with an explicit lifetime. New sessions request only three Warm Storage permissions: create data sets, add pieces, and schedule piece removals. Revocation also clears the termination permission granted by older versions. Renewing a session does not remove previously granted termination permission; it must be revoked or allowed to expire. Deposit USDFC and approve storage payments separately with the owner wallet. Session keys are saved before requesting authorization so a submitted transaction cannot leave the browser without its key. A definite wallet rejection restores the previous session, or removes a newly created draft, provided another tab has not replaced it. Unknown submission outcomes retain the key for recovery; the session UI shows an expiry and renewal/revocation actions only after chain validation succeeds.
 
@@ -20,9 +20,9 @@ WalletConnect defaults to Beck’s registered public project ID. To override it,
 
 Session credentials are encrypted in IndexedDB using a non-exportable AES-GCM wrapping key. File caches contain metadata and operation checkpoints only. Scripts running on the same origin can still use stored credentials; encryption does not protect against a compromised application origin.
 
-### 3. Get Test Tokens (if using your own wallet)
+### 3. Funds and development testing
 
-For development, select Calibration and use test tokens. Mainnet operations spend real FIL and USDFC. Both networks require:
+The default app uses Mainnet, where operations spend real FIL and USDFC. The mocked unit and browser checks do not need tokens or submit live transactions. Calibration is retained internally for development. Using it requires a source-level configuration change; there is no network selector in the current UI. Calibration test tokens are available from:
 
 - **Test FIL** - For transaction gas fees
   - Get from: [Filecoin Calibration Faucet](https://faucet.calibnet.chainsafe-fil.io/funds.html)
@@ -92,7 +92,7 @@ The main logic demonstrating `filecoin-pin` usage:
 
 To run the mocked browser checks, start `npm run dev`, install Chromium with `npx playwright install chromium`, then run `npm run test:drive`. On a machine with Chrome installed, use `PLAYWRIGHT_CHANNEL=chrome npm run test:drive`. The checks mock wallet requests and external RPCs and do not submit transactions to a live network. They also open two pages in one browser context to exercise native Web Locks, concurrent file-cache writes, same-content upload/deletion exclusion, storage events and rereading missed changes on resume. Mobile viewport checks cover layout, not physical-device browser compatibility.
 
-To exercise the WalletConnect UI without a live relay, use the running dev server and run `DRIVE_TEST_WALLETCONNECT=1 npm run test:drive`. This replaces the remote SDK with a mock and checks lazy loading, pairing parameters, authorization, network/account isolation and disconnect. Use `DRIVE_TEST_URL` if the dev server is on another port. A real project ID and a Filecoin-compatible mobile wallet are required for live QR pairing validation.
+To exercise the WalletConnect UI without a live relay, use the running dev server and run `DRIVE_TEST_WALLETCONNECT=1 npm run test:drive`. This replaces the remote SDK with a mock and checks lazy loading, pairing parameters, authorization, Mainnet session restoration, account isolation and disconnect. Use `DRIVE_TEST_URL` if the dev server is on another port. A real project ID and a Filecoin-compatible mobile wallet are required for live QR pairing validation.
 
 Theme colors for foreground, surface, accent, links and status tones live in [`src/index.css`](src/index.css). Use semantic colors for text and icons; white text is reserved for filled buttons whose contrast is checked. With `npm run dev` running, `PLAYWRIGHT_CHANNEL=chrome npm run test:drive:theme` renders shared components and the actual landing page, console and details in both themes. It checks normal, focused and hovered text at 4.5:1 (3:1 for large text) and icons at 3:1; disabled controls are exempt.
 

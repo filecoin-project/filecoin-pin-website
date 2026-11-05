@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { prepareBrowserPage } from './drive-browser-fixtures.mjs'
+import { openDrive } from './drive-browser-navigation.mjs'
 
 export async function checkWalletSelection(browser) {
   for (const mixed of [false, true]) {
@@ -8,6 +9,8 @@ export async function checkWalletSelection(browser) {
       const page = await context.newPage()
       await prepareBrowserPage(page)
       await page.addInitScript((mixed) => {
+        // Seed the legacy preference only in the main page, not its landing iframe.
+        if (!mixed && window === window.top) localStorage.setItem('filecoin-drive-network', 'calibration')
         window.addEventListener('eip6963:requestProvider', () => {
           for (let i = 0; i < (mixed ? 1 : 8); i++) {
             window.dispatchEvent(
@@ -31,6 +34,8 @@ export async function checkWalletSelection(browser) {
       }, mixed)
       await page.goto(process.env.DRIVE_TEST_URL || 'http://127.0.0.1:5173/')
       const dialog = page.getByRole('dialog', { name: 'Connect a wallet', exact: true })
+      await openDrive(page)
+      if (!mixed) assert.equal(await page.evaluate(() => localStorage.getItem('filecoin-drive-network')), 'mainnet')
       await page.getByRole('button', { name: 'Connect wallet', exact: true }).click()
       await dialog.waitFor()
       assert.equal(await dialog.getByRole('button', { name: 'Browser wallet', exact: true }).count(), 0)
@@ -48,7 +53,7 @@ export async function checkWalletSelection(browser) {
       }
       await page.keyboard.press('Escape')
       await dialog.waitFor({ state: 'hidden' })
-      await page.getByRole('button', { name: 'Connect a wallet', exact: true }).click()
+      await page.getByRole('button', { name: 'Connect wallet', exact: true }).click()
       await dialog.waitFor()
       await dialog.getByRole('button', { name: 'Test wallet 0', exact: true }).click()
       await page.getByRole('button', { name: 'report.pdf', exact: true }).waitFor()
