@@ -34,6 +34,12 @@ export function FileUploadDetails({ file, onOpenWallet }: { file: DatasetPiece; 
           {status}
         </span>
       </div>
+      {upload.phase === 'interrupted' && (file.copyCount ?? 0) > 0 && (
+        <p className="text-xs text-muted">
+          Your confirmed copies remain stored. Remaining upload work has stopped. Check status refreshes the file index
+          and saved provider operations; it does not restart the upload.
+        </p>
+      )}
       {upload.phase === 'funding' && (
         <div className="space-y-3 rounded-lg border border-border bg-surface p-4" role="status">
           <p className="text-sm font-medium">
@@ -215,6 +221,7 @@ export function FileUploadDetails({ file, onOpenWallet }: { file: DatasetPiece; 
                         ? 'File received; submission receipt not recorded'
                         : 'Receipt not recorded'}
               </p>
+              {provider.confirmed && !provider.transactionHash && <p>Transaction hash unavailable in this browser.</p>}
               {provider.transactionHash && (
                 <a
                   className="text-link underline"
@@ -229,6 +236,12 @@ export function FileUploadDetails({ file, onOpenWallet }: { file: DatasetPiece; 
           ))}
         </ul>
         <h4 className="mt-4 text-xs font-medium">{active ? 'Upload steps' : 'Last saved progress'}</h4>
+        {!active && (file.copyCount ?? 0) > 0 && upload.steps.some((step) => step.status !== 'completed') && (
+          <p className="mt-2 text-xs text-muted">
+            These steps show the last saved browser progress. Current storage confirmations are shown above and in
+            Storage copies; unverified steps do not undo a confirmed copy.
+          </p>
+        )}
         <ol className="mt-3 space-y-3">
           {upload.steps.map((step) => (
             <li className="flex items-center justify-between gap-3" key={step.step}>

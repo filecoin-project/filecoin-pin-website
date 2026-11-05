@@ -35,6 +35,7 @@ import {
   getPieceExplorerLink,
   getTxExplorerLink,
 } from '../../utils/links.ts'
+import { blocksFileDeletion } from '../../utils/upload/blocks-file-deletion.ts'
 import { canRemoveUpload } from '../../utils/upload/can-remove-upload.ts'
 import { customerStatus, fileStatus } from '../../utils/upload/file-status.ts'
 import { ButtonBase as Button, buttonVariants } from '../ui/button/button-base.tsx'
@@ -243,6 +244,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
       )
   )
   const autoCheckingDeletion = Boolean(selected && autoCheckingPieceCids.has(selected.pieceCid))
+  const uploadBlocksDeletion = selectedAliases.some(blocksFileDeletion)
   const disabled = working || autoCheckingDeletion || Boolean(download) || connection.busy
   const isQueued = (id: string) => queuedDownloads.some((file) => file.id === id)
   const files = visibleHistory
@@ -272,7 +274,8 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
     Boolean(
       file.pieceCid &&
         !isDeletionScheduled(file) &&
-        (!file.upload || file.upload.phase === 'complete') &&
+        !blocksFileDeletion(file) &&
+        !history.some((alias) => alias.pieceCid === file.pieceCid && blocksFileDeletion(alias)) &&
         !deletingPieceCids.has(file.pieceCid) &&
         !autoCheckingPieceCids.has(file.pieceCid)
     )
@@ -982,6 +985,12 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                 <section className="space-y-3">
                   <h3 className="font-medium">Storage copies</h3>
                   {(selected.datasetIds ?? [selected.datasetId]).map((datasetId, index) => {
+                    const uploadTransactionHash =
+                      selected.transactionHashes?.[index] ||
+                      (datasetId === selected.datasetId ? selected.transactionHash : undefined) ||
+                      selected.upload?.providers.find(
+                        (provider) => provider.dataSetId === datasetId && provider.confirmed
+                      )?.transactionHash
                     const checkpoint = selected.deletion?.[datasetId]
                     const removalStatus = selected.removedCopies?.includes(datasetId)
                       ? 'Removed'
@@ -1010,13 +1019,10 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                               providerId={selected.providerIds?.[index] ?? selected.providerId}
                             />
                           )}
-                          {(selected.transactionHashes?.[index] || selected.transactionHash) && (
+                          {uploadTransactionHash && (
                             <a
                               className="underline"
-                              href={getTxExplorerLink(
-                                selected.transactionHashes?.[index] ?? selected.transactionHash,
-                                selected.network
-                              )}
+                              href={getTxExplorerLink(uploadTransactionHash, selected.network)}
                               rel="noopener noreferrer"
                               target="_blank"
                             >
@@ -1094,7 +1100,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                         disabled ||
                         (Boolean(connection.session) && !deleteConsent) ||
                         allAliasesScheduled ||
-                        Boolean(selected.upload && selected.upload.phase !== 'complete')
+                        uploadBlocksDeletion
                       }
                       onClick={() => {
                         if (connection.session) {
@@ -1115,8 +1121,11 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                             ? 'Continue deletion'
                             : 'Schedule deletion'}
                     </Button>
-                    {selected.upload && selected.upload.phase !== 'complete' && (
-                      <p className="text-sm text-muted">Wait for the upload to finish before deleting this content.</p>
+                    {uploadBlocksDeletion && (
+                      <p className="text-sm text-muted">
+                        An upload or unconfirmed provider operation still needs to be resolved before deleting this
+                        content.
+                      </p>
                     )}
                     {waitingForDeletion && !working && (
                       <p className="text-sm text-muted" role="status">

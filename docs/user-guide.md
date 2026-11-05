@@ -76,6 +76,10 @@ Larger deletions may require **Continue deletion** after the provider’s remova
 
 Deletion is scheduled for provider processing, rather than immediate erasure. IPFS caches may retain content. Piece removal does not terminate the whole dataset or immediately end every storage charge.
 
+A stopped partial upload with at least one confirmed copy can be deleted once no provider has an unresolved submission or an unconfirmed stored-file checkpoint. Active uploads remain protected by content locks. Use **Check status** to reconcile missing confirmations; missing API entries alone do not prove failure. Deletion schedules removal of the recorded stored copies, not cancellation of unknown operations.
+
+Upload transaction links are shown only for the dataset whose hash is recorded. API recovery can restore confirmed copies without restoring the original transaction hash; no empty or borrowed transaction links are generated.
+
 ## Refresh and recover
 
 Connect the same wallet on another browser to discover indexed Drive files. Recent uploads may take time to appear; reload the page to fetch the latest list. If loading fails, use **Retry**. Older datasets without Drive metadata may only remain available in the browser that cached them.

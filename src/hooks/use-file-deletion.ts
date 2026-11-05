@@ -8,6 +8,7 @@ import {
   withFileDeletionLock,
 } from '../lib/filecoin-pin/delete.ts'
 import { applyDeletionUpdate, isDeletionScheduled } from '../utils/file-deletion.ts'
+import { blocksFileDeletion } from '../utils/upload/blocks-file-deletion.ts'
 import type { DatasetPiece } from './use-dataset-pieces.ts'
 import { useDeletionRecovery } from './use-deletion-recovery.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
@@ -59,15 +60,7 @@ export function useFileDeletion() {
       await withFileDeletionLock(storageScope, selected.cid, async () => {
         // Retry retained checkpoints before planning from the latest locked directory.
         await mutateHistory((current) => current)
-        if (
-          getLatestHistory().some(
-            (record) =>
-              record.pieceCid === selected.pieceCid &&
-              record.upload &&
-              record.upload.phase !== 'complete' &&
-              record.upload.phase !== 'failed'
-          )
-        )
+        if (getLatestHistory().some((record) => record.pieceCid === selected.pieceCid && blocksFileDeletion(record)))
           throw new Error('This content has an unfinished upload. Check its status before deleting.')
         await ensurePermissions()
         const { aliasIds, file } = planDeletion(getLatestHistory(), selected)
