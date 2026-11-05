@@ -52,13 +52,13 @@ Choose **Folder** in the upload panel to store an entire folder as one UnixFS di
 
 An organizing folder groups independent uploads. An uploaded folder stores its contents together: its children share the folder’s upload time and cannot be added, renamed or deleted individually. Delete the uploaded folder from its details to remove its storage copies. Icons and folder information distinguish these two kinds of folder. Known name collisions are rejected before a folder upload starts.
 
-The search field stays in the Files toolbar beside Load from Filecoin and Upload. **Search file list** matches names and paths in the wallet’s file records, without searching inside uploaded folders. Inside an uploaded folder, **Search this folder** matches names across all pages of the current directory (not file contents or nested directories), up to 10,000 entries. Opening Upload from an uploaded folder leaves Upload location empty and starts at Files root because uploaded folders cannot be appended to. Opening Upload from an organizing folder pre-fills its current path.
+The search field stays in the Files toolbar beside Upload. **Search file list** matches names and paths in the wallet’s file records, without searching inside uploaded folders. Inside an uploaded folder, **Search this folder** matches names across all pages of the current directory (not file contents or nested directories), up to 10,000 entries. Opening Upload from an uploaded folder leaves Upload location empty and starts at Files root because uploaded folders cannot be appended to. Opening Upload from an organizing folder pre-fills its current path.
 
 ## Downloads, previews and sharing
 
 Use **Download** to retrieve the original file from a recorded storage provider. File details offer gateway previews for every downloadable file; whether the browser displays or saves it depends on the format, browser and encoding.
 
-Gateway links use the external `inbrowser.link` browser gateway. Gateway availability is separate from IPNI indexing: an indexed CID does not guarantee successful gateway retrieval.
+Gateway links use the external `inbrowser.link` browser gateway. One confirmed provider with a synced piece and an advertised root CID is enough to enable gateway links; remaining replicas continue their own upload checks. Gateway availability is separate from IPNI indexing: an indexed CID does not guarantee successful gateway retrieval.
 
 Original-file downloads can run alongside an upload. Additional downloads are queued and run one at a time; repeated requests for the same file record are deduplicated. Queued files show **Queued · Cancel** in the list and details. Expand the queue above the file list to manage pending downloads across folders. Pending downloads can be cancelled; an active download cannot be cancelled. A failed download reports its file name and the queue continues. The queue is kept only in the current page and is cleared on reload or a wallet/network change; an already running download may still finish. Closing file details keeps downloads running.
 
@@ -78,7 +78,7 @@ Deletion is scheduled for provider processing, rather than immediate erasure. IP
 
 ## Refresh and recover
 
-Connect the same wallet on another browser to discover indexed Drive files. Recent uploads may take time to appear; use **Load from Filecoin** to retry. Older datasets without Drive metadata may only remain available in the browser that cached them.
+Connect the same wallet on another browser to discover indexed Drive files. Recent uploads may take time to appear; reload the page to fetch the latest list. If loading fails, use **Retry**. Older datasets without Drive metadata may only remain available in the browser that cached them.
 
 If saving fails, keep the page open, free browser storage and use **Retry saving**. Clearing site data loses unindexed checkpoints and local-only metadata.
 

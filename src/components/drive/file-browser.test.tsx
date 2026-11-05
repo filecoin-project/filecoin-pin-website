@@ -1014,7 +1014,7 @@ it('selects only eligible records in the current file list', async () => {
 
 it('shows folder activity on every ancestor without marking similarly named folders', async () => {
   const checkpoint = {
-    phase: 'waiting' as const,
+    phase: 'uploading' as const,
     expectedCopies: 2,
     providers: [],
     steps: [],
@@ -1244,6 +1244,7 @@ it.each(['waiting', 'uploading', 'confirming', 'pending'] as const)(
       expect(within(row).queryByText('Waiting')).toBeNull()
       expect(within(row).queryByLabelText('Uploading…')).toBeNull()
       expect(selection).toHaveProperty('disabled', false)
+      expect(screen.queryAllByTitle('Uploads or deletions in progress')).toHaveLength(0)
     } else {
       expect(within(row).queryByText('Waiting')).toBeNull()
       expect(within(row).getByLabelText('Uploading…')).toBeTruthy()

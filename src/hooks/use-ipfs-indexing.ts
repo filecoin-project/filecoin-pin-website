@@ -90,26 +90,43 @@ export function useIpfsIndexing(
           request = new AbortController()
           const timeout = window.setTimeout(() => request?.abort(), REQUEST_TIMEOUT)
           let indexed = false
-          const serviceUrls = [...new Set((file.serviceURLs ?? [file.serviceURL]).filter(Boolean))]
+          const providerSources = new Map<string, { pieceCid: string; serviceURL: string }>()
+          for (const copy of candidates) {
+            if (copy.cid !== file.cid || !copy.pieceCid) continue
+            for (const serviceURL of [...(copy.serviceURLs ?? []), copy.serviceURL].filter(Boolean)) {
+              providerSources.set(JSON.stringify([copy.pieceCid, serviceURL]), { pieceCid: copy.pieceCid, serviceURL })
+            }
+          }
+          const providerChecks = new AbortController()
           try {
-            // Prefer the storing provider's piece-status: Curio proxies the indexer
-            // sync check, so it answers quickly and a direct cid.contact lookup
-            // (which negative-caches misses) only runs as the confirming step.
-            indexed =
-              file.pieceCid && serviceUrls.length
-                ? await waitForIndexingConfirmation(CID.parse(file.cid), CID.parse(file.pieceCid), {
+            // This flag controls gateway availability, not completion of every replica.
+            // Keep the SDK's provider-first check, but one synced and advertised copy
+            // is enough. The upload pipeline still validates its full provider set.
+            if (providerSources.size) {
+              const rootCid = CID.parse(file.cid)
+              const signal = AbortSignal.any([request.signal, providerChecks.signal])
+              indexed = await Promise.any(
+                [...providerSources.values()].map(async ({ pieceCid, serviceURL }) => {
+                  const available = await waitForIndexingConfirmation(rootCid, CID.parse(pieceCid), {
                     maxAttempts: 1,
-                    expectedProviders: serviceUrls.map((serviceURL) => ({ pdp: { serviceURL } }) as PDPProvider),
-                    signal: request.signal,
+                    expectedProviders: [{ pdp: { serviceURL } } as PDPProvider],
+                    signal,
                   })
-                : await checkIpniIndexer(CID.parse(file.cid), {
-                    maxAttempts: 1,
-                    ipniIndexerUrl: 'https://cid.contact',
-                    signal: request.signal,
-                  })
+                  if (!available) throw new Error('Provider indexing is not confirmed')
+                  return true
+                })
+              )
+            } else {
+              indexed = await checkIpniIndexer(CID.parse(file.cid), {
+                maxAttempts: 1,
+                ipniIndexerUrl: 'https://cid.contact',
+                signal: request.signal,
+              })
+            }
           } catch {
             // A miss, timeout or network error consumes one attempt, never marks stored data failed.
           } finally {
+            providerChecks.abort()
             window.clearTimeout(timeout)
           }
           if (stopped) break

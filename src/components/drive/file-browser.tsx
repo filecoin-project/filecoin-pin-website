@@ -156,9 +156,9 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
     (file) =>
       deletingPieceCids.has(file.pieceCid) ||
       autoCheckingPieceCids.has(file.pieceCid) ||
-      uploadTasks?.activeIds.has(file.id) ||
+      (uploadTasks?.activeIds.has(file.id) && !uploadTasks.queuedIds.has(file.id)) ||
       uploadTasks?.checking.has(file.id) ||
-      ['waiting', 'uploading', 'confirming'].includes(file.upload?.phase ?? '')
+      ['uploading', 'confirming'].includes(file.upload?.phase ?? '')
   )
   const activeFolders = new Set<string>()
   for (const file of activeFiles) {

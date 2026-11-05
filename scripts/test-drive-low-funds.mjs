@@ -87,6 +87,7 @@ try {
       )
       await upload.getByRole('button', { name: 'Upload 3 files', exact: true }).click()
       await page.getByText('Paused', { exact: true }).waitFor()
+      await page.getByTitle('Uploads or deletions in progress', { exact: true }).waitFor({ state: 'detached' })
       const pausedRow = page.getByRole('button', { name: 'example.png', exact: true }).locator('..').locator('..')
       assert.equal(
         await pausedRow.getByLabel('Uploading…').count(),

@@ -151,3 +151,116 @@ it('reuses an already confirmed CID for a duplicate record without downgrading i
   expect(checkIpniIndexer).not.toHaveBeenCalled()
   expect(update).toHaveBeenCalledWith(cid, true, 0)
 })
+
+it('accepts an available replica without waiting for an unavailable provider', async () => {
+  let canceled = false
+  vi.mocked(waitForIndexingConfirmation).mockImplementation(async (_root, _piece, options) => {
+    const urls = options?.expectedProviders?.map((provider) => provider.pdp.serviceURL)
+    expect(urls).toHaveLength(1)
+    if (urls?.[0] === 'https://slow.example') {
+      return new Promise<boolean>((_resolve, reject) => {
+        options?.signal?.addEventListener('abort', () => {
+          canceled = true
+          reject(new Error('Aborted'))
+        })
+      })
+    }
+    return true
+  })
+  const update = vi.fn()
+  renderHook(() =>
+    useIpfsIndexing(
+      'wallet-a',
+      [
+        {
+          ...file,
+          copyCount: 2,
+          pieceCid: 'bafkzcibcd4bdomn3tgwgrh3g532zopskstnbrd2n3sxfqbze7rxt7vqn7veigmy',
+          serviceURLs: ['https://slow.example', 'https://ready.example'],
+        },
+      ],
+      update
+    )
+  )
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1000)
+  })
+  expect(update).toHaveBeenCalledWith(cid, true, 1)
+  expect(canceled).toBe(true)
+  expect(readIndexingChecks('wallet-a')[cid].indexed).toBe(true)
+})
+
+it.each([false, true])('only marks indexed when at least one provider succeeds (available: %s)', async (available) => {
+  vi.mocked(waitForIndexingConfirmation)
+    .mockRejectedValueOnce(new Error('provider unavailable'))
+    .mockResolvedValueOnce(available)
+  const update = vi.fn()
+  renderHook(() =>
+    useIpfsIndexing(
+      'wallet-a',
+      [
+        {
+          ...file,
+          copyCount: 2,
+          pieceCid: 'bafkzcibcd4bdomn3tgwgrh3g532zopskstnbrd2n3sxfqbze7rxt7vqn7veigmy',
+          serviceURLs: ['https://down.example', 'https://other.example'],
+        },
+      ],
+      update
+    )
+  )
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1000)
+  })
+  expect(update).toHaveBeenCalledWith(cid, available, 1)
+  expect(checkIpniIndexer).not.toHaveBeenCalled()
+})
+
+it('uses the primary provider when a historical record has an empty provider array', async () => {
+  vi.mocked(waitForIndexingConfirmation).mockResolvedValue(true)
+  const update = vi.fn()
+  renderHook(() =>
+    useIpfsIndexing(
+      'wallet-a',
+      [
+        {
+          ...file,
+          serviceURLs: [],
+          serviceURL: 'https://primary.example',
+          pieceCid: 'bafkzcibcd4bdomn3tgwgrh3g532zopskstnbrd2n3sxfqbze7rxt7vqn7veigmy',
+        },
+      ],
+      update
+    )
+  )
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1000)
+  })
+  expect(waitForIndexingConfirmation).toHaveBeenCalledOnce()
+  expect(checkIpniIndexer).not.toHaveBeenCalled()
+  expect(update).toHaveBeenCalledWith(cid, true, 1)
+})
+
+it('checks providers across duplicate root records rather than letting the first unavailable alias block them', async () => {
+  vi.mocked(waitForIndexingConfirmation)
+    .mockRejectedValueOnce(new Error('first alias provider unavailable'))
+    .mockResolvedValueOnce(true)
+  const update = vi.fn()
+  const pieceCid = 'bafkzcibcd4bdomn3tgwgrh3g532zopskstnbrd2n3sxfqbze7rxt7vqn7veigmy'
+  renderHook(() =>
+    useIpfsIndexing(
+      'wallet-a',
+      [
+        { ...file, pieceCid, serviceURL: 'https://down.example' },
+        { ...file, id: 'alias', pieceCid, serviceURL: 'https://ready.example' },
+      ],
+      update
+    )
+  )
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1000)
+  })
+  expect(waitForIndexingConfirmation).toHaveBeenCalledTimes(2)
+  expect(update).toHaveBeenCalledOnce()
+  expect(update).toHaveBeenCalledWith(cid, true, 1)
+})
