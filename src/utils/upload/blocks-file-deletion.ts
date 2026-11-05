@@ -8,6 +8,11 @@ export function blocksFileDeletion(file: DatasetPiece): boolean {
     (provider) => !provider.confirmed && !provider.rejected && (provider.transactionHash || provider.stored)
   )
   if (unresolved) return true
-  if (upload.phase === 'complete') return false
-  return !(['interrupted', 'failed'].includes(upload.phase) && (file.copyCount ?? 0) > 0)
+  if (upload.phase === 'complete' || upload.phase === 'failed') return false
+  return !(upload.phase === 'interrupted' && hasStoredCopy(file))
+}
+
+/** Target eligibility is separate from whether a related upload still blocks deletion. */
+export function hasStoredCopy(file: DatasetPiece): boolean {
+  return !file.upload || (file.copyCount ?? 0) > 0
 }

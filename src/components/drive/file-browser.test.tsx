@@ -1407,3 +1407,90 @@ it('uses a matching confirmed provider receipt when its per-copy transaction cac
     `https://filecoin.blockscout.com/tx/${hash}`
   )
 })
+
+it('does not assign a pending providers hash to a different API-recovered dataset', async () => {
+  const { mergeIndexedFiles } = await import('../../lib/filecoin-pin/drive-api.ts')
+  const pending: DatasetPiece = {
+    ...file,
+    datasetId: '',
+    datasetIds: [],
+    pieceId: undefined,
+    copyCount: 0,
+    transactionHash: hash,
+    transactionHashes: [],
+    upload: {
+      phase: 'pending',
+      expectedCopies: 2,
+      steps: [],
+      checks: 0,
+      nextCheckAt: 0,
+      providers: [
+        { providerId: '1', serviceURL: '', transactionHash: hash, stored: true },
+        { providerId: '5', serviceURL: '' },
+      ],
+    },
+  }
+  const recovered: DatasetPiece = {
+    ...file,
+    id: 'indexed-2-1',
+    datasetId: '2',
+    datasetIds: ['2'],
+    providerId: '5',
+    uploadedAt: 2,
+    transactionHash: '',
+  }
+  const merged = mergeIndexedFiles([pending], [recovered])
+  expect(merged).toHaveLength(1)
+  setCachedPieces(scope, merged)
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'first.txt' }))
+  const storage = within(screen.getByRole('heading', { name: 'Storage copies' }).parentElement as HTMLElement)
+  expect(storage.getByRole('link', { name: 'Dataset 2' })).toBeTruthy()
+  expect(storage.queryByRole('link', { name: 'Upload transaction' })).toBeNull()
+})
+
+it('permits deleting stored content despite a failed rejected alias with no copies', async () => {
+  setCachedPieces(scope, [
+    { ...file, copyCount: 1 },
+    {
+      ...file,
+      id: 'old-failed',
+      fileName: 'failed.txt',
+      datasetId: '',
+      datasetIds: [],
+      copyCount: 0,
+      upload: {
+        phase: 'failed',
+        expectedCopies: 2,
+        steps: [],
+        checks: 0,
+        nextCheckAt: 0,
+        providers: [{ providerId: '1', serviceURL: '', transactionHash: hash, stored: true, rejected: true }],
+      },
+    },
+  ])
+  mocks.context.mockResolvedValue({ deletePieces: mocks.submit, getScheduledRemovals: async () => [] })
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  await screen.findByRole('button', { name: 'first.txt' })
+  expect(screen.getByRole('checkbox', { name: 'Select first.txt' })).toHaveProperty('disabled', false)
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select all files in this list' }))
+  expect(screen.getByRole('button', { name: 'Remove local records (1)' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Delete stored files (1)' }))
+  const dialog = within(screen.getByRole('dialog', { name: 'Delete selected files' }))
+  expect(dialog.queryByText('failed.txt')).toBeNull()
+  fireEvent.click(dialog.getByRole('checkbox'))
+  fireEvent.click(dialog.getByRole('button', { name: 'Delete selected files' }))
+  await waitFor(() => expect(mocks.submit).toHaveBeenCalledOnce())
+  await waitFor(() =>
+    expect(getCachedPieces(scope)?.find((record) => record.id === file.id)?.deletion?.['1'].confirmed).toBe(true)
+  )
+  expect(getCachedPieces(scope)?.find((record) => record.id === 'old-failed')?.deletion).toBeUndefined()
+})

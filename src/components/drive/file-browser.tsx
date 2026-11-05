@@ -35,9 +35,10 @@ import {
   getPieceExplorerLink,
   getTxExplorerLink,
 } from '../../utils/links.ts'
-import { blocksFileDeletion } from '../../utils/upload/blocks-file-deletion.ts'
+import { blocksFileDeletion, hasStoredCopy } from '../../utils/upload/blocks-file-deletion.ts'
 import { canRemoveUpload } from '../../utils/upload/can-remove-upload.ts'
 import { customerStatus, fileStatus } from '../../utils/upload/file-status.ts'
+import { storageCopyTransactionHash } from '../../utils/upload/storage-copy-transaction.ts'
 import { ButtonBase as Button, buttonVariants } from '../ui/button/button-base.tsx'
 import { CopyButton } from '../ui/copy-button.tsx'
 import { BatchDeleteDialog } from './batch-delete-dialog.tsx'
@@ -233,9 +234,10 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
         .map(([cid, message]) => `${history.find((file) => file.pieceCid === cid)?.fileName ?? cid}: ${message}`)
         .join('\n')
   const selectedAliases = selected?.pieceCid ? history.filter((file) => file.pieceCid === selected.pieceCid) : []
+  const storedAliases = selectedAliases.filter(hasStoredCopy)
   const allAliasesScheduled =
-    selectedAliases.length > 0 && selectedAliases.every((file) => fileStatus(file) === 'Deletion scheduled')
-  const affectedAliases = selectedAliases.filter((file) => !isDeletionScheduled(file))
+    storedAliases.length > 0 && storedAliases.every((file) => fileStatus(file) === 'Deletion scheduled')
+  const affectedAliases = storedAliases.filter((file) => !isDeletionScheduled(file))
   const hasDeletionProgress = affectedAliases.some(hasRemovalProgress)
   const waitingForDeletion = Boolean(
     selected &&
@@ -274,6 +276,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
     Boolean(
       file.pieceCid &&
         !isDeletionScheduled(file) &&
+        hasStoredCopy(file) &&
         !blocksFileDeletion(file) &&
         !history.some((alias) => alias.pieceCid === file.pieceCid && blocksFileDeletion(alias)) &&
         !deletingPieceCids.has(file.pieceCid) &&
@@ -291,7 +294,9 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
   const removableFiles = selectedFiles.filter(canSelectForRemoval)
   const storedFiles = selectedFiles.filter(canSelectForDeletion)
   const batchTargets = [...new Map(storedFiles.map((file) => [file.pieceCid, file])).values()]
-  const batchAliases = visibleHistory.filter((file) => batchTargets.some((target) => target.pieceCid === file.pieceCid))
+  const batchAliases = visibleHistory.filter(
+    (file) => hasStoredCopy(file) && batchTargets.some((target) => target.pieceCid === file.pieceCid)
+  )
   const toggleSelection = (file: DatasetPiece) =>
     setSelectedFileIds((current) => {
       const next = new Set(current)
@@ -985,12 +990,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                 <section className="space-y-3">
                   <h3 className="font-medium">Storage copies</h3>
                   {(selected.datasetIds ?? [selected.datasetId]).map((datasetId, index) => {
-                    const uploadTransactionHash =
-                      selected.transactionHashes?.[index] ||
-                      (datasetId === selected.datasetId ? selected.transactionHash : undefined) ||
-                      selected.upload?.providers.find(
-                        (provider) => provider.dataSetId === datasetId && provider.confirmed
-                      )?.transactionHash
+                    const uploadTransactionHash = storageCopyTransactionHash(selected, datasetId)
                     const checkpoint = selected.deletion?.[datasetId]
                     const removalStatus = selected.removedCopies?.includes(datasetId)
                       ? 'Removed'
@@ -1100,7 +1100,8 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                         disabled ||
                         (Boolean(connection.session) && !deleteConsent) ||
                         allAliasesScheduled ||
-                        uploadBlocksDeletion
+                        uploadBlocksDeletion ||
+                        !hasStoredCopy(selected)
                       }
                       onClick={() => {
                         if (connection.session) {
@@ -1121,6 +1122,9 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                             ? 'Continue deletion'
                             : 'Schedule deletion'}
                     </Button>
+                    {!hasStoredCopy(selected) && (
+                      <p className="text-sm text-muted">No confirmed storage copy is available to delete.</p>
+                    )}
                     {uploadBlocksDeletion && (
                       <p className="text-sm text-muted">
                         An upload or unconfirmed provider operation still needs to be resolved before deleting this

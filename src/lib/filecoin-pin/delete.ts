@@ -5,6 +5,7 @@ import { BaseError, WaitForTransactionReceiptTimeoutError } from 'viem'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import type { DeletionCheckpoint, DeletionUpdate } from '../../utils/file-deletion.ts'
 import { isDeletionScheduled } from '../../utils/file-deletion.ts'
+import { hasStoredCopy } from '../../utils/upload/blocks-file-deletion.ts'
 import { type DriveNetwork, publicClient } from './browser-wallet.ts'
 import { acquireContentLock } from './content-lock.ts'
 import { resolveTransactionReceipt } from './transaction-receipt.ts'
@@ -170,9 +171,11 @@ export async function scheduleFileDeletion(
 export function planDeletion(history: DatasetPiece[], selected: DatasetPiece) {
   // Identical uploads can share the same on-chain piece. Explain and track all affected records.
   // Archived receipts belong to earlier uploads and cannot settle a new removal.
-  const aliases = history.filter((file) => file.pieceCid === selected.pieceCid && !isDeletionScheduled(file))
+  const aliases = history.filter(
+    (file) => file.pieceCid === selected.pieceCid && hasStoredCopy(file) && !isDeletionScheduled(file)
+  )
   const aliasIds = new Set(aliases.map((file) => file.id))
-  const datasetIds = [...new Set(aliases.flatMap((file) => file.datasetIds ?? [file.datasetId]))]
+  const datasetIds = [...new Set(aliases.flatMap((file) => file.datasetIds ?? [file.datasetId]).filter(Boolean))]
   const deletion: NonNullable<DatasetPiece['deletion']> = {}
   for (const alias of aliases)
     for (const [id, checkpoint] of Object.entries(alias.deletion ?? {})) {
