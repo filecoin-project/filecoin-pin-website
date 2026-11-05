@@ -112,6 +112,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
           <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" size={14} />
         </span>
       )
+    if (status === 'Waiting') return <span className="ml-2 align-middle text-[11px] text-muted">Waiting</span>
     if (status === 'Paused')
       return (
         <span className="ml-2 inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 align-middle text-[11px] text-warning">
@@ -268,7 +269,9 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
     canRemoveUpload(file) &&
     (!uploadTasks?.activeIds.has(file.id) || !!uploadTasks?.queuedIds.has(file.id)) &&
     !uploadTasks?.checking.has(file.id)
-  const canSelect = (file: DatasetPiece) => canSelectForDeletion(file) || canSelectForRemoval(file)
+  const canSelect = (file: DatasetPiece) =>
+    !['Uploading…', 'Deleting…'].includes(displayStatus(file)) &&
+    (canSelectForDeletion(file) || canSelectForRemoval(file))
   const selectableFiles = files.filter(canSelect)
   const selectedFiles = selectableFiles.filter((file) => selectedFileIds.has(file.id))
   const removableFiles = selectedFiles.filter(canSelectForRemoval)

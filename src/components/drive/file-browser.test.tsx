@@ -278,10 +278,10 @@ it('collapses internal states into the customer vocabulary', () => {
     checks: 0,
     nextCheckAt: 0,
   }
-  expect(customerStatus({ ...file, copyCount: 0, upload })).toBe('Uploading…')
+  expect(customerStatus({ ...file, copyCount: 0, upload })).toBe('Waiting')
   expect(customerStatus({ ...file, copyCount: 0, upload: { ...upload, phase: 'pending' } })).toBe('Uploading…')
-  expect(customerStatus({ ...file, copyCount: 0, upload, ipfsIndexed: true })).toBe('Uploading…')
-  expect(customerStatus({ ...file, copyCount: 0, pieceCid: '', upload, ipfsIndexed: true })).toBe('Uploading…')
+  expect(customerStatus({ ...file, copyCount: 0, upload, ipfsIndexed: true })).toBe('Waiting')
+  expect(customerStatus({ ...file, copyCount: 0, pieceCid: '', upload, ipfsIndexed: true })).toBe('Waiting')
   expect(customerStatus({ ...file, copyCount: 0, upload: { ...upload, phase: 'failed' } })).toBe('Upload failed')
   expect(customerStatus({ ...file, copyCount: 0, upload: { ...upload, phase: 'interrupted' } })).toBe('Upload failed')
   expect(customerStatus({ ...file, ipfsIndexed: false })).toBe('Stored')
@@ -1214,4 +1214,49 @@ it('keeps chain confirmation separate from indexing and interrupted upload progr
   ).toBe('Uploading…')
   expect(customerStatus({ ...file, copyCount: 0, upload: { ...upload, phase: 'funding' } })).toBe('Paused')
   expect(fileStatus({ ...file, copyCount: 0, upload: { ...upload, phase: 'funding' } })).toBe('Waiting for funding')
+})
+
+it.each(['waiting', 'uploading', 'confirming', 'pending'] as const)(
+  'distinguishes queued records from uploads in progress (%s)',
+  async (phase) => {
+    setCachedPieces(scope, [
+      {
+        ...file,
+        datasetId: '',
+        datasetIds: [],
+        pieceCid: '',
+        cid: '',
+        copyCount: 0,
+        upload: { phase, expectedCopies: 2, providers: [], steps: [], checks: 0, nextCheckAt: 0 },
+      },
+    ])
+    render(
+      <UploadHistoryProvider>
+        <FileBrowser folder="" onFolderChange={vi.fn()} />
+      </UploadHistoryProvider>
+    )
+    const row = (await screen.findByRole('button', { name: 'first.txt' })).closest('tr') as HTMLElement
+    const selection = within(row).getByRole('checkbox', { name: 'Select first.txt' })
+    if (phase === 'waiting') {
+      expect(within(row).getByText('Waiting')).toBeTruthy()
+      expect(within(row).queryByLabelText('Uploading…')).toBeNull()
+      expect(selection).toHaveProperty('disabled', false)
+    } else {
+      expect(within(row).queryByText('Waiting')).toBeNull()
+      expect(within(row).getByLabelText('Uploading…')).toBeTruthy()
+      expect(selection).toHaveProperty('disabled', true)
+    }
+  }
+)
+
+it('keeps a deletion-pending row unselectable while its deletion spinner is shown', async () => {
+  setCachedPieces(scope, [{ ...file, deletion: { '1': { transactionHash: hash, confirmed: false } } }])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  const row = (await screen.findByRole('button', { name: 'first.txt' })).closest('tr') as HTMLElement
+  expect(within(row).getByLabelText('Deleting…')).toBeTruthy()
+  expect(within(row).getByRole('checkbox', { name: 'Select first.txt' })).toHaveProperty('disabled', true)
 })

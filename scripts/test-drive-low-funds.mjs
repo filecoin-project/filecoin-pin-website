@@ -94,6 +94,13 @@ try {
         'Paused uploads must not show an uploading spinner'
       )
       assert.equal(await page.getByRole('columnheader', { name: /Status|Copies/ }).count(), 0)
+      for (const name of ['notes.txt', 'receipt.csv']) {
+        const row = page.getByRole('button', { name, exact: true }).locator('..').locator('..')
+        await row.getByText('Waiting', { exact: true }).waitFor()
+        assert.equal(await row.getByLabel('Uploading…').count(), 0, 'Queued uploads must not show a spinner')
+        assert.equal(await row.getByRole('checkbox', { name: `Select ${name}`, exact: true }).isEnabled(), true)
+      }
+
       await page.getByRole('button', { name: 'example.png', exact: true }).click()
       await page.getByRole('button', { name: 'Check funding and continue', exact: true }).waitFor()
       await page
