@@ -1063,3 +1063,50 @@ it('uses the same default copy count for legacy records and their tooltip', asyn
   const copies = await screen.findByTitle('1 confirmed storage copy')
   expect(copies.textContent).toBe('1')
 })
+
+it('does not group uploads with missing piece CIDs and removes only selected safe local records', async () => {
+  const failed = {
+    ...file,
+    id: 'failed',
+    fileName: 'failed.txt',
+    pieceCid: '',
+    cid: '',
+    datasetId: '',
+    datasetIds: [],
+    copyCount: 0,
+    upload: { phase: 'failed', expectedCopies: 2, providers: [], steps: [], checks: 0, nextCheckAt: 0 },
+  } satisfies DatasetPiece
+  setCachedPieces(scope, [
+    failed,
+    { ...failed, id: 'interrupted', fileName: 'interrupted.txt', upload: { ...failed.upload, phase: 'interrupted' } },
+    {
+      ...failed,
+      id: 'pending',
+      fileName: 'pending.txt',
+      upload: { ...failed.upload, providers: [{ providerId: '1', serviceURL: '', transactionHash: hash }] },
+    },
+    file,
+  ])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByText('failed.txt'))
+  expect(screen.queryByText('These files contain identical content. Deletion affects all listed records:')).toBeNull()
+  expect(screen.queryByText('Delete from Filecoin')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Close details' }))
+  expect(screen.getByRole('checkbox', { name: 'Select pending.txt' })).toHaveProperty('disabled', true)
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select failed.txt' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select interrupted.txt' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Remove local records (2)' }))
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove local records' }))
+  await waitFor(() =>
+    expect(
+      getCachedPieces(scope)
+        ?.map((record) => record.id)
+        .sort()
+    ).toEqual(['first', 'pending'])
+  )
+  expect(mocks.submit).not.toHaveBeenCalled()
+})

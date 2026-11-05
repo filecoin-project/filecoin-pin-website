@@ -5,6 +5,7 @@ import { useUploadOrchestration } from '../hooks/use-upload-orchestration.ts'
 import { useUploadRecovery } from '../hooks/use-upload-recovery.ts'
 import { DEFAULT_STORAGE_COPIES } from '../lib/filecoin-pin/config.ts'
 import { acquireContentLock } from '../lib/filecoin-pin/content-lock.ts'
+import { validateDriveMetadata } from '../lib/filecoin-pin/drive-metadata.ts'
 import { isDirectoryUpload, type UploadSource } from '../lib/filecoin-pin/upload-source.ts'
 import { directoryFolders, normalizeFolder } from '../lib/local-storage/drive-directory.ts'
 import { isDeletionScheduled } from '../utils/file-deletion.ts'
@@ -150,6 +151,7 @@ export function UploadTasksProvider({ children }: { children: ReactNode }) {
       for (const job of added) reserved.current.add(job.id)
       try {
         folder = normalizeFolder(folder)
+        for (const file of files) validateDriveMetadata(file.name, folder)
         for (const job of added) {
           job.folder = folder
           taskLocks.current.set(job.id, await acquireContentLock(`${storageScope}:upload-task`, job.id))
