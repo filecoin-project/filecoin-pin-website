@@ -928,7 +928,7 @@ it('confirms a batch once and deduplicates identical file records', async () => 
   )
   fireEvent.click(await screen.findByRole('checkbox', { name: 'Select first.txt' }))
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select second.txt' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Delete stored files (2)' }))
   const dialog = screen.getByRole('dialog', { name: 'Delete selected files' })
   expect(within(dialog).getByText('2 file records · 1 unique uploads')).toBeTruthy()
   expect(within(dialog).getByRole('list', { name: 'Files affected by deletion' }).children).toHaveLength(2)
@@ -1099,7 +1099,9 @@ it('does not group uploads with missing piece CIDs and removes only selected saf
   expect(screen.getByRole('checkbox', { name: 'Select pending.txt' })).toHaveProperty('disabled', true)
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select failed.txt' }))
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select interrupted.txt' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Remove local records (2)' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select first.txt' }))
+  expect(screen.getByRole('button', { name: 'Delete stored files (1)' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Remove failed records (2)' }))
   fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove local records' }))
   await waitFor(() =>
     expect(
