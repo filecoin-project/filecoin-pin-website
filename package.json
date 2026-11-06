@@ -19,7 +19,7 @@
     "test:drive:theme": "node scripts/test-drive-theme.mjs"
   },
   "dependencies": {
-    "@filoz/synapse-core": "^0.10.2",
+    "@filoz/synapse-core": "^0.10.3",
     "@filoz/synapse-react": "^0.5.1",
     "@filoz/synapse-sdk": "^2.0.2",
     "@ipld/car": "^5.4.7",
