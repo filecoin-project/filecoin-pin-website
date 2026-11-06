@@ -31,6 +31,11 @@ vi.mock('../lib/filecoin-pin/browser-wallet.ts', async (importOriginal) => ({
     expiresAt: () => mocks.chainExpiry,
   }),
 }))
+vi.mock('@filoz/synapse-core/client', () => ({ asClient: (client: unknown) => client }))
+vi.mock('@filoz/synapse-sdk', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@filoz/synapse-sdk')>()),
+  Synapse: class {},
+}))
 vi.mock('@filoz/synapse-react', () => ({ getSignerClient: vi.fn(async () => ({})) }))
 vi.mock('viem/actions', async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -832,4 +837,94 @@ it('does not roll back a newer session saved by another tab when the old prompt 
   await act(async () => result.current.authorize(7))
   expect(await mocks.load(`314:${ALICE}`)).toEqual(newer)
   expect(result.current.session).toEqual(newer)
+})
+
+it.each(['deposit', 'approve'] as const)(
+  'keeps a verified session active while a %s is signed, confirmed and recovered',
+  async (kind) => {
+    const { result } = renderHook(useBrowserWallet, { wrapper })
+    await act(async () => result.current.connect())
+    await act(async () => result.current.authorize(7))
+    await waitFor(() => expect(result.current.sessionStatus).toBe('active'))
+    const session = result.current.session
+    mocks.validate.mockClear()
+    mocks.receipt.mockClear()
+    let sign!: () => void
+    const signature = new Promise<void>((resolve) => {
+      sign = resolve
+    })
+    let settle!: () => void
+    mocks.receipt.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          settle = () => reject(new Error('Receipt timeout'))
+        })
+    )
+    let payment!: Promise<void>
+    act(() => {
+      payment = result.current.paymentAction(async (_synapse, confirm) => {
+        await signature
+        await confirm(hash as `0x${string}`)
+      }, kind)
+    })
+    await waitFor(() => expect(result.current.busy).toBe(true))
+    expect(result.current.sessionStatus).toBe('active')
+    await act(async () => sign())
+    await waitFor(() => expect(mocks.receipt).toHaveBeenCalledOnce())
+    expect(result.current.pendingTransaction?.kind).toBe(kind)
+    expect(result.current.sessionStatus).toBe('active')
+    await act(async () => {
+      settle()
+      await payment
+    })
+    expect(result.current.busy).toBe(false)
+    expect(result.current.pendingTransaction?.kind).toBe(kind)
+    expect(result.current.sessionStatus).toBe('active')
+    mocks.getReceipt.mockResolvedValue({ status: 'success' })
+    await act(async () => result.current.refreshTransaction())
+    await waitFor(() => expect(result.current.pendingTransaction).toBeNull())
+    expect(result.current.sessionStatus).toBe('active')
+    expect(result.current.session).toEqual(session)
+    expect(mocks.validate).not.toHaveBeenCalled()
+  }
+)
+
+it('ignores an in-flight session check while a revocation signature is pending', async () => {
+  let verified!: () => void
+  mocks.validate.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        verified = resolve
+      })
+  )
+  mocks.load.mockResolvedValue({
+    privateKey: `0x${'1'.repeat(64)}`,
+    expiresAt: mocks.chainExpiry,
+    revision: 'existing-session',
+  })
+  const { result } = renderHook(useBrowserWallet, { wrapper })
+  await act(async () => result.current.connect())
+  await waitFor(() => expect(mocks.validate).toHaveBeenCalledOnce())
+  let rejectSignature!: (cause: unknown) => void
+  mocks.write.mockImplementation(
+    () =>
+      new Promise((_resolve, reject) => {
+        rejectSignature = reject
+      })
+  )
+  let revocation!: Promise<void>
+  act(() => {
+    revocation = result.current.revoke()
+  })
+  await waitFor(() => expect(mocks.write).toHaveBeenCalledOnce())
+  await act(async () => verified())
+  expect(result.current.busy).toBe(true)
+  expect(result.current.sessionStatus).toBe('checking')
+  expect(mocks.validate).toHaveBeenCalledOnce()
+  mocks.validate.mockResolvedValue(undefined)
+  await act(async () => {
+    rejectSignature(new UserRejectedRequestError(new Error('User rejected')))
+    await revocation
+  })
+  await waitFor(() => expect(result.current.sessionStatus).toBe('active'))
 })

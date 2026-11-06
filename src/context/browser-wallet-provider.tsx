@@ -96,7 +96,8 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
   const [network, setNetwork] = useState<DriveNetwork>(readNetworkPreference)
   const [session, setSession] = useState<BrowserSession | null>(null)
   const [sessionStatus, setSessionStatus] = useState<WalletConnection['sessionStatus']>('none')
-  const [busy, setBusy] = useState(false)
+  const [walletOperation, setWalletOperation] = useState<'wallet' | 'session' | null>(null)
+  const busy = walletOperation !== null
   const [uploading, setUploading] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const operations = useRef({ uploading: false, deleting: false })
@@ -281,6 +282,9 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
     }
   }, [address, network])
 
+  const sessionMutationPending =
+    walletOperation === 'session' || transaction.pending?.kind === 'authorize' || transaction.pending?.kind === 'revoke'
+
   useEffect(() => {
     if (!address || !session) {
       setSessionStatus('none')
@@ -288,9 +292,9 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
     }
     let cancelled = false
     setSessionStatus('checking')
-    // Owner transactions can change these expirations. Validate only after the
-    // transaction settles so an old chain read cannot overwrite the new grant.
-    if (busy || transaction.pending?.kind === 'authorize' || transaction.pending?.kind === 'revoke') return
+    // Authorization and revocation can change these expirations. Wait until they
+    // settle; deposits and payment approvals do not affect session permissions.
+    if (sessionMutationPending) return
     const runtime = browserSynapse(address, network, session)
     let retryTimer: ReturnType<typeof setTimeout> | undefined
     let retryDelay = 5000
@@ -336,7 +340,7 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
       cancelled = true
       clearTimeout(retryTimer)
     }
-  }, [address, network, session, busy, transaction.pending])
+  }, [address, network, session, sessionMutationPending])
 
   useEffect(() => {
     if (!session) return
@@ -388,12 +392,12 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
     [config, selectedConnector]
   )
 
-  const run = async (action: () => Promise<void>) => {
+  const run = async (action: () => Promise<void>, kind: 'wallet' | 'session' = 'wallet') => {
     if (locked.current) return
     restoreEpoch.current++
     setRestoring(false)
     locked.current = true
-    setBusy(true)
+    setWalletOperation(kind)
     setError(null)
     try {
       await action()
@@ -403,7 +407,7 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
         setError(cause instanceof Error ? cause.message : 'Wallet operation failed')
       }
     } finally {
-      setBusy(false)
+      setWalletOperation(null)
       locked.current = operations.current.uploading || operations.current.deleting
     }
   }
@@ -597,7 +601,7 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
             }
             // Track the submitted hash immediately; the key was saved before signing.
             await transaction.confirm(hash, 'authorize', next.expiresAt, { key: sessionKey, revision: next.revision })
-          }),
+          }, 'session'),
         revoke: () =>
           run(async () => {
             if (transaction.pending || !address || !session) return
@@ -615,7 +619,7 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
               key: privateKeyToAccount(session.privateKey).address,
               revision: session.revision,
             })
-          }),
+          }, 'session'),
         paymentAction: (action, kind = 'deposit') =>
           run(async () => {
             if (transaction.pending) return
