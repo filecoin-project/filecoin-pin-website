@@ -143,6 +143,8 @@ refactor: simplify wallet initialization flow
 
 ## Pull Requests
 
+- Target `staging` for all normal PRs. See the [release process](docs/RELEASE.md)
+  for staging validation, promotion to `main`, deployment setup and emergency fixes.
 - Use conventional commit format for your PR title (see above).
 - Reference the GitHub issue in the PR description.
 - Include screenshots or terminal output for user-facing changes or CLI flows.

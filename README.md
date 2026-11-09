@@ -50,6 +50,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for source layout, browser checks and con
 
 ## Deployment
 
+See the [release process](docs/RELEASE.md) for staging validation and promotion to production.
+
 Build with `npm run build` and serve `dist` over HTTPS on a stable origin. Browser data and session credentials are scoped to that origin.
 
 WalletConnect includes a public Reown project ID. To use your own, copy [`.env.example`](.env.example) to `.env.local`, set `VITE_WALLETCONNECT_PROJECT_ID`, and rebuild. Include the deployment origin in your project's allowlist. Never configure wallet private keys in deployment environment variables.
