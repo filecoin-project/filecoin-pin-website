@@ -1,6 +1,6 @@
 name: Deploy Website
 
-# Use the team token so deployment does not depend on the commit author's
+# Use the deployment token so deployment does not depend on the commit author's
 # Vercel role. Vercel builds remotely; do not run repository code with this token.
 on:
   pull_request:
@@ -87,5 +87,12 @@ jobs:
           else
             alias_host="$STAGING_DOMAIN"
           fi
-          vercel alias set "$DEPLOYMENT_URL" "$alias_host" --token="$VERCEL_TOKEN"
+          # The CLI alias command looks up the account, which project tokens cannot access.
+          alias_body=$(jq -cn --arg alias "$alias_host" '{alias: $alias}')
+          curl --fail-with-body --silent --show-error \
+            --header "Authorization: Bearer $VERCEL_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data "$alias_body" \
+            "https://api.vercel.com/v2/deployments/${DEPLOYMENT_URL#https://}/aliases" |
+            jq --exit-status --arg alias "$alias_host" '.alias == $alias' >/dev/null
           echo "url=https://$alias_host" >> "$GITHUB_OUTPUT"
