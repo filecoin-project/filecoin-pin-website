@@ -27,6 +27,11 @@ vi.mock('@filoz/synapse-core/pdp-verifier', async (original) => ({
   dataSetLive: dataSetLiveMock,
 }))
 
+vi.mock('filecoin-pin/core/payments', () => ({
+  checkFILBalance: vi.fn().mockResolvedValue({ balance: 10n ** 18n, isCalibnet: false }),
+  validateGasRequirement: vi.fn().mockReturnValue({ isValid: true }),
+}))
+
 vi.mock('filecoin-pin/core/upload', () => ({
   executeUpload: executeUploadMock,
   checkUploadReadiness: checkUploadReadinessMock,
@@ -103,12 +108,9 @@ it('refuses uploads before packing when safe directory writes are unavailable', 
 })
 
 describe('useFilecoinUpload readiness', () => {
-  it('stops before uploading when the readiness check is blocked', async () => {
+  it('stops before transferring when SDK preparation fails', async () => {
     useFilecoinPinContextMock.mockReturnValue(baseContext)
-    checkUploadReadinessMock.mockResolvedValueOnce({
-      status: 'blocked',
-      validation: { errorMessage: 'Insufficient storage funds' },
-    })
+    prepareMock.mockRejectedValueOnce(new Error('Insufficient storage funds'))
 
     const { result } = renderHook(() => useFilecoinUpload())
 
@@ -168,7 +170,7 @@ describe('useFilecoinUpload dataset resume', () => {
     expect(fund).not.toHaveBeenCalled()
     expect(result.current.uploadState.stepStates.some((step) => step.status === 'in-progress')).toBe(false)
     expect(result.current.uploadState.stepStates.find((step) => step.step === 'checking-readiness')?.status).toBe(
-      'error'
+      'pending'
     )
     expect(getStoredDataSetIds('0xabc')).toEqual([42])
   })
@@ -383,6 +385,51 @@ it('retries the two-copy target on every upload when no additional provider is r
   expect(getStoredDataSetIds(scope)).toEqual([44585])
 })
 
+it('completes the announce step on the first provider sync and keeps later announce failures from downgrading it', async () => {
+  useFilecoinPinContextMock.mockReturnValue(baseContext)
+  executeUploadMock.mockImplementationOnce(async (_synapse, _car, _root, options) => {
+    options.onProgress?.({
+      type: 'pieceSyncStatus:providerSynced',
+      data: { serviceURL: 'https://a.example', providerIndex: 1, providerCount: 2 },
+    })
+    options.onProgress?.({
+      type: 'pieceSyncStatus:failed',
+      data: { error: new Error('not synced on https://b.example after 20 attempts'), providerCount: 2 },
+    })
+    options.onProgress?.({
+      type: 'indexingConfirmation:mismatch',
+      data: { error: new Error('indexer lookup disagreed') },
+    })
+    return { copies: [], network: 'calibration' }
+  })
+  const { result } = renderHook(useFilecoinUpload)
+  await act(async () => {
+    await result.current.uploadFile(testFile)
+  })
+  expect(result.current.uploadState.stepStates.find((step) => step.step === 'announcing-cids')).toMatchObject({
+    status: 'completed',
+    progress: 100,
+  })
+})
+
+it('reports an announce failure when no authoritative indexing signal passed', async () => {
+  useFilecoinPinContextMock.mockReturnValue(baseContext)
+  executeUploadMock.mockImplementationOnce(async (_synapse, _car, _root, options) => {
+    options.onProgress?.({
+      type: 'pieceSyncStatus:failed',
+      data: { error: new Error('not synced anywhere'), providerCount: 1 },
+    })
+    return { copies: [], network: 'calibration' }
+  })
+  const { result } = renderHook(useFilecoinUpload)
+  await act(async () => {
+    await result.current.uploadFile(testFile)
+  })
+  expect(result.current.uploadState.stepStates.find((step) => step.step === 'announcing-cids')).toMatchObject({
+    status: 'error',
+  })
+})
+
 it('keeps the selected copy count while only the first provider has submitted', async () => {
   useFilecoinPinContextMock.mockReturnValue(baseContext)
   let complete!: () => void
@@ -524,4 +571,17 @@ it('does not let a pre-transfer interrupted record block unrelated uploads', asy
     await result.current.uploadFile(testFile)
   })
   expect(executeUploadMock).toHaveBeenCalledOnce()
+})
+
+it('keeps the actual quoted copy count when funding is missing', async () => {
+  useFilecoinPinContextMock.mockReturnValue(baseContext)
+  createFreshUploadContextsMock.mockResolvedValueOnce([fakeContexts[0]])
+  prepareMock.mockResolvedValueOnce({ costs: { ready: false, depositNeeded: 1n, needsFwssMaxApproval: false } })
+  const { result } = renderHook(useFilecoinUpload)
+  await act(async () => {
+    await expect(result.current.uploadFile(testFile)).rejects.toThrow('1 storage copies')
+  })
+  expect(result.current.uploadState.expectedCopies).toBe(1)
+  expect(result.current.uploadState.funding).toEqual({ depositNeeded: '1', needsApproval: false })
+  expect(executeUploadMock).not.toHaveBeenCalled()
 })

@@ -1,6 +1,7 @@
 /** Wallet/network-scoped cache plus durable checkpoints for uploads and removals. */
 
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
+import { storageCopyTransactionHash } from '../../utils/upload/storage-copy-transaction.ts'
 import { createDirectoryStore } from './directory-store.ts'
 
 const PIECE_CACHE_KEY = 'filecoin-pin-piece-cache-v1'
@@ -106,7 +107,9 @@ export function mergeStorageCopies(recorded: DatasetPiece, incoming: DatasetPiec
   const providerIds = mergeField('providerIds', 'providerId')
   const providerNames = mergeField('providerNames', 'providerName')
   const serviceURLs = mergeField('serviceURLs', 'serviceURL')
-  const transactionHashes = mergeField('transactionHashes', 'transactionHash')
+  const transactionHashes = datasetIds.map(
+    (id) => storageCopyTransactionHash(recorded, id) || storageCopyTransactionHash(incoming, id) || ''
+  )
   return {
     ...incoming,
     ...recorded,
@@ -122,7 +125,7 @@ export function mergeStorageCopies(recorded: DatasetPiece, incoming: DatasetPiec
     providerId: providerIds[0] || recorded.providerId || incoming.providerId,
     providerName: providerNames[0] || recorded.providerName || incoming.providerName,
     serviceURL: serviceURLs[0] || recorded.serviceURL || incoming.serviceURL,
-    transactionHash: transactionHashes[0] || recorded.transactionHash || incoming.transactionHash,
+    transactionHash: transactionHashes[0] || '',
   }
 }
 

@@ -12,7 +12,7 @@ export const CONFIRMATION_CHECK_INTERVAL = 30_000
 /** Read existing operations only. Timeouts and missing hashes never authorize resubmission. */
 export async function recoverUpload(synapse: Synapse, file: DatasetPiece, signal: AbortSignal): Promise<DatasetPiece> {
   const upload = file.upload
-  if (!upload || upload.phase === 'complete' || upload.phase === 'failed') return file
+  if (!upload || upload.phase === 'complete' || upload.phase === 'funding' || upload.phase === 'failed') return file
   if (!file.pieceCid)
     return {
       ...file,

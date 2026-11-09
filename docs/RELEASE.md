@@ -36,8 +36,10 @@ record validation evidence in PR comments.
    Later developer merges into staging normally trigger push and PR CI without
    this bot-event approval. Editing the generated description does not rerun CI.
 2. Confirm CI passes and the latest staging deployment is ready. Smoke-test wallet
-   connection, network switching, upload, download and deletion on staging. Use
-   Calibration for transaction checks.
+   connection, upload, download and deletion on staging. Staging is a deployment
+   environment, not a blockchain network: the current UI defaults to Mainnet and
+   has no network selector. Live transactions use real funds; use the mocked
+   browser checks in the contribution guide for automated transaction coverage.
 3. Merge the promotion PR using **Create a merge commit**, never squash or rebase.
    Preserve the `staging` branch. This keeps shared history for future promotions.
 4. Confirm the Vercel production deployment succeeds and check the production site.

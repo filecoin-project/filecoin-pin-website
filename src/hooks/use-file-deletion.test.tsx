@@ -96,3 +96,31 @@ it('clears a stale RPC error after automatic confirmation succeeds', async () =>
   expect(result.current.deletionErrors).toEqual({})
   expect(result.current.autoCheckingPieceCids.has(file.pieceCid)).toBe(false)
 })
+
+it('rechecks saved provider submissions under the content lock before permitting deletion', async () => {
+  const uncertain: DatasetPiece = {
+    ...file,
+    deletion: undefined,
+    copyCount: 1,
+    upload: {
+      phase: 'interrupted',
+      expectedCopies: 2,
+      steps: [],
+      checks: 20,
+      nextCheckAt: 0,
+      providers: [
+        { providerId: '4', serviceURL: '', dataSetId: '1', confirmed: true },
+        { providerId: '32', serviceURL: '', transactionHash: hash },
+      ],
+    },
+  }
+  setCachedPieces('314:0xabc', [uncertain])
+  const { result } = renderHook(() => useFileDeletion(), { wrapper: UploadHistoryProvider })
+  await act(async () => undefined)
+  await act(async () => {
+    expect(await result.current.deleteFile(uncertain)).toBe(false)
+  })
+  expect(result.current.deletionErrors.piece).toContain('unfinished upload')
+  expect(mocks.resolve).not.toHaveBeenCalled()
+  expect(getCachedPieces('314:0xabc')?.[0].deletion).toBeUndefined()
+})

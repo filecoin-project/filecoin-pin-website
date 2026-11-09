@@ -1,7 +1,7 @@
 import type { Synapse } from '@filoz/synapse-sdk'
 import type { StorageContext } from '@filoz/synapse-sdk/storage'
 import { beforeEach, expect, it, vi } from 'vitest'
-import { prepareUploadContexts } from './upload-funding.ts'
+import { formatFundingAmount, prepareUploadContexts } from './upload-funding.ts'
 
 vi.mock('./storage-chain.ts', () => ({ assertCurrentStorageChain: vi.fn() }))
 const { freshContexts, live } = vi.hoisted(() => ({ freshContexts: vi.fn(), live: vi.fn() }))
@@ -156,4 +156,10 @@ it.each(['live', 'unknown'] as const)('preserves resolution errors when liveness
   await expect(prepareUploadContexts(synapse, 10n, { dataSetIds: [1n] })).rejects.toBe(error)
   expect(freshContexts).not.toHaveBeenCalled()
   expect(prepare).not.toHaveBeenCalled()
+})
+
+it('rounds displayed funding up without losing small shortfalls', () => {
+  expect(formatFundingAmount(645192894000747211n)).toBe('0.6452')
+  expect(formatFundingAmount(1n)).toBe('0.0001')
+  expect(formatFundingAmount(0n)).toBe('0')
 })

@@ -278,3 +278,37 @@ it('does not use an older indexed upload to confirm a new parked task', () => {
   expect(merged).toHaveLength(2)
   expect(merged[0].upload?.phase).toBe('pending')
 })
+
+it('recovers a late secondary copy from the API when its submission receipt was lost on refresh', () => {
+  const local: DatasetPiece = {
+    ...record('1879', 4),
+    id: 'local-upload',
+    uploadedAt: 1000,
+    providerId: '1',
+    copyCount: 1,
+    datasetIds: ['1879'],
+    providerIds: ['1'],
+    pieceIds: ['4'],
+    upload: {
+      phase: 'interrupted',
+      expectedCopies: 2,
+      steps: [],
+      checks: 20,
+      nextCheckAt: 0,
+      error: 'Not all storage submission receipts were saved.',
+      providers: [
+        { providerId: '1', serviceURL: 'https://first.example', dataSetId: '1879', pieceId: '4', confirmed: true },
+        { providerId: '32', serviceURL: 'https://second.example' },
+      ],
+    },
+  }
+  const secondary = { ...record('1881', 0), providerId: '32', uploadedAt: 2000 }
+  const merged = mergeIndexedFiles([local], [secondary])
+  expect(merged).toHaveLength(1)
+  expect(merged[0].id).toBe(local.id)
+  expect(merged[0].copyCount).toBe(2)
+  expect(merged[0].datasetIds).toEqual(['1879', '1881'])
+  expect(merged[0].upload?.phase).toBe('complete')
+  expect(merged[0].upload?.error).toBeUndefined()
+  expect(merged[0].upload?.providers[1]).toMatchObject({ confirmed: true, dataSetId: '1881', pieceId: '0' })
+})

@@ -92,6 +92,7 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
     await Promise.all([
       snapshotQuery.refetch(),
       queryClient.invalidateQueries({ queryKey: ['drive-storage-runway', storageScope] }),
+      queryClient.invalidateQueries({ queryKey: ['drive-storage-budget', storageScope] }),
     ])
   }, [storageChain, connection.network, chainQuery.refetch, snapshotQuery.refetch, queryClient, storageScope])
   const { wallet, storageSetup } = useMemo<{

@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { useState } from 'react'
 
-export type SortKey = 'name' | 'size' | 'status' | 'copies' | 'uploaded'
+export type SortKey = 'name' | 'size' | 'uploaded'
 export type FileSort = { key: SortKey; direction: 'asc' | 'desc' }
 export const nameOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
 

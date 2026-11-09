@@ -51,7 +51,7 @@ jobs:
             printf '%s\n' \
               '- If GitHub requests it, select **Approve workflows to run** for this bot-created PR.' \
               '- Confirm CI passes and the latest staging deployment is ready.' \
-              '- Verify wallet connection, network switching, upload, download and deletion on staging.' \
+              '- Verify wallet connection, upload, download and deletion on staging.' \
               '- Merge using **Create a merge commit**; keep the staging branch.' \
               '' '---' '_Auto-generated; merge when staging is validated. This description is refreshed on staging pushes._'
           } > "$BODY_FILE"
