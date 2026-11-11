@@ -30,7 +30,7 @@ jobs:
       - name: Upload to Filecoin
         uses: filecoin-project/filecoin-pin/upload-action@master
         with:
-          path: dist  # Path to the downloaded build artifacts
+          path: dist # Path to the downloaded build artifacts
           walletPrivateKey: ${{ secrets.WALLET_PRIVATE_KEY }}
           network: calibration
           minRunwayDays: "30"

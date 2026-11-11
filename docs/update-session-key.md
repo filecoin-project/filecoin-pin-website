@@ -5,7 +5,7 @@ This runbook describes how to create or refresh the session key used by [pin.fil
 ## Context
 
 - The site uses **session key** auth (not the main wallet private key) so the app can create datasets and add pieces without exposing the owner key.
-- The session key is valid for a fixed period (e.g. 180 days). When it expires, users see: *"Session key expired or expiring soon"*.
+- The session key is valid for a fixed period (e.g. 180 days). When it expires, users see: _"Session key expired or expiring soon"_.
 - **Owner wallet:** `0x44f08D1beFe61255b3C3A349C392C560FA333759`
 - The **private key** for this wallet is stored in the team’s secure secret store. Use it only to run the script below; never commit it or paste it into docs.
 - The session key lives in **two** places, and a rotation is not finished until both are updated:
@@ -36,7 +36,7 @@ PRIVATE_KEY=<private_key_for_0x44f08D1beFe61255b3C3A349C392C560FA333759> ./scrip
   - Authorize the session key on-chain with CreateDataSet and AddPieces permissions.
   - Print **VITE_WALLET_ADDRESS** and **VITE_SESSION_KEY** to add to your env.
 
-**Note the expiry date** printed by the script (e.g. *"Validity: 180 days (expires: YYYY-MM-DD HH:MM:SS)"*). You will use this for calendar reminders and the next rotation.
+**Note the expiry date** printed by the script (e.g. _"Validity: 180 days (expires: YYYY-MM-DD HH:MM:SS)"_). You will use this for calendar reminders and the next rotation.
 
 The script prints that date in **your local timezone**. The calendar link below and the comment in `config.ts` both want **UTC**, so convert it before you copy it anywhere. Step 6 reads the expiry back off-chain as a unix timestamp, which is the unambiguous source:
 
@@ -53,7 +53,7 @@ To avoid the session key expiring unnoticed, create **one recurring event** on t
 Use a pre-filled Google Calendar link, then adjust dates and set repeat:
 
 1. **Open a pre-filled event** using one of these:
-   - **Example (copy and edit):** [Open in Google Calendar (expires 2026-08-15)](https://calendar.google.com/calendar/render?action=TEMPLATE&text=Filecoin-pin-website+session+key+expiring+soon%3A+expires%3A+2026-08-15+09%3A24%3A22&dates=20260715T092400Z/20260715T095400Z&details=Rotate+using+runbook%3A+https%3A%2F%2Fgithub.com%2Ffilecoin-project%2Ffilecoin-pin-website%2Fblob%2Fmain%2Fdocs%2Fupdate-session-key.md&add=infra%40filoz.org%2Cbiglep%40filoz.org%2Corjan%40filoz.org%2Csgtpooki%40filoz.org) — then change the title (expires date) and the event start/end to **your** expiry and **1 month before** that (same time).  
+   - **Example (copy and edit):** [Open in Google Calendar (expires 2026-08-15)](https://calendar.google.com/calendar/render?action=TEMPLATE&text=Filecoin-pin-website+session+key+expiring+soon%3A+expires%3A+2026-08-15+09%3A24%3A22&dates=20260715T092400Z/20260715T095400Z&details=Rotate+using+runbook%3A+https%3A%2F%2Fgithub.com%2Ffilecoin-project%2Ffilecoin-pin-website%2Fblob%2Fmain%2Fdocs%2Fupdate-session-key.md&add=infra%40filoz.org%2Cbiglep%40filoz.org%2Corjan%40filoz.org%2Csgtpooki%40filoz.org) — then change the title (expires date) and the event start/end to **your** expiry and **1 month before** that (same time).
    - **Or build your own:** use `https://calendar.google.com/calendar/render?action=TEMPLATE&text=...&dates=START/END&details=...&add=...` with title `Filecoin-pin-website session key expiring soon: expires: YYYY-MM-DD HH:MM:SS`, `dates` in UTC as `YYYYMMDDTHHMMSSZ/YYYYMMDDTHHMMSSZ` (first occurrence = 1 month before expiry), and `add=infra@filoz.org,biglep@filoz.org,orjan@filoz.org,sgtpooki@filoz.org` (URL-encode the whole query).
 
 2. After the event form opens, set **Repeat** → **Weekly** → **End after 4 occurrences**, then save. Guests (infra@filoz.org, biglep@filoz.org, orjan@filoz.org, sgtpooki@filoz.org) are pre-filled.
