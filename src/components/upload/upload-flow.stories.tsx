@@ -121,6 +121,7 @@ function buildScript(config: FlowConfig): Array<(s: FlowState) => FlowState> {
   }))
   script.push((s) => ({
     ...s,
+    expectedCopies: copies,
     stepStates: setStep(
       setStep(s.stepStates, 'checking-readiness', { status: 'completed', progress: 100 }),
       'uploading-car',
@@ -182,7 +183,6 @@ function buildScript(config: FlowConfig): Array<(s: FlowState) => FlowState> {
   for (let i = 0; i < piecesAddedCount; i++) {
     script.push((s) => {
       const newHashes = [...s.transactionHashes, TX_HASHES[i] ?? TX_HASHES[0]]
-      const newExpected = s.expectedCopies + 1
       const stepStates = setStep(
         s.stepStates.map((step) =>
           step.step === 'replicating' && step.status === 'in-progress'
@@ -192,7 +192,7 @@ function buildScript(config: FlowConfig): Array<(s: FlowState) => FlowState> {
         'finalizing-transaction',
         { status: 'in-progress', progress: 0 }
       )
-      return { ...s, transactionHashes: newHashes, expectedCopies: newExpected, stepStates }
+      return { ...s, transactionHashes: newHashes, stepStates }
     })
   }
 

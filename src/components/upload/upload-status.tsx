@@ -2,13 +2,14 @@ import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { useUploadProgress } from '../../hooks/use-upload-progress.ts'
 import type { StepState } from '../../types/upload/step.ts'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion.tsx'
-import { FileInfo } from '../ui/file-info.tsx'
+import { BadgeStatus } from '../ui/badge-status.tsx'
 import { UploadCompleted } from './upload-completed.tsx'
 import { UploadProgress } from './upload-progress.tsx'
 
 export interface UploadStatusProps {
   fileName: DatasetPiece['fileName']
   fileSize: DatasetPiece['fileSize']
+  importedCar?: boolean
   stepStates: Array<StepState>
   isExpanded?: boolean
   onToggleExpanded?: () => void
@@ -56,18 +57,30 @@ function UploadStatus({
 
   return (
     <Accordion
-      className="rounded-xl space-y-6 overflow-hidden border p-6 border-zinc-700"
+      className="overflow-hidden rounded-xl border border-border bg-surface"
       collapsible
       onValueChange={onToggleExpanded ? () => onToggleExpanded() : undefined}
       type="single"
       value={isExpanded ? 'file-card' : ''}
     >
       <AccordionItem value="file-card">
-        <FileInfo badgeStatus={uploadBadgeStatus} fileName={fileName} fileSize={fileSize}>
-          <AccordionTrigger />
-        </FileInfo>
+        <div className="flex items-start gap-3 border-b border-border bg-canvas/30 p-4">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-800/10 text-accent">
+            <File aria-hidden="true" size={20} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="line-clamp-2 break-all text-sm font-medium leading-5" title={fileName}>
+              {fileName}
+            </h3>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span className="text-xs text-muted">{fileSize}</span>
+              <BadgeStatus status={uploadBadgeStatus} />
+            </div>
+          </div>
+          <AccordionTrigger aria-label="Toggle upload progress" className="p-1 text-muted" />
+        </div>
 
-        <AccordionContent className="space-y-6 mt-6">
+        <AccordionContent className="p-4 sm:p-5">
           {isUploadSuccessful && cid ? (
             <UploadCompleted
               cid={cid}
@@ -86,7 +99,6 @@ function UploadStatus({
               cid={cid}
               confirmedCopies={confirmedCopies}
               expectedCopies={expectedCopies}
-              fileName={fileName}
               network={uploadNetwork ?? network}
               stepStates={stepStates}
               transactionHash={transactionHash}
@@ -100,3 +112,5 @@ function UploadStatus({
 }
 
 export { UploadStatus }
+
+import { File } from 'lucide-react'

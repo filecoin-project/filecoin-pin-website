@@ -13,7 +13,7 @@ type ToastProps = {
 }
 function toaster({ type, message, button }: ToastProps) {
   return sonnerToast.custom((id) => (
-    <div className="bg-black xl:w-[40vw] md:w-[60vw] w-[100vw] rounded-xl mb-4 mx-4 -mt-3 max-w-4xl">
+    <div className="bg-surface shadow-lg xl:w-[40vw] md:w-[60vw] w-[100vw] rounded-xl mb-4 mx-4 -mt-3 max-w-4xl">
       <Alert
         button={{
           children: button?.label || 'Close',

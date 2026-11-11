@@ -9,7 +9,7 @@ import { fetchWalletSnapshot } from './wallet.ts'
 
 const status = (network: string) => ({
   network,
-  chainId: 314159,
+  chainId: network === 'calibration' ? 314159 : 314,
   address: '0xabc',
   filBalance: 1_234_000_000_000_000_000n,
   walletUsdfcBalance: 5_678_000_000_000_000_000n,

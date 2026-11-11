@@ -13,8 +13,8 @@ const badgeVariants = cva(
   {
     variants: {
       level: {
-        replicated: 'text-green-300 bg-green-950/60 border border-green-900/40',
-        degraded: 'text-yellow-200 bg-yellow-600/30 border border-yellow-400/20',
+        replicated: 'text-success bg-success-surface border border-success-border',
+        degraded: 'text-warning bg-warning-surface border border-warning-border',
       },
     },
   }

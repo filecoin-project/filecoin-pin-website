@@ -2,18 +2,19 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/utils/cn.ts'
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center font-medium transition-colors w-full cursor-pointer focus:brand-outline',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium transition-colors w-full cursor-pointer',
   {
     variants: {
       variant: {
         primary:
-          'bg-brand-800 text-zinc-100 border border-transparent disabled:bg-button-brand-disabled hover:bg-brand-700',
-        secondary: 'bg-transparent text-zinc-100 border border-zinc-800 hover:bg-zinc-800',
+          'bg-button-brand text-white border border-brand-700/30 disabled:bg-button-brand-disabled hover:bg-button-brand-hover shadow-sm',
+        secondary: 'bg-surface text-foreground border border-border hover:bg-surface-raised hover:border-muted',
+        danger: 'bg-red-500/10 text-danger border border-red-500/25 hover:bg-red-500/20 hover:border-red-500/50',
         unstyled: '',
       },
       size: {
-        sm: 'text-sm px-4 py-2 rounded-md',
-        md: 'text-base px-5 py-3 rounded-lg',
+        sm: 'min-h-10 text-sm px-4 py-2 rounded-lg',
+        md: 'min-h-11 text-sm px-5 py-3 rounded-lg',
       },
       loading: {
         true: 'cursor-wait',
@@ -50,4 +51,4 @@ function ButtonBase({ className, variant, loading, children, disabled, size = 'm
   )
 }
 
-export { ButtonBase, type ButtonBaseProps }
+export { ButtonBase, type ButtonBaseProps, buttonVariants }

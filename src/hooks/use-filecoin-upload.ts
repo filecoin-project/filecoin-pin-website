@@ -1,27 +1,38 @@
 import { CommitError, type PDPProvider, StoreError } from '@filoz/synapse-sdk'
-import { createCarFromFile } from 'filecoin-pin/core/unixfs'
-import {
-  checkUploadReadiness,
-  executeUpload,
-  type UploadExecutionOptions,
-  type UploadExecutionResult,
-} from 'filecoin-pin/core/upload'
+import { checkFILBalance, validateGasRequirement } from 'filecoin-pin/core/payments'
+import { executeUpload, type UploadExecutionOptions, type UploadExecutionResult } from 'filecoin-pin/core/upload'
 import pino from 'pino'
-import { useCallback, useState } from 'react'
+import prettyBytes from 'pretty-bytes'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { MAX_FILE_SIZE } from '../constants/files.ts'
+import { DEFAULT_STORAGE_COPIES } from '../lib/filecoin-pin/config.ts'
+import { acquireContentLock } from '../lib/filecoin-pin/content-lock.ts'
+import { cacheDirectoryUpload } from '../lib/filecoin-pin/directory.ts'
+import { validateDriveMetadata } from '../lib/filecoin-pin/drive-metadata.ts'
 import { createFreshUploadContexts } from '../lib/filecoin-pin/fresh-contexts.ts'
 import { ensureSessionKeyPermissions } from '../lib/filecoin-pin/synapse.ts'
+import type { UploadProviderCheckpoint } from '../lib/filecoin-pin/upload-checkpoint.ts'
+import { prepareUploadContexts, UploadFundingRequired } from '../lib/filecoin-pin/upload-funding.ts'
+import { prepareUploadInput } from '../lib/filecoin-pin/upload-input.ts'
+import type { UploadSource } from '../lib/filecoin-pin/upload-source.ts'
 import { getOrCreateClientId } from '../lib/local-storage/client-id.ts'
 import { addStoredDataSetId, clearStoredDataSetIds, getStoredDataSetIds } from '../lib/local-storage/data-set.ts'
-import { clearCachedPieces } from '../lib/local-storage/piece-cache.ts'
+import { requireDirectoryLocks } from '../lib/local-storage/directory-store.ts'
+import { getCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import type { StepState } from '../types/upload/step.ts'
-import { formatFileSize } from '../utils/format-file-size.ts'
+import { hasRemovalProgress, isDeletionScheduled } from '../utils/file-deletion.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 import { useWaitableRef } from './use-waitable-ref.ts'
 
-interface UploadState {
+export interface UploadState {
+  uploadProviders?: UploadProviderCheckpoint[]
+  isDirectory?: boolean
+  importedCar?: boolean
+  confirmedPieces?: { dataSetId: bigint; providerId: bigint; pieceId: bigint; transactionHash: string }[]
   isUploading: boolean
   stepStates: StepState[]
   error?: string
+  funding?: { depositNeeded: string; needsApproval: boolean }
   currentCid?: string
   pieceCid?: string
   transactionHash?: string
@@ -76,13 +87,19 @@ const isProviderStoreError = (error: unknown): boolean => StoreError.is(error) |
 
 /**
  * Handles the end-to-end upload workflow with filecoin-pin:
- * - Builds a CAR file in-browser
+ * - Packs files or imports existing CAR archives in-browser
  * - Checks upload readiness (allowances, balances)
  * - Executes the upload with progress callbacks
  * - Tracks IPNI availability and on-chain confirmation
  */
-export const useFilecoinUpload = () => {
-  const { synapse, wallet, addDataSetId, debugParams } = useFilecoinPinContext()
+export const useFilecoinUpload = (retainLockForDirectory = false) => {
+  const contentLock = useRef<(() => void) | null>(null)
+  const releaseUploadLock = useCallback(() => {
+    contentLock.current?.()
+    contentLock.current = null
+  }, [])
+  useEffect(() => releaseUploadLock, [releaseUploadLock])
+  const { synapse, wallet, addDataSetId, debugParams, storageScope, ensurePermissions } = useFilecoinPinContext()
 
   // Waitable ref so the upload callback can access synapse even if initialized after callback creation
   const synapseRef = useWaitableRef(synapse)
@@ -106,61 +123,95 @@ export const useFilecoinUpload = () => {
   }, [])
 
   const uploadFile = useCallback(
-    async (file: File, metadata?: Record<string, string>): Promise<string> => {
+    async (file: UploadSource, metadata?: Record<string, string>): Promise<string> => {
+      // Freeze the network before any asynchronous upload or balance refresh.
+      const network = wallet.status === 'ready' ? wallet.data.network : undefined
       setUploadState({
+        network,
         isUploading: true,
         stepStates: INITIAL_STEP_STATES,
         transactionHashes: [],
         confirmedCopies: 0,
         expectedCopies: 0,
         providersById: {},
+        confirmedPieces: [],
+        uploadProviders: [],
       })
 
+      let confirmed = false
       try {
+        if (network !== 'mainnet' && network !== 'calibration')
+          throw new Error('Wait for wallet setup to finish before uploading.')
+        if (file.size > MAX_FILE_SIZE)
+          throw new Error(`Files must be ${prettyBytes(MAX_FILE_SIZE)} or smaller for browser uploads.`)
+        const folderPath = validateDriveMetadata(file.name, metadata?.path ?? '')
+        requireDirectoryLocks()
         updateStepState('creating-car', { status: 'in-progress', progress: 0 })
-        logger.info('Creating CAR from file')
+        logger.info('Preparing IPFS input')
 
-        const carResult = await createCarFromFile(file, {
+        const carResult = await prepareUploadInput(file, {
           onProgress: (bytesProcessed: number, totalBytes: number) => {
             const progressPercent = Math.round((bytesProcessed / totalBytes) * 100)
             updateStepState('creating-car', { progress: progressPercent })
           },
         })
 
+        if (carResult.isDirectory && carResult.carBytes.length > MAX_FILE_SIZE)
+          throw new Error('The packed folder exceeds the 200 MB browser upload limit.')
         const rootCid = carResult.rootCid.toString()
+        if (carResult.isDirectory) {
+          try {
+            await cacheDirectoryUpload(carResult.carBytes, rootCid)
+          } catch {
+            // Optional browsing cache must not prevent a valid upload.
+            logger.warn('Unable to cache folder contents; browsing will use storage providers')
+          }
+        }
         setUploadState((prev) => ({
           ...prev,
           currentCid: rootCid,
+          importedCar: carResult.importedCar,
+          isDirectory: carResult.isDirectory,
         }))
 
         updateStepState('creating-car', { status: 'completed', progress: 100 })
-        logger.info({ carResult }, 'CAR created')
+        logger.info('IPFS data prepared')
+
+        contentLock.current = await acquireContentLock(
+          storageScope ??
+            `${network === 'mainnet' ? 314 : 314159}:${wallet.status === 'ready' ? wallet.data.address.toLowerCase() : ''}`,
+          rootCid
+        )
+
+        if (
+          storageScope &&
+          getCachedPieces(storageScope)?.some(
+            (piece) =>
+              piece.id !== metadata?.taskId &&
+              (((!piece.cid || piece.cid === rootCid) && hasRemovalProgress(piece) && !isDeletionScheduled(piece)) ||
+                (piece.cid === rootCid &&
+                  piece.upload &&
+                  piece.upload.phase !== 'complete' &&
+                  piece.upload.phase !== 'failed' &&
+                  piece.upload.phase !== 'funding'))
+          )
+        )
+          throw new Error(
+            'This content has an unfinished deletion or upload. Check its status before uploading it again.'
+          )
 
         updateStepState('checking-readiness', { status: 'in-progress', progress: 0 })
-        updateStepState('uploading-car', { status: 'in-progress', progress: 0 })
         logger.info('Waiting for synapse to be initialized')
         const synapse = await synapseRef.wait()
         logger.info('Synapse initialized')
         // Session-key permission checks are deferred from page load to here so
         // read-only visits make no permission-related RPC calls.
-        await ensureSessionKeyPermissions()
+        await (ensurePermissions ? ensurePermissions() : ensureSessionKeyPermissions())
         updateStepState('checking-readiness', { progress: 50 })
 
-        logger.info('Checking upload readiness')
-        const readinessCheck = await checkUploadReadiness({
-          synapse,
-          fileSize: carResult.carBytes.length,
-          autoConfigureAllowances: true,
-        })
-
-        logger.info({ readinessCheck }, 'Upload readiness check')
-
-        if (readinessCheck.status === 'blocked') {
-          throw new Error('Readiness check failed')
-        }
-
-        updateStepState('checking-readiness', { status: 'completed', progress: 100 })
-        logger.info('Upload readiness check completed')
+        const gas = await checkFILBalance(synapse)
+        const gasCheck = validateGasRequirement(gas.balance, gas.isCalibnet)
+        if (!gasCheck.isValid) throw new Error(gasCheck.errorMessage)
 
         logger.info('Uploading CAR to Synapse')
         // Distinguishes resolution failures (safe to retry into fresh data
@@ -170,13 +221,16 @@ export const useFilecoinUpload = () => {
         // a store or commit failure reflects a problem mid-upload, so the
         // resume retry below leaves the stored dataset ids in place.
         let sawBytesStored = false
+        const transactionsByProvider = new Map<string, string>()
+        // First authoritative indexing signal; later announce failures never downgrade it.
+        let announceConfirmed = false
+        let executionContexts: Awaited<ReturnType<typeof prepareUploadContexts>> = []
         const baseOptions: UploadExecutionOptions = {
           logger,
           contextId: `upload-${Date.now()}`,
           pieceMetadata: {
-            ...(metadata ?? {}),
             label: file.name,
-            fileSize: formatFileSize(file.size),
+            [carResult.importedCar ? 'carPath' : 'path']: folderPath,
           },
           onProgress: (event) => {
             sawUploadProgress = true
@@ -205,6 +259,9 @@ export const useFilecoinUpload = () => {
                 setUploadState((prev) => ({
                   ...prev,
                   pieceCid: event.data.pieceCid.toString(),
+                  uploadProviders: prev.uploadProviders?.map((provider) =>
+                    provider.providerId === String(event.data.providerId) ? { ...provider, stored: true } : provider
+                  ),
                 }))
                 updateStepState('uploading-car', { status: 'completed', progress: 100 })
                 updateStepState('replicating', { status: 'in-progress', progress: 0 })
@@ -227,11 +284,24 @@ export const useFilecoinUpload = () => {
                 break
 
               case 'piecesAdded': {
+                const context = executionContexts.find((entry) => entry.provider.id === event.data.providerId)
+                setUploadState((prev) => ({
+                  ...prev,
+                  uploadProviders: prev.uploadProviders?.map((provider) =>
+                    provider.providerId === String(event.data.providerId)
+                      ? {
+                          ...provider,
+                          dataSetId: context?.dataSetId?.toString() ?? provider.dataSetId,
+                          transactionHash: event.data.txHash,
+                        }
+                      : provider
+                  ),
+                }))
                 const txHash = event.data.txHash
+                transactionsByProvider.set(String(event.data.providerId), txHash)
                 console.debug('[FilecoinUpload] Piece add transaction:', { txHash })
                 setUploadState((prev) => {
                   const newHashes = txHash ? [...prev.transactionHashes, txHash] : prev.transactionHashes
-                  const newExpected = prev.expectedCopies + 1
                   // Fallback: complete replicating if still in-progress
                   const stepStates = prev.stepStates.map((s) =>
                     s.step === 'replicating' && s.status === 'in-progress'
@@ -242,7 +312,6 @@ export const useFilecoinUpload = () => {
                     ...prev,
                     transactionHash: txHash || prev.transactionHash,
                     transactionHashes: newHashes,
-                    expectedCopies: newExpected,
                     stepStates,
                   }
                 })
@@ -251,9 +320,10 @@ export const useFilecoinUpload = () => {
               }
 
               case 'piecesConfirmed': {
+                confirmed = true
                 const confirmedDataSetId = event.data.dataSetId
                 if (wallet?.status === 'ready' && confirmedDataSetId != null) {
-                  addStoredDataSetId(wallet.data.address, Number(confirmedDataSetId))
+                  addStoredDataSetId(storageScope ?? wallet.data.address, Number(confirmedDataSetId))
                   addDataSetId(confirmedDataSetId)
                 }
                 setUploadState((prev) => {
@@ -262,6 +332,18 @@ export const useFilecoinUpload = () => {
                   return {
                     ...prev,
                     confirmedCopies: newConfirmed,
+                    confirmedPieces:
+                      event.data.pieceIds[0] === undefined
+                        ? prev.confirmedPieces
+                        : [
+                            ...(prev.confirmedPieces ?? []).filter((piece) => piece.dataSetId !== confirmedDataSetId),
+                            {
+                              dataSetId: confirmedDataSetId,
+                              providerId: event.data.providerId,
+                              pieceId: event.data.pieceIds[0],
+                              transactionHash: transactionsByProvider.get(String(event.data.providerId)) ?? '',
+                            },
+                          ],
                     stepStates: prev.stepStates.map((s) =>
                       s.step === 'finalizing-transaction'
                         ? {
@@ -277,38 +359,52 @@ export const useFilecoinUpload = () => {
                 break
               }
 
+              case 'pieceSyncStatus:providerSynced': {
+                console.debug('[FilecoinUpload] Advertisement confirmed indexed on provider:', event.data.serviceURL)
+                announceConfirmed = true
+                updateStepState('announcing-cids', { status: 'completed', progress: 100 })
+                break
+              }
+
               case 'pieceSyncStatus:failed': {
                 console.warn('[FilecoinUpload] Piece sync check failed:', event.data.error.message)
-                updateStepState('announcing-cids', {
-                  status: 'error',
-                  progress: 0,
-                  error: INPI_ERROR_MESSAGE,
-                })
+                if (!announceConfirmed) {
+                  updateStepState('announcing-cids', {
+                    status: 'error',
+                    progress: 0,
+                    error: INPI_ERROR_MESSAGE,
+                  })
+                }
                 break
               }
 
               case 'indexingConfirmation:mismatch': {
                 console.warn('[FilecoinUpload] Indexer mismatch:', event.data.error.message)
-                updateStepState('announcing-cids', {
-                  status: 'error',
-                  progress: 0,
-                  error: INPI_ERROR_MESSAGE,
-                })
+                if (!announceConfirmed) {
+                  updateStepState('announcing-cids', {
+                    status: 'error',
+                    progress: 0,
+                    error: INPI_ERROR_MESSAGE,
+                  })
+                }
                 break
               }
 
               case 'ipniProviderResults:failed': {
                 console.warn('[FilecoinUpload] IPNI check failed:', event.data.error.message)
-                updateStepState('announcing-cids', {
-                  status: 'error',
-                  progress: 0,
-                  error: INPI_ERROR_MESSAGE,
-                })
+                if (!announceConfirmed) {
+                  updateStepState('announcing-cids', {
+                    status: 'error',
+                    progress: 0,
+                    error: INPI_ERROR_MESSAGE,
+                  })
+                }
                 break
               }
 
               case 'ipniProviderResults:complete': {
                 console.debug('[FilecoinUpload] IPNI check succeeded')
+                announceConfirmed = true
                 updateStepState('announcing-cids', { status: 'completed', progress: 100 })
                 break
               }
@@ -319,14 +415,43 @@ export const useFilecoinUpload = () => {
           },
         }
 
-        const walletAddress = wallet?.status === 'ready' ? wallet.data.address : null
+        const walletAddress = storageScope ?? (wallet?.status === 'ready' ? wallet.data.address : null)
         const storedDataSetIds =
           debugParams.providerId == null && walletAddress ? getStoredDataSetIds(walletAddress) : []
+        let uploadExecutionStarted = false
+        const executeFundedUpload = async (options: UploadExecutionOptions) => {
+          uploadExecutionStarted = false
+          const contexts = await prepareUploadContexts(synapse, BigInt(carResult.carBytes.length), options)
+          executionContexts = contexts
+          setUploadState((prev) => ({
+            ...prev,
+            expectedCopies: contexts.length,
+            uploadProviders: contexts.map((context) => ({
+              providerId: String(context.provider.id),
+              serviceURL: context.provider.pdp?.serviceURL ?? '',
+              dataSetId: context.dataSetId?.toString(),
+            })),
+            providersById: {
+              ...prev.providersById,
+              ...Object.fromEntries(contexts.map((context) => [String(context.provider.id), context.provider])),
+            },
+          }))
+          updateStepState('checking-readiness', { status: 'completed', progress: 100 })
+          updateStepState('uploading-car', { status: 'in-progress', progress: 0 })
+          const executionOptions = { ...options, contexts }
+          // Targeting has already been resolved and quoted. The SDK rejects
+          // selectors together with explicit contexts and would otherwise select twice.
+          delete executionOptions.dataSetIds
+          delete executionOptions.providerIds
+          delete executionOptions.copies
+          delete executionOptions.excludeProviderIds
+          uploadExecutionStarted = true
+          return executeUpload(synapse, carResult.carBytes, carResult.rootCid, executionOptions)
+        }
 
         // Select providers directly from the registry and create fresh
         // per-browser datasets during the upload commit, skipping the SDK's
-        // smart-select (which enumerates every dataset on the shared demo
-        // wallet). Falls back to smart-select with per-browser metadata when
+        // smart-select (which enumerates every dataset the wallet owns). Falls back to smart-select with per-browser metadata when
         // no provider is reachable. The created dataset ids are stored on
         // `piecesConfirmed`, so later uploads take the resume path.
         const uploadIntoFreshDataSets = async (): Promise<UploadExecutionResult> => {
@@ -343,10 +468,7 @@ export const useFilecoinUpload = () => {
           } catch (error) {
             console.warn('[FilecoinUpload] Fresh context selection failed, falling back to smart-select:', error)
           }
-          return executeUpload(
-            synapse,
-            carResult.carBytes,
-            carResult.rootCid,
+          return executeFundedUpload(
             contexts == null
               ? { ...baseOptions, metadata: { clientId: getOrCreateClientId() } }
               : { ...baseOptions, contexts }
@@ -355,7 +477,7 @@ export const useFilecoinUpload = () => {
 
         let result: UploadExecutionResult
         if (debugParams.providerId != null) {
-          result = await executeUpload(synapse, carResult.carBytes, carResult.rootCid, {
+          result = await executeFundedUpload({
             ...baseOptions,
             providerIds: [debugParams.providerId],
             metadata: { clientId: getOrCreateClientId() },
@@ -363,13 +485,16 @@ export const useFilecoinUpload = () => {
         } else if (walletAddress != null && storedDataSetIds.length > 0) {
           // Resume into this browser's known datasets. Passing explicit ids
           // skips the SDK's smart-select, which enumerates every dataset on
-          // the shared demo wallet (one eth_call per dataset, unbounded).
+          // a large wallet (one eth_call per dataset).
           try {
-            result = await executeUpload(synapse, carResult.carBytes, carResult.rootCid, {
+            result = await executeFundedUpload({
               ...baseOptions,
               dataSetIds: storedDataSetIds.map((id) => BigInt(id)),
             })
           } catch (error) {
+            // Resolution/quote reads already distinguish dead datasets from
+            // unavailable chain state; never clear candidates for these errors.
+            if (!uploadExecutionStarted) throw error
             // Recoverable failures, both safe to retry into fresh datasets:
             //   1. Resolution failed: the stored id is gone or owned by another
             //      wallet. Resolution emits no progress events, so
@@ -384,38 +509,84 @@ export const useFilecoinUpload = () => {
             if (!resolutionFailure && !deadProviderOnResume) throw error
             console.warn('[FilecoinUpload] Stored dataset ids unusable, recreating data sets:', error)
             clearStoredDataSetIds(walletAddress)
-            clearCachedPieces(walletAddress)
             result = await uploadIntoFreshDataSets()
           }
         } else {
           // First upload from this browser
           result = await uploadIntoFreshDataSets()
         }
+        confirmed ||= result.copies.length > 0
         logger.info('Upload completed')
 
-        setUploadState((prev) => ({
-          ...prev,
-          copies: result.copies,
-          network: result.network,
-        }))
+        // The SDK resolves once all attempts settle, even if only some copies
+        // succeeded. Failed commits will never emit another piecesConfirmed.
+        setUploadState((prev) => {
+          const copies = result.copies
+          const expectedCopies = Math.max(
+            debugParams.providerId == null ? DEFAULT_STORAGE_COPIES : 1,
+            result.requestedCopies ?? prev.expectedCopies,
+            copies.length
+          )
+          const reduced = copies.length < expectedCopies
+          return {
+            ...prev,
+            copies,
+            expectedCopies,
+            confirmedCopies: copies.length,
+            stepStates: prev.stepStates.map((step) => {
+              if (step.step === 'finalizing-transaction')
+                return { ...step, status: 'completed' as const, progress: 100 }
+              if (step.step === 'replicating')
+                return {
+                  ...step,
+                  status: reduced ? ('error' as const) : ('completed' as const),
+                  progress: 100,
+                  error: reduced ? `Stored with ${copies.length} of ${expectedCopies} storage copies.` : undefined,
+                }
+              return step
+            }),
+          }
+        })
 
         return rootCid
       } catch (error) {
-        console.error('[FilecoinUpload] Upload failed with error:', error)
+        if (!(error instanceof UploadFundingRequired))
+          console.error('[FilecoinUpload] Upload failed with error:', error)
         const errorMessage = error instanceof Error ? error.message : 'Upload failed'
         setUploadState((prev) => ({
           ...prev,
           error: errorMessage,
+          expectedCopies: error instanceof UploadFundingRequired ? error.copies : prev.expectedCopies,
+          funding:
+            error instanceof UploadFundingRequired
+              ? { depositNeeded: error.depositNeeded.toString(), needsApproval: error.needsApproval }
+              : undefined,
+          stepStates: prev.stepStates.map((step) =>
+            step.status === 'in-progress'
+              ? { ...step, status: error instanceof UploadFundingRequired ? 'pending' : 'error', error: errorMessage }
+              : step
+          ),
         }))
         throw error
       } finally {
+        if (!retainLockForDirectory || !confirmed) releaseUploadLock()
         setUploadState((prev) => ({
           ...prev,
           isUploading: false,
         }))
       }
     },
-    [updateStepState, synapseRef, wallet, addDataSetId, debugParams]
+    [
+      updateStepState,
+      synapseRef,
+      wallet,
+      addDataSetId,
+      debugParams,
+      storageScope,
+      ensurePermissions,
+      retainLockForDirectory,
+      releaseUploadLock,
+    ]
   )
 
   const resetUpload = useCallback(() => {
@@ -438,5 +609,6 @@ export const useFilecoinUpload = () => {
     uploadState,
     uploadFile,
     resetUpload,
+    releaseUploadLock,
   }
 }

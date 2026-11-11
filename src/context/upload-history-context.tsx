@@ -1,27 +1,16 @@
-import { createContext, type ReactNode, useCallback, useContext, useMemo } from 'react'
-import type { DatasetPiece } from '../hooks/use-dataset-pieces.ts'
+import { createContext, type ReactNode, useContext, useMemo } from 'react'
+import type { DatasetPiece, DirectoryPiecePatch, PieceMutation } from '../hooks/use-dataset-pieces.ts'
 import { useDatasetPieces } from '../hooks/use-dataset-pieces.ts'
 
 export interface UploadHistoryContextValue {
   /**
-   * All completed uploads for the current dataset
+   * File records and durable operation checkpoints for the connected wallet/network
    */
   history: DatasetPiece[]
-
-  /**
-   * Get a specific upload by its CID
-   */
-  getUploadByCid: (cid: string) => DatasetPiece | undefined
-
-  /**
-   * Get a specific upload by its piece CID
-   */
-  getUploadByPieceCid: (pieceCid: string) => DatasetPiece | undefined
-
-  /**
-   * Get a specific upload by its unique ID
-   */
-  getUploadById: (id: string) => DatasetPiece | undefined
+  updateUpload: (id: string, patch: DirectoryPiecePatch) => Promise<void>
+  mutateHistory: (update: PieceMutation) => Promise<void>
+  getLatestHistory: () => DatasetPiece[]
+  hasUnsavedChanges: boolean
 
   /**
    * Refresh the upload history from the backend
@@ -31,7 +20,7 @@ export interface UploadHistoryContextValue {
   /**
    * Add a new upload to history without refetching from backend
    */
-  addUpload: (piece: DatasetPiece) => void
+  addUpload: (piece: DatasetPiece) => Promise<void>
 
   /**
    * Loading state for history fetching
@@ -39,12 +28,13 @@ export interface UploadHistoryContextValue {
   isLoading: boolean
 
   /**
-   * Error state for history fetching
+   * Local directory persistence errors; index requests report indexError separately
    */
   error: string | null
+  indexError: string | null
 
   /**
-   * Indicates whether we've completed at least one history load attempt.
+   * Indicates whether a Filecoin index load attempt has completed; cache reads do not count.
    */
   hasLoaded: boolean
 }
@@ -54,10 +44,10 @@ const UploadHistoryContext = createContext<UploadHistoryContextValue | undefined
 /**
  * Provides upload history data access to all child components.
  *
- * Single Responsibility: Historical upload data CRUD operations
+ * Single Responsibility: File metadata and operation checkpoint persistence
  *
  * Does NOT:
- * - Handle active/in-progress uploads (that's useFilecoinUpload)
+ * - Execute uploads (that's useFilecoinUpload)
  * - Orchestrate upload lifecycle (that's useUploadOrchestration)
  * - Manage UI state (that's component state or UI hooks)
  *
@@ -67,7 +57,9 @@ const UploadHistoryContext = createContext<UploadHistoryContextValue | undefined
  *   return (
  *     <FilecoinPinProvider>
  *       <UploadHistoryProvider>
- *         <Content />
+ *         <UploadTasksProvider>
+ *           <Content />
+ *         </UploadTasksProvider>
  *       </UploadHistoryProvider>
  *     </FilecoinPinProvider>
  *   )
@@ -85,42 +77,47 @@ const UploadHistoryContext = createContext<UploadHistoryContextValue | undefined
  * ```
  */
 export function UploadHistoryProvider({ children }: { children: ReactNode }) {
-  const { pieces, refreshPieces, addPiece, isLoading, error, hasLoaded } = useDatasetPieces()
-
-  const getUploadByCid = useCallback(
-    (cid: string) => {
-      return pieces.find((p) => p.cid === cid)
-    },
-    [pieces]
-  )
-
-  const getUploadByPieceCid = useCallback(
-    (pieceCid: string) => {
-      return pieces.find((p) => p.pieceCid === pieceCid)
-    },
-    [pieces]
-  )
-
-  const getUploadById = useCallback(
-    (id: string) => {
-      return pieces.find((p) => p.id === id)
-    },
-    [pieces]
-  )
+  const {
+    pieces,
+    updatePiece,
+    mutatePieces,
+    getLatestPieces,
+    refreshPieces,
+    addPiece,
+    hasUnsavedChanges,
+    isLoading,
+    error,
+    indexError,
+    hasLoaded,
+  } = useDatasetPieces()
 
   const value = useMemo<UploadHistoryContextValue>(
     () => ({
       history: pieces,
-      getUploadByCid,
-      getUploadByPieceCid,
-      getUploadById,
+      updateUpload: updatePiece,
+      mutateHistory: mutatePieces,
+      getLatestHistory: getLatestPieces,
+      hasUnsavedChanges,
       refreshHistory: refreshPieces,
       addUpload: addPiece,
       isLoading,
       error,
+      indexError,
       hasLoaded,
     }),
-    [pieces, getUploadByCid, getUploadByPieceCid, getUploadById, refreshPieces, addPiece, isLoading, error, hasLoaded]
+    [
+      pieces,
+      updatePiece,
+      mutatePieces,
+      getLatestPieces,
+      hasUnsavedChanges,
+      refreshPieces,
+      addPiece,
+      isLoading,
+      error,
+      indexError,
+      hasLoaded,
+    ]
   )
 
   return <UploadHistoryContext.Provider value={value}>{children}</UploadHistoryContext.Provider>

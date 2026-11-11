@@ -1,0 +1,69 @@
+name: Promotion PR
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  open-promotion-pr:
+    name: Open staging → main PR
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/staging'
+    concurrency:
+      group: promote-staging
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: staging
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Create or update promotion PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          STAGING_DOMAIN: ${{ vars.STAGING_DOMAIN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Compare content so history-only back-merges do not open empty PRs.
+          if git diff --quiet origin/main HEAD; then
+            echo "Staging matches main; nothing to promote."
+            exit 0
+          fi
+
+          OWNER="${GH_REPO%/*}"
+          EXISTING=$(gh api "repos/$GH_REPO/pulls?base=main&head=${OWNER}:staging&state=open" --jq '.[0].number // empty')
+          BODY_FILE="$RUNNER_TEMP/promotion-body.md"
+
+          # Treat commit subjects as data; escape issue references so closing
+          # keywords in subjects do not close issues through this PR body.
+          {
+            if [ -n "$STAGING_DOMAIN" ]; then
+              printf '**Preview:** [Open staging](https://%s)\n\n' "$STAGING_DOMAIN"
+            fi
+            printf '%s\n' '## Changes' ''
+            git log origin/main..HEAD --pretty=format:'%s (%h)' | sed 's/^/- /; s/#/\\#/g'
+            printf '\n\n%s\n' '## Validation' ''
+            printf '%s\n' \
+              '- If GitHub requests it, select **Approve workflows to run** for this bot-created PR.' \
+              '- Confirm CI passes and the latest staging deployment is ready.' \
+              '- Verify wallet connection, upload, download and deletion on staging.' \
+              '- Merge using **Create a merge commit**; keep the staging branch.' \
+              '' '---' '_Auto-generated; merge when staging is validated. This description is refreshed on staging pushes._'
+          } > "$BODY_FILE"
+
+          if [ -z "$EXISTING" ]; then
+            gh pr create --base main --head staging \
+              --title "chore: promote staging to production" \
+              --body-file "$BODY_FILE"
+          else
+            gh pr edit "$EXISTING" --body-file "$BODY_FILE"
+          fi

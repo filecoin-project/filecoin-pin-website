@@ -1,105 +1,119 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, expect, it, vi } from 'vitest'
 
-const { getDetailedDataSetMock, useFilecoinPinContextMock } = vi.hoisted(() => ({
-  getDetailedDataSetMock: vi.fn(),
-  useFilecoinPinContextMock: vi.fn(),
+const { load, context } = vi.hoisted(() => ({ load: vi.fn(), context: vi.fn() }))
+vi.mock('../context/browser-wallet-provider.tsx', () => ({
+  useBrowserWallet: () => ({ address: context().storageScope?.split(':')[1] ?? null, network: 'mainnet' }),
 }))
-
-vi.mock('filecoin-pin/core/data-set', () => ({
-  getDetailedDataSet: getDetailedDataSetMock,
+vi.mock('../lib/filecoin-pin/drive-api.ts', async (original) => ({
+  ...(await original<object>()),
+  loadDriveFiles: load,
 }))
+vi.mock('./use-filecoin-pin-context.ts', () => ({ useFilecoinPinContext: context }))
+vi.mock('./use-ipfs-indexing.ts', () => ({ useIpfsIndexing: vi.fn() }))
 
-vi.mock('./use-filecoin-pin-context.ts', () => ({
-  useFilecoinPinContext: useFilecoinPinContextMock,
-}))
-
-import { setCachedPieces } from '../lib/local-storage/piece-cache.ts'
+import { getCachedPieces, setCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import { type DatasetPiece, useDatasetPieces } from './use-dataset-pieces.ts'
 
-const WALLET = '0xabc'
-
-const readyWallet = { status: 'ready', data: { address: WALLET, network: 'calibration' } }
-
-const makeContext = (dataSet: { status: string; dataSetIds?: bigint[] }) => ({
-  wallet: readyWallet,
-  synapse: {},
-  dataSet,
-})
-
-const cachedPiece = (pieceCid: string): DatasetPiece =>
-  ({
-    id: `piece-${pieceCid}`,
-    pieceCid,
-    cid: 'bafyroot',
-    fileName: 'a.txt',
-    fileSize: '5 B',
-    providerName: 'p',
-    datasetId: '1',
-    providerId: '4',
-    serviceURL: '',
-    transactionHash: '',
-    network: 'calibration',
-    uploadedAt: 0,
-    pieceId: 1,
-  }) as DatasetPiece
-
+const scope = '314:0xabc'
+const file = {
+  id: 'local',
+  fileName: 'local.txt',
+  folderPath: 'old',
+  pieceCid: 'piece',
+  cid: 'root',
+  datasetId: '1',
+  pieceId: 0,
+  network: 'mainnet',
+} as DatasetPiece
+const synapse = {}
+const addDataSetId = vi.fn()
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear()
-  getDetailedDataSetMock.mockResolvedValue({ pieces: [], provider: null })
+  load.mockResolvedValue([])
+  context.mockReturnValue({
+    wallet: { status: 'ready', data: { address: '0xabc', network: 'mainnet' } },
+    storageScope: scope,
+    synapse,
+    addDataSetId,
+  })
+})
+it('discovers indexed files even with no local dataset IDs or cache', async () => {
+  load.mockResolvedValue([file])
+  const { result } = renderHook(useDatasetPieces)
+  await waitFor(() => expect(result.current.pieces).toHaveLength(1))
+  expect(load).toHaveBeenCalledWith(synapse, '0xabc', 'mainnet', expect.any(AbortSignal))
+  expect(addDataSetId).toHaveBeenCalledWith(1n)
+})
+it('keeps local records when the index lags or fails, and supports manual retry', async () => {
+  setCachedPieces(scope, [file])
+  const { result } = renderHook(useDatasetPieces)
+  await waitFor(() => expect(result.current.isLoading).toBe(false))
+  expect(result.current.pieces).toEqual([file])
+  load.mockRejectedValueOnce(new Error('index unavailable'))
+  await act(async () => result.current.refreshPieces())
+  expect(result.current.pieces).toEqual([file])
+  expect(result.current.indexError).toBe('index unavailable')
+  expect(result.current.error).toBeNull()
+  expect(getCachedPieces(scope)).toEqual([file])
+})
+it('merges a late index response against uploads saved while fetching', async () => {
+  let finish!: (files: DatasetPiece[]) => void
+  load.mockImplementation(
+    () =>
+      new Promise<DatasetPiece[]>((resolve) => {
+        finish = resolve
+      })
+  )
+  const { result } = renderHook(useDatasetPieces)
+  await act(async () => {
+    await result.current.addPiece(file)
+  })
+  await act(async () => finish([]))
+  expect(result.current.pieces).toEqual([file])
+})
+it('ignores an aborted response after switching wallets', async () => {
+  let finish!: (files: DatasetPiece[]) => void
+  load.mockImplementationOnce(
+    () =>
+      new Promise<DatasetPiece[]>((resolve) => {
+        finish = resolve
+      })
+  )
+  const { result, rerender } = renderHook(useDatasetPieces)
+  context.mockReturnValue({
+    wallet: { status: 'ready', data: { address: '0xdef', network: 'mainnet' } },
+    storageScope: '314:0xdef',
+    synapse,
+    addDataSetId,
+  })
+  rerender()
+  await act(async () => finish([file]))
+  await waitFor(() => expect(result.current.isLoading).toBe(false))
+  expect(result.current.pieces).toEqual([])
+  expect(getCachedPieces('314:0xdef')).toEqual([])
 })
 
-describe('useDatasetPieces auto-load', () => {
-  it('does not enumerate the chain when a dataset id appears mid-upload on a fresh browser', async () => {
-    // Fresh browser: dataset manager has resolved ready with no ids, cache empty.
-    useFilecoinPinContextMock.mockReturnValue(makeContext({ status: 'ready', dataSetIds: [] }))
-    const { rerender } = renderHook(() => useDatasetPieces())
-
-    // Mid-upload, piecesConfirmed appends the freshly created dataset id,
-    // flipping dataSetIds 0 -> 1 while the cache is still empty (addPiece only
-    // writes at upload completion). History must NOT enumerate the chain here.
-    useFilecoinPinContextMock.mockReturnValue(makeContext({ status: 'ready', dataSetIds: [1n] }))
-    await act(async () => {
-      rerender()
-    })
-
-    expect(getDetailedDataSetMock).not.toHaveBeenCalled()
+it('discovers files while balances are unavailable, without marking an unfinished request loaded', async () => {
+  context.mockReturnValue({
+    wallet: { status: 'error', error: 'balances unavailable' },
+    storageScope: scope,
+    synapse,
+    addDataSetId,
   })
-
-  it('does not arm auto-load until the dataset manager is ready', async () => {
-    // While the dataset manager is still initializing with no ids, the effect
-    // must not mark itself loaded — otherwise the later idle->ready flip with
-    // real ids would never trigger the one allowed enumeration.
-    useFilecoinPinContextMock.mockReturnValue(makeContext({ status: 'initializing', dataSetIds: [] }))
-    const { rerender } = renderHook(() => useDatasetPieces())
-
-    useFilecoinPinContextMock.mockReturnValue(makeContext({ status: 'ready', dataSetIds: [7n] }))
-    await act(async () => {
-      rerender()
-    })
-
-    await waitFor(() => expect(getDetailedDataSetMock).toHaveBeenCalledTimes(1))
-    expect(getDetailedDataSetMock).toHaveBeenCalledWith(expect.anything(), 7n)
-  })
-
-  it('enumerates the chain once on load when ids are present and the cache is empty', async () => {
-    useFilecoinPinContextMock.mockReturnValue(makeContext({ status: 'ready', dataSetIds: [5n] }))
-
-    renderHook(() => useDatasetPieces())
-
-    await waitFor(() => expect(getDetailedDataSetMock).toHaveBeenCalledTimes(1))
-    expect(getDetailedDataSetMock).toHaveBeenCalledWith(expect.anything(), 5n)
-  })
-
-  it('renders from the cache without any chain enumeration', async () => {
-    setCachedPieces(WALLET, [cachedPiece('bafkcached')])
-    useFilecoinPinContextMock.mockReturnValue(makeContext({ status: 'ready', dataSetIds: [5n] }))
-
-    const { result } = renderHook(() => useDatasetPieces())
-
-    await waitFor(() => expect(result.current.hasLoaded).toBe(true))
-    expect(getDetailedDataSetMock).not.toHaveBeenCalled()
-    expect(result.current.pieces).toHaveLength(1)
-  })
+  let finish!: (files: DatasetPiece[]) => void
+  load.mockImplementation(
+    () =>
+      new Promise<DatasetPiece[]>((resolve) => {
+        finish = resolve
+      })
+  )
+  const { result } = renderHook(useDatasetPieces)
+  expect(load).toHaveBeenCalledWith(synapse, '0xabc', 'mainnet', expect.any(AbortSignal))
+  expect(result.current.hasLoaded).toBe(false)
+  expect(result.current.isLoading).toBe(true)
+  await act(async () => finish([]))
+  expect(result.current.hasLoaded).toBe(true)
+  expect(result.current.isLoading).toBe(false)
 })
