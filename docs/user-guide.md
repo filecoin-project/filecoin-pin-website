@@ -35,7 +35,7 @@ Keep the tab open while uploads are running. **Stored** means at least one copy 
 
 Drive checks two values separately before starting an upload:
 
-- **Upload name**: the name of the selected file, including its extension, or the name of the selected folder. Maximum: **96 UTF-8 bytes**.
+- **Upload name**: the name of the selected file, including its extension, or the name of the selected folder. Maximum: **96 UTF-8 bytes** for files, **95 UTF-8 bytes** for uploaded folders.
 - **Upload location**: the destination path entered in the upload panel, including `/` separators. Maximum: **96 UTF-8 bytes** after path normalization. Leave it empty to upload directly under **Files**.
 
 For example, upload the folder `photos` into **Upload location** `trips/2026`. Drive checks `photos` and `trips/2026` separately. The resulting location is `Files → trips → 2026 → photos`, but that combined path is not the value checked against either limit. A file such as `photos/day-1/beach.jpg` inside the selected folder is part of its contents; its child path is not subject to these two metadata limits.
@@ -48,11 +48,11 @@ UTF-8 bytes are not the same as characters: English letters and digits normally 
 
 The folder sidebar shows **Files** as the root, with nested paths derived from visible files. Choose a folder path in the upload panel; deleting all files under a path removes that path from the tree.
 
-Choose **Folder** in the upload panel to store an entire folder as one UnixFS directory. Nested folders retain their paths. Browse the uploaded folder in Drive, download individual files, or download a folder as a ZIP. Preview and sharing use each entry’s IPFS CID when available. The browser picker omits empty folders; selected content and the packed CAR must each fit the 200 MB browser limit. Folder ZIP downloads are also limited to 200 MB of extracted content and 10,000 entries, counting files and directories, including the root.
+Choose **Folder** in the upload panel to store an entire folder as one encrypted upload. Nested paths are preserved. Drive treats the upload as a single item: open its details, download it as a ZIP, or use Preview and Share to open the external viewer. Its contents are not browsed within Drive. The browser picker omits empty folders; selected content and the packed CAR must each fit the 200 MB browser limit. ZIP downloads are limited to 200 MB of extracted content and 10,000 entries, counting files and directories, including the root.
 
-An organizing folder groups independent uploads. An uploaded folder stores its contents together: its children share the folder’s upload time and cannot be added, renamed or deleted individually. Delete the uploaded folder from its details to remove its storage copies. Icons and folder information distinguish these two kinds of folder. Known name collisions are rejected before a folder upload starts.
+An organizing folder groups independent uploads through their Upload location. It remains navigable in Drive. An uploaded folder is an immutable storage unit; its files cannot be added, renamed or deleted individually. Delete the whole uploaded folder from its details to remove its storage copies. Known name collisions are rejected before upload.
 
-The search field stays in the Files toolbar beside Upload. **Search file list** matches names and paths in the wallet’s file records, without searching inside uploaded folders. Inside an uploaded folder, **Search this folder** matches names across all pages of the current directory (not file contents or nested directories), up to 10,000 entries. Opening Upload from an uploaded folder leaves Upload location empty and starts at Files root because uploaded folders cannot be appended to. Opening Upload from an organizing folder pre-fills its current path.
+**Search file list** matches names and paths in the wallet’s file records. It does not search inside uploaded folders. Opening Upload from an organizing folder pre-fills its current path.
 
 ## Downloads, previews and sharing
 
@@ -109,3 +109,9 @@ The file list has selection, Name, Size, Uploaded and Actions columns. Status ap
 Stored files have no badge. At least one confirmed storage copy is enough to show **Stored** in details; remaining replication and IPFS indexing do not change that status. A provider receiving bytes or an indexed CID alone does not establish confirmed storage. Preview and share availability still follow their own checks. Copy counts, provider receipts and saved progress remain in file details under **Upload details** and **Storage copies**. The list loads automatically; reload the page to discover later remote changes, or use **Retry** if loading fails.
 
 [Back to README](../README.md)
+
+### Uploaded folder markers
+
+New folder uploads carry a trailing `/` in their public metadata label. Drive uses it to display the folder type without downloading or decrypting the content; displayed names omit the marker. Preview and Share open the external viewer and grant access to the whole upload.
+
+Older encrypted uploads may have no marker and appear as ordinary items. Drive does not download them to guess their type. Use Preview or Share to open their contents in the external viewer.

@@ -1,7 +1,6 @@
 // @vitest-environment node
 
 import { decodeGrant, keyForEnvelope, keyspaceKeys, unwrapWith } from '@filoz/keysmith'
-import { calculate } from '@filoz/synapse-core/piece'
 import type { Synapse } from '@filoz/synapse-sdk'
 import { CarWriter } from '@ipld/car'
 import * as fee from 'filecoin-encryption-envelope'
@@ -31,7 +30,6 @@ import {
   issueEncryptionCredential,
   type OwnerSigner,
 } from './encryption.ts'
-import { contentReader } from './ipfs-content.ts'
 
 describe('original file retrieval', () => {
   it('round-trips a multi-block UnixFS CAR produced by the actual upload library', async () => {
@@ -386,92 +384,6 @@ describe('encrypted piece retrieval', () => {
     }
   })
 
-  it.each(['session', 'owner', 'stale grant'] as const)(
-    'browses an encrypted directory with %s access and reuses the opened envelope',
-    async (mode) => {
-      const inner = await directoryCar()
-      const { sessionPrivateKey, credential, outer } = await encrypted(inner.carBytes)
-      const pieceCid = (await calculate(outer.carBytes)).toString()
-      const fetchMock = vi.fn().mockImplementation(async () => new Response(new Uint8Array(outer.carBytes)))
-      vi.stubGlobal('fetch', fetchMock)
-      try {
-        const file = piece({
-          id: 'directory',
-          cid: outer.rootCid.toString(),
-          pieceCid,
-          fileName: 'reports',
-          isDirectory: true,
-          upload: {
-            phase: 'confirming',
-            expectedCopies: 1,
-            steps: [],
-            checks: 0,
-            nextCheckAt: 0,
-            providers: [{ providerId: '4', serviceURL: 'https://sp.example', stored: true }],
-          },
-        })
-        const signer = owner()
-        const credentials: DecryptCredentials =
-          mode === 'session'
-            ? { session: { privateKey: sessionPrivateKey, credential } }
-            : mode === 'owner'
-              ? { ownerSigner: () => signer }
-              : { session: { privateKey: generatePrivateKey(), credential }, ownerSigner: () => signer }
-        const reader = contentReader(file, new AbortController().signal, false, credentials)
-        expect(reader.rootCid).toBe(outer.rootCid.toString())
-        const entry = await reader.entry('docs/notes.txt')
-        if (entry.type !== 'file' && entry.type !== 'raw' && entry.type !== 'identity')
-          throw new Error('expected a single-file entry')
-        const chunks: Uint8Array[] = []
-        for await (const chunk of entry.content()) chunks.push(new Uint8Array(chunk))
-        expect(Buffer.concat(chunks).toString()).toBe('nested notes')
-        const fetches = fetchMock.mock.calls.length
-        const signatures = signer.signatures()
-        expect(signatures).toBe(mode === 'session' ? 0 : mode === 'stale grant' ? 1 : 2)
-        await reader.entry('研究.txt')
-        expect(fetchMock.mock.calls.length).toBe(fetches)
-        expect(signer.signatures()).toBe(signatures)
-      } finally {
-        vi.unstubAllGlobals()
-      }
-    }
-  )
-
-  it('stops a cancelled directory unlock before the next signature and does not retain its key', async () => {
-    const inner = await directoryCar()
-    const { outer, credential } = await encrypted(inner.carBytes)
-    const pieceCid = (await calculate(outer.carBytes)).toString()
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => new Response(new Uint8Array(outer.carBytes)))
-    )
-    const controller = new AbortController()
-    const wallet = owner()
-    const signer: OwnerSigner = {
-      address: wallet.address,
-      signTypedData: async (args) => {
-        const signature = await wallet.signTypedData(args)
-        controller.abort()
-        return signature
-      },
-    }
-    const file = piece({ cid: outer.rootCid.toString(), pieceCid, serviceURL: 'https://sp.example', isDirectory: true })
-    try {
-      const reader = contentReader(file, controller.signal, false, { ownerSigner: () => signer })
-      await expect(reader.entry()).rejects.toMatchObject({ name: 'AbortError' })
-      expect(wallet.signatures()).toBe(1)
-      const fresh = owner()
-      const retried = contentReader(file, new AbortController().signal, false, {
-        ownerSigner: () => fresh,
-        commitment: credential.commitment,
-      })
-      expect(['file', 'raw', 'identity']).toContain((await retried.entry('docs/notes.txt')).type)
-      expect(fresh.signatures()).toBe(1)
-    } finally {
-      vi.unstubAllGlobals()
-    }
-  })
-
   async function otherGroupSession() {
     const wallet = owner()
     const privateKey = generatePrivateKey()
@@ -548,11 +460,6 @@ describe('encrypted piece retrieval', () => {
     expect(await decryptEnvelope(envelope, () => keyForEnvelope(key, info.appMetadata as never, grant))).toEqual(
       inner.carBytes
     )
-  })
-
-  it('refuses to browse an encrypted directory without a grant instead of prompting the wallet', async () => {
-    const reader = contentReader(piece({ cid: 'bafy-outer', isDirectory: true }), new AbortController().signal)
-    await expect(reader.entry('docs/notes.txt')).rejects.toThrow('Connect your wallet to browse this encrypted folder.')
   })
 
   it('mints a share link by reading the stored envelope labels, openable with the link alone', async () => {

@@ -8,8 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { MAX_FILE_SIZE } from '../constants/files.ts'
 import { DEFAULT_STORAGE_COPIES } from '../lib/filecoin-pin/config.ts'
 import { acquireContentLock } from '../lib/filecoin-pin/content-lock.ts'
-import { cacheDirectoryUpload } from '../lib/filecoin-pin/directory.ts'
-import { validateDriveMetadata } from '../lib/filecoin-pin/drive-metadata.ts'
+import { driveMetadataLabel, validateDriveMetadata } from '../lib/filecoin-pin/drive-metadata.ts'
 import { buildEncryptedPayload, wrapCarPayload } from '../lib/filecoin-pin/encrypted-payload.ts'
 import { encryptCar, encryptedDataSetMetadata } from '../lib/filecoin-pin/encryption.ts'
 import { createFreshUploadContexts } from '../lib/filecoin-pin/fresh-contexts.ts'
@@ -17,7 +16,7 @@ import { ensureSessionKeyPermissions } from '../lib/filecoin-pin/synapse.ts'
 import type { UploadProviderCheckpoint } from '../lib/filecoin-pin/upload-checkpoint.ts'
 import { prepareUploadContexts, UploadFundingRequired } from '../lib/filecoin-pin/upload-funding.ts'
 import { prepareUploadInput } from '../lib/filecoin-pin/upload-input.ts'
-import type { UploadSource } from '../lib/filecoin-pin/upload-source.ts'
+import { isDirectoryUpload, type UploadSource } from '../lib/filecoin-pin/upload-source.ts'
 import { getOrCreateClientId } from '../lib/local-storage/client-id.ts'
 import { addStoredDataSetId, clearStoredDataSetIds, getStoredDataSetIds } from '../lib/local-storage/data-set.ts'
 import { requireDirectoryLocks } from '../lib/local-storage/directory-store.ts'
@@ -152,7 +151,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           throw new Error('Wait for wallet setup to finish before uploading.')
         if (file.size > MAX_FILE_SIZE)
           throw new Error(`Files must be ${prettyBytes(MAX_FILE_SIZE)} or smaller for browser uploads.`)
-        const folderPath = validateDriveMetadata(file.name, metadata?.path ?? '')
+        const folderPath = validateDriveMetadata(file.name, metadata?.path ?? '', isDirectoryUpload(file))
         requireDirectoryLocks()
         updateStepState('creating-car', { status: 'in-progress', progress: 0 })
         logger.info('Preparing IPFS input')
@@ -188,15 +187,6 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           throw new Error('The encrypted upload exceeds the 200 MB browser upload limit.')
         const innerRoot = payload.rootCid
         const rootCid = outerCar.rootCid.toString()
-        if (carResult.isDirectory) {
-          try {
-            // Plaintext inner structure, keyed by the outer root browsing will look up.
-            await cacheDirectoryUpload(carResult.carBytes, rootCid)
-          } catch {
-            // Optional browsing cache must not prevent a valid upload.
-            logger.warn('Unable to cache folder contents; browsing will use storage providers')
-          }
-        }
         setUploadState((prev) => ({
           ...prev,
           currentCid: rootCid,
@@ -265,7 +255,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           logger,
           contextId: `upload-${Date.now()}`,
           pieceMetadata: {
-            label: file.name,
+            label: driveMetadataLabel(file.name, carResult.isDirectory),
             [carResult.importedCar ? 'carPath' : 'path']: folderPath,
           },
           onProgress: (event) => {

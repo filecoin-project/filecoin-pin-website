@@ -39,7 +39,9 @@ export function FolderInfo() {
             <FolderUp aria-hidden="true" className="mt-0.5 shrink-0 text-accent" size={16} />
             <span>
               <strong className="block font-medium">Uploaded folder</strong>
-              <span className="text-muted">Uploaded as one unit. Browse its contents; delete the whole folder.</span>
+              <span className="text-muted">
+                Uploaded as one unit. View in the external viewer; delete the whole folder.
+              </span>
             </span>
           </span>
         </span>

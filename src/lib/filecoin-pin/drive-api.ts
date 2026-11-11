@@ -9,6 +9,7 @@ import { isCopyRemovalScheduled, isDeletionScheduled } from '../../utils/file-de
 import { formatFileSize } from '../../utils/format-file-size.ts'
 import { normalizeFolder } from '../local-storage/drive-directory.ts'
 import { mergeStorageCopies, storageInstances } from '../local-storage/piece-cache.ts'
+import { parseDriveLabel } from './drive-metadata.ts'
 import { ENCRYPTION_VERSION, ENCRYPTION_VERSION_KEY } from './encryption.ts'
 import { APPLICATION_SOURCE } from './synapse.ts'
 
@@ -105,8 +106,12 @@ export async function loadDriveFiles(synapse: Synapse, owner: string, network: s
       } catch {
         /* Missing metadata does not hide stored content. */
       }
-      const fileName =
-        typeof metadata.name === 'string' && metadata.name.trim()
+      const importedCar = typeof metadata.carPath === 'string'
+      const label = parseDriveLabel(typeof metadata.label === 'string' ? metadata.label : '')
+      const isDirectory = !importedCar && label.isDirectory === true
+      const fileName = isDirectory
+        ? label.fileName
+        : typeof metadata.name === 'string' && metadata.name.trim()
           ? metadata.name
           : typeof metadata.label === 'string' && metadata.label.trim()
             ? metadata.label
@@ -122,10 +127,12 @@ export async function loadDriveFiles(synapse: Synapse, owner: string, network: s
         id: `indexed-${dataset.dataSetId}-${piece.pieceId}`,
         fileName,
         folderPath,
-        importedCar: typeof metadata.carPath === 'string' || undefined,
+        importedCar: importedCar || undefined,
+        ...(isDirectory ? { isDirectory: true } : {}),
         ...(encrypted ? { encrypted: true } : {}),
-        fileSize:
-          typeof metadata.carPath === 'string' && decimal(piece.rawSize)
+        fileSize: isDirectory
+          ? '—'
+          : typeof metadata.carPath === 'string' && decimal(piece.rawSize)
             ? formatFileSize(Number(piece.rawSize))
             : 'Unknown',
         cid,

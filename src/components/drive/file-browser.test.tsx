@@ -1534,3 +1534,33 @@ it('permits deleting stored content despite a failed rejected alias with no copi
   )
   expect(getCachedPieces(scope)?.find((record) => record.id === 'old-failed')?.deletion).toBeUndefined()
 })
+
+it('treats uploaded folders as stored items with details and external preview/share, not sidebar navigation', async () => {
+  const folder = { ...file, fileName: 'Uploaded reports', encrypted: true, isDirectory: true, ipfsIndexed: true }
+  setCachedPieces(scope, [folder])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  const nav = screen.getByRole('navigation', { name: 'File folders' })
+  expect(within(nav).queryByRole('button', { name: 'Uploaded reports' })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Share' })).toBeTruthy()
+  fireEvent.click(await screen.findByRole('button', { name: 'Uploaded reports' }))
+  const details = screen.getByRole('dialog', { name: 'Uploaded reports' })
+  expect(within(details).getByRole('button', { name: 'Preview' })).toHaveProperty('disabled', false)
+  expect(within(details).queryByRole('button', { name: 'Share' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Unlock and identify' })).toBeNull()
+  expect(screen.queryByRole('searchbox', { name: 'Search this folder' })).toBeNull()
+})
+it('does not fetch and decrypt legacy uploads merely to identify their type', async () => {
+  setCachedPieces(scope, [{ ...file, fileName: 'Legacy unknown', encrypted: true, isDirectory: undefined }])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'Legacy unknown' }))
+  expect(screen.queryByRole('button', { name: 'Unlock and identify' })).toBeNull()
+  expect(mocks.context).not.toHaveBeenCalled()
+})

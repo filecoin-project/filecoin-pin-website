@@ -152,7 +152,7 @@ export function ShareFileButton({
                   {file.encrypted && !(minted?.id === file.id && minted.gateway)
                     ? sharesWholeFolder
                       ? 'Scan to open the entire uploaded folder.'
-                      : 'Anyone with this link can read this file. The key travels in the link and never reaches a server. Share links cannot be revoked.'
+                      : 'Anyone with this link can read the entire upload, including any files and subfolders it contains. The key travels in the link and never reaches a server. Share links cannot be revoked.'
                     : file.isDirectory
                       ? 'Scan to browse this folder.'
                       : file.importedCar

@@ -147,8 +147,8 @@ export default function Content() {
               <details className="mt-3 text-xs text-muted">
                 <summary className="w-fit cursor-pointer hover:text-foreground">Name and folder requirements</summary>
                 <p className="mt-2 leading-relaxed">
-                  File names and full folder paths each allow 96 UTF-8 bytes. Names and paths are public and cannot be
-                  changed after upload.
+                  File names and full folder paths each allow 96 UTF-8 bytes; uploaded folder names allow 95. Names and
+                  paths are public and cannot be changed after upload.
                 </p>
               </details>
             </div>
