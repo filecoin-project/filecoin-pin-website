@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { mainnet } from '@filoz/synapse-sdk'
+import { CarReader } from '@ipld/car'
+import { unzipSync } from 'fflate'
+import * as fee from 'filecoin-encryption-envelope'
+import { exporter } from 'ipfs-unixfs-exporter'
+import { CID } from 'multiformats/cid'
 import { decodeFunctionData, encodeFunctionResult, toFunctionSelector } from 'viem'
-import { prepareBrowserPage } from './drive-browser-fixtures.mjs'
+import { prepareEncryptedBrowserPage } from './drive-browser-fixtures.mjs'
 import { openDrive } from './drive-browser-navigation.mjs'
 
 /** Exercise the real task UI/persistence and SDK recovery readers without submitting transactions. */
@@ -15,7 +20,7 @@ export async function checkUploadTasks(browser) {
     const page = await context.newPage()
     const errors = []
     page.on('pageerror', (error) => errors.push(error.message))
-    await prepareBrowserPage(page, { seedDirectory: false })
+    const mockBrowser = await prepareEncryptedBrowserPage(page, { seedDirectory: false })
     const providers = `const contexts = () => [4n,5n].map(id => ({provider:{id,name:'SP '+id,pdp:{serviceURL:'https://sp'+id+'.example'}},dataSetId:id+10n}));`
     await page.route('**/src/lib/filecoin-pin/fresh-contexts.ts*', (route) =>
       route.fulfill({
@@ -48,7 +53,7 @@ export async function checkUploadTasks(browser) {
         }
         return new Promise(resolve=>{
           window.__taskUploads ??={};
-          window.__taskUploads[name]={bytes:Array.from(bytes),pieceCid:pieceCid.toString(),confirmPrimary(){
+          window.__taskUploads[name]={bytes:Array.from(bytes),pieceCid:pieceCid.toString(),rootCid:root.toString(),pieceMetadata:options.pieceMetadata,confirmPrimary(){
             emit({type:'piecesConfirmed',data:{providerId:4n,dataSetId:14n,pieceIds:[8n]}});
           },finish(){
             emit({type:'piecesConfirmed',data:{providerId:4n,dataSetId:14n,pieceIds:[8n]}});
@@ -122,6 +127,9 @@ export async function checkUploadTasks(browser) {
       .check()
     await page.getByRole('button', { name: 'Authorize session', exact: true }).click()
     await page.getByLabel('Session authorized', { exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Add encryption key', exact: true }).click()
+    await page.getByLabel('Encryption key added', { exact: true }).waitFor()
+    assert.equal(mockBrowser.signatures(), 2, 'A new group key must pass deterministic-signature verification')
     await page.getByRole('button', { name: 'Close Wallet and Storage', exact: true }).click()
     const start = async (name) => {
       await page.getByRole('button', { name: 'Upload files', exact: true }).click()
@@ -137,24 +145,47 @@ export async function checkUploadTasks(browser) {
           console.log(await page.locator('body').innerText())
           console.log(errors)
           console.log(
-            await page.evaluate(() =>
-              localStorage.getItem('filecoin-pin-piece-cache-v1-314:0x1111111111111111111111111111111111111111')
-            )
+            await page.evaluate(() => localStorage.getItem(`filecoin-pin-piece-cache-v1-${window.__driveTestScope}`))
           )
           throw error
         })
       await page.getByRole('button', { name: 'Upload files', exact: true }).waitFor({ state: 'visible' })
       await page.waitForFunction(() => !document.querySelector('button[aria-label="Upload files"]').disabled)
     }
+    const checkEncryptedUpload = async (name, label) => {
+      const stored = await page.evaluate((name) => window.__taskUploads[name], name)
+      assert.equal(stored.pieceMetadata.label, label)
+      assert.equal(Object.keys(stored.pieceMetadata).length, 2, 'Leave the third metadata slot for ipfsRootCID')
+      const car = await CarReader.fromBytes(new Uint8Array(stored.bytes))
+      const roots = await car.getRoots()
+      assert.equal(roots.length, 1)
+      assert.equal(roots[0].toString(), stored.rootCid)
+      const entry = await exporter(stored.rootCid, {
+        get: async function* (cid) {
+          const block = await car.get(CID.parse(cid.toString()))
+          assert.ok(block)
+          yield block.bytes
+        },
+      })
+      assert.ok(['file', 'raw', 'identity'].includes(entry.type))
+      const chunks = []
+      for await (const chunk of entry.content()) chunks.push(chunk)
+      const envelope = await fee.parse(new Uint8Array(Buffer.concat(chunks)))
+      assert.equal(envelope.contentType, 'application/vnd.ipld.car')
+      assert.equal(envelope.appMetadata['foc/own'].toLowerCase(), mockBrowser.walletAddress.toLowerCase())
+      assert.equal(envelope.appMetadata['foc/v'], 1)
+    }
     await start('first.txt')
+    await checkEncryptedUpload('first.txt', 'first.txt')
     const firstRow = page.getByRole('button', { name: 'first.txt', exact: true }).locator('..').locator('..')
     await firstRow.getByLabel('Uploading…').waitFor()
-    assert.equal(await firstRow.getByRole('button', { name: 'Share', exact: true }).isDisabled(), true)
+    assert.equal(await firstRow.getByRole('button', { name: 'Share', exact: true }).isDisabled(), false)
     const [download] = await Promise.all([
       page.waitForEvent('download'),
       firstRow.getByRole('button', { name: 'Download', exact: true }).click(),
     ])
     assert.equal(download.suggestedFilename(), 'first.txt')
+    assert.equal(await readFile(await download.path(), 'utf8'), 'first.txt original bytes')
     await start('second.txt')
     await page.evaluate(() => window.__taskUploads['second.txt'].finish())
     const secondRow = page.getByRole('button', { name: 'second.txt', exact: true }).locator('..').locator('..')
@@ -189,12 +220,12 @@ export async function checkUploadTasks(browser) {
       .waitFor({ timeout: 20000 })
     await page.waitForFunction(
       () =>
-        JSON.parse(
-          localStorage.getItem('filecoin-pin-piece-cache-v1-314:0x1111111111111111111111111111111111111111')
-        ).find((file) => file.fileName === 'first.txt').upload.phase === 'complete'
+        JSON.parse(localStorage.getItem(`filecoin-pin-piece-cache-v1-${window.__driveTestScope}`)).find(
+          (file) => file.fileName === 'first.txt'
+        ).upload.phase === 'complete'
     )
     const files = await page.evaluate(() =>
-      JSON.parse(localStorage.getItem('filecoin-pin-piece-cache-v1-314:0x1111111111111111111111111111111111111111'))
+      JSON.parse(localStorage.getItem(`filecoin-pin-piece-cache-v1-${window.__driveTestScope}`))
     )
     assert.equal(files.length, 2)
     assert.deepEqual(files.find((file) => file.fileName === 'first.txt').pieceIds, ['8', '9'])
@@ -256,7 +287,7 @@ export async function checkUploadTasks(browser) {
     await folderPanel.getByText('reports', { exact: true }).waitFor()
     await page.screenshot({ path: '/tmp/drive-folder-upload-picker.png', fullPage: true, animations: 'disabled' })
     await page.evaluate(() => {
-      const key = 'filecoin-pin-piece-cache-v1-314:0x1111111111111111111111111111111111111111'
+      const key = `filecoin-pin-piece-cache-v1-${window.__driveTestScope}`
       const files = JSON.parse(localStorage.getItem(key))
       const previous = files[0]
       files.push({
@@ -270,10 +301,19 @@ export async function checkUploadTasks(browser) {
     })
     await folderPanel.getByRole('button', { name: 'Upload', exact: true }).click()
     await page.waitForFunction(() => Boolean(window.__taskUploads?.reports))
+    await checkEncryptedUpload('reports', 'reports/')
     const folderRow = page
       .getByRole('row')
       .filter({ hasText: 'reports' })
       .filter({ has: page.getByRole('button', { name: 'Download ZIP', exact: true }) })
+    const [folderDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      folderRow.getByRole('button', { name: 'Download ZIP', exact: true }).click(),
+    ])
+    assert.equal(folderDownload.suggestedFilename(), 'reports.zip')
+    const zip = unzipSync(new Uint8Array(await readFile(await folderDownload.path())))
+    assert.equal(new TextDecoder().decode(zip['reports/研究.txt']), 'hello folder')
+    assert.equal(new TextDecoder().decode(zip['reports/docs/notes.txt']), 'nested notes')
     await folderRow.getByRole('button', { name: 'reports', exact: true }).click()
     await page.getByRole('dialog', { name: 'reports', exact: true }).waitFor()
     assert.equal(await page.getByRole('button', { name: 'Unlock and identify', exact: true }).count(), 0)
@@ -288,13 +328,13 @@ export async function checkUploadTasks(browser) {
     await page.evaluate(() => window.__taskUploads.reports.finish())
     await page.waitForFunction(
       () =>
-        JSON.parse(
-          localStorage.getItem('filecoin-pin-piece-cache-v1-314:0x1111111111111111111111111111111111111111')
-        ).find((file) => file.fileName === 'reports' && !file.removedCopies?.length).upload.phase === 'complete'
+        JSON.parse(localStorage.getItem(`filecoin-pin-piece-cache-v1-${window.__driveTestScope}`)).find(
+          (file) => file.fileName === 'reports' && !file.removedCopies?.length
+        ).upload.phase === 'complete'
     )
     assert.deepEqual(errors, [])
     console.log(
-      'Upload task browser checks passed: parked download, consecutive uploads, per-file details and reload recovery.'
+      'Upload task browser checks passed: encryption setup and signatures, encrypted envelopes, decrypted file and folder ZIP downloads, directory labels, consecutive uploads and reload recovery.'
     )
   } finally {
     await context.close()
