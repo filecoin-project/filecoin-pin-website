@@ -3,13 +3,15 @@ import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { ButtonBase as Button } from '../ui/button/button-base.tsx'
 
-export type SetupTarget = 'session' | 'gas' | 'deposit' | 'approval'
+export type SetupTarget = 'session' | 'encryption' | 'gas' | 'deposit' | 'approval'
 
 export function WalletNextStep({
+  encryptionReady,
   onReview,
   onContinue,
   pendingFunding = false,
 }: {
+  encryptionReady: boolean
   onReview: (target: SetupTarget) => void
   onContinue: () => void
   pendingFunding?: boolean
@@ -47,6 +49,21 @@ export function WalletNextStep({
     title = 'Checking storage setup…'
     description = 'Checking your session, balances and payment approval.'
     checking = true
+  } else if (connection.sessionStatus === 'active' && !encryptionReady) {
+    // The signature is free and needs only the live session key, so it outranks
+    // gas, which the remaining on-chain steps need — but never the session step.
+    if (connection.session?.encryption) {
+      title = 'Restore encryption access'
+      description =
+        'Your session was re-authorized, so encryption access needs 1 wallet signature to be restored — no transaction, no fee. Only sign it here.'
+      action = 'Restore encryption access'
+    } else {
+      title = 'Add your encryption key'
+      description =
+        'Uploads are encrypted by default. Your wallet signs 1 message (2 for a brand-new key) — no transaction, no fee. This signature is your encryption key, so only sign it here, never from a link or another site.'
+      action = 'Review encryption key'
+    }
+    target = 'encryption'
   } else if (!storageSetup?.gasReady) {
     title = 'Add FIL for transaction fees'
     description = 'Send FIL to your connected wallet, then refresh balances. FIL pays gas; USDFC pays for storage.'
@@ -103,6 +120,12 @@ export function WalletNextStep({
             : 'Session not authorized',
     },
     {
+      key: 'encryption',
+      label: 'Encryption',
+      complete: encryptionReady,
+      status: encryptionReady ? 'Encryption key added' : 'Encryption key needed',
+    },
+    {
       key: 'deposit',
       label: 'Funds',
       complete: storageSetup?.depositReady,
@@ -119,9 +142,11 @@ export function WalletNextStep({
     <section aria-label="Next step" className="border-b border-border pb-5">
       <div className="flex items-center justify-between text-xs">
         <p className="font-medium text-foreground">Upload setup</p>
-        <p className="tabular-nums text-muted">{steps.filter((step) => step.complete).length} of 4 ready</p>
+        <p className="tabular-nums text-muted">
+          {steps.filter((step) => step.complete).length} of {steps.length} ready
+        </p>
       </div>
-      <ol aria-label="Storage setup checklist" className="mt-4 grid grid-cols-4">
+      <ol aria-label="Storage setup checklist" className="mt-4 grid grid-cols-5">
         {steps.map((step, index) => (
           <li aria-label={step.status} className="relative flex flex-col items-center gap-1.5" key={step.key}>
             {index < steps.length - 1 && (

@@ -5,6 +5,7 @@ import {
   ChevronDown,
   Clock3,
   KeyRound,
+  Lock,
   Moon,
   QrCode,
   ShieldCheck,
@@ -168,7 +169,7 @@ export function WalletSetup({
   const { history } = useUploadHistory()
   const tasks = useUploadTasks()
   const fundingRequests = history.filter((file) => file.upload?.phase === 'funding')
-  const { wallet, refreshWallet, storageSetup } = useFilecoinPinContext()
+  const { wallet, refreshWallet, storageSetup, encryption } = useFilecoinPinContext()
   const [days, setDays] = useState(DEFAULT_SESSION_DAYS)
   const [amount, setAmount] = useState('')
   const lastSuggestedAmount = useRef<string | null>(null)
@@ -185,9 +186,11 @@ export function WalletSetup({
   const depositTarget = useRef<HTMLDivElement>(null)
   const pendingFundingTarget = useRef<HTMLElement>(null)
   const approvalTarget = useRef<HTMLDivElement>(null)
+  const encryptionTarget = useRef<HTMLElement>(null)
   const reviewStep = (target: SetupTarget) => {
     const node = {
       session: sessionTarget,
+      encryption: encryptionTarget,
       gas: gasTarget,
       deposit: pendingFundingTarget.current ? pendingFundingTarget : depositTarget,
       approval: approvalTarget,
@@ -216,6 +219,12 @@ export function WalletSetup({
   const active = connection.sessionStatus === 'active'
   const disabled =
     connection.busy || connection.uploading || connection.deleting || Boolean(connection.pendingTransaction)
+  // Keysmith refuses signers that cannot root a keyspace (smart accounts, some
+  // embedded wallets); detection is empirical, from the surfaced error message.
+  const unsupportedWallet = Boolean(
+    connection.error && /not deterministic|ECDSA signature|cannot root a keyspace/i.test(connection.error)
+  )
+  const staleGrant = Boolean(connection.session?.encryption) && !encryption.ready
   const pay = async (kind: 'deposit' | 'approve') => {
     setMessage('')
     await connection.paymentAction(async (synapse, confirm) => {
@@ -236,6 +245,7 @@ export function WalletSetup({
     <>
       {inDrawer && onContinueUpload && (
         <WalletNextStep
+          encryptionReady={encryption.ready}
           onContinue={onContinueUpload}
           onReview={reviewStep}
           pendingFunding={fundingRequests.length > 0}
@@ -286,6 +296,7 @@ export function WalletSetup({
             >
               {[
                 { title: 'Session authorized', ready: active },
+                { title: 'Encryption key added', ready: encryption.ready },
                 { title: 'Gas balance sufficient', ready: storageSetup?.gasReady },
                 { title: 'Storage funds available', ready: storageSetup?.depositReady },
                 { title: 'Storage payments approved', ready: storageSetup?.approvalReady },
@@ -383,6 +394,48 @@ export function WalletSetup({
                 Revoking this session blocks future use of this key. It does not delete your files or stop existing
                 storage charges.
               </p>
+            )}
+          </section>
+          <section
+            className={`scroll-mt-24 space-y-4 rounded-lg ${inDrawer ? 'border-t border-border pt-6' : ''}`}
+            data-setup-target="encryption"
+            ref={encryptionTarget}
+          >
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <Lock aria-hidden="true" className="text-accent" size={16} />
+              Encryption key
+            </h2>
+            <p className="text-sm leading-6 text-muted">
+              Uploads are encrypted by default. Your wallet signs 1 message (2 for a brand-new key) — no transaction, no
+              fee, and no further prompts after. This signature is your encryption key, so only sign it here. If a link,
+              email, or any other site asks for the same signature, don't: it would hand over the key to every file
+              you've encrypted.
+            </p>
+            {encryption.ready && connection.session?.encryption && (
+              <p className="rounded-lg border border-border bg-canvas/40 p-3 text-xs leading-5 text-muted break-all">
+                Group key {connection.session.encryption.groupKeyId}
+              </p>
+            )}
+            {unsupportedWallet && (
+              <p className="text-xs leading-5 text-warning" role="alert">
+                This wallet type can't derive encryption keys. Uploads stay blocked until a supported wallet is
+                connected.
+              </p>
+            )}
+            {!encryption.ready && (
+              <div className="flex flex-wrap gap-3">
+                <ButtonBase
+                  className="w-auto"
+                  disabled={disabled || !active}
+                  onClick={() => void connection.addEncryptionKey()}
+                  size="sm"
+                >
+                  {staleGrant ? 'Restore encryption access' : 'Add encryption key'}
+                </ButtonBase>
+              </div>
+            )}
+            {!active && !encryption.ready && (
+              <p className="text-xs leading-5 text-muted">Authorize an upload session first.</p>
             )}
           </section>
           <section

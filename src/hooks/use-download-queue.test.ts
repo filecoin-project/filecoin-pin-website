@@ -3,8 +3,19 @@ import { act, renderHook } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import type { DatasetPiece } from './use-dataset-pieces.ts'
 
-const mocks = vi.hoisted(() => ({ download: vi.fn() }))
-vi.mock('../lib/filecoin-pin/download.ts', () => ({ downloadFile: mocks.download }))
+const mocks = vi.hoisted(() => ({
+  download: vi.fn(),
+  encryption: { ready: false } as Record<string, unknown>,
+  ownerSigner: vi.fn(async () => undefined),
+}))
+vi.mock('../lib/filecoin-pin/download.ts', async (original) => ({
+  ...(await original<object>()),
+  downloadFile: mocks.download,
+}))
+vi.mock('./use-filecoin-pin-context.ts', () => ({ useFilecoinPinContext: () => ({ encryption: mocks.encryption }) }))
+vi.mock('../context/browser-wallet-provider.tsx', () => ({
+  useBrowserWallet: () => ({ ownerSigner: mocks.ownerSigner }),
+}))
 
 import { useDownloadQueue } from './use-download-queue.ts'
 
@@ -13,9 +24,10 @@ const files = ['first', 'second', 'third'].map((id) => ({ id, fileName: `${id}.t
 let jobs: Map<string, { finish: () => void; fail: (cause: Error) => void; progress: (stage: string) => void }>
 beforeEach(() => {
   mocks.download.mockReset()
+  mocks.encryption = { ready: false }
   jobs = new Map()
   mocks.download.mockImplementation(
-    (_synapse, file, progress) =>
+    (_synapse, file, _credentials, progress) =>
       new Promise<void>((finish, fail) => {
         jobs.set(file.id, { finish, fail, progress })
       })
@@ -93,4 +105,29 @@ it('never starts a queued download after unmount', async () => {
   unmount()
   await act(async () => jobs.get('first')?.finish())
   expect(mocks.download).toHaveBeenCalledOnce()
+})
+
+it('assembles decrypt credentials from the session context and surfaces the unlocking stage', async () => {
+  const credential = { grant: 'grant', groupKeyId: '0xid', commitment: 'v1.c', owner: '0xabc' }
+  mocks.encryption = { ready: true, sessionPrivateKey: '0x11', credential }
+  const { result } = renderHook(() => useDownloadQueue(synapse, '314:alice'))
+  act(() => result.current.enqueueDownload(files[0]))
+  const credentials = mocks.download.mock.calls[0][2]
+  expect(credentials.session).toEqual({ privateKey: '0x11', credential })
+  expect(credentials.commitment).toBe('v1.c')
+  // The wallet provider does not expose its EIP-712 signer yet; the owner
+  // fallback stays typed but inactive, so decrypt errors name the owner wallet.
+  expect(await credentials.ownerSigner()).toBeUndefined()
+  act(() => jobs.get('first')?.progress('unlocking'))
+  expect(result.current.download?.stage).toBe('Sign to unlock your files')
+  await act(async () => jobs.get('first')?.finish())
+})
+
+it('passes no session credentials while encryption is not ready', async () => {
+  const { result } = renderHook(() => useDownloadQueue(synapse, '314:alice'))
+  act(() => result.current.enqueueDownload(files[0]))
+  const credentials = mocks.download.mock.calls[0][2]
+  expect(credentials.session).toBeUndefined()
+  expect(credentials.commitment).toBeUndefined()
+  await act(async () => jobs.get('first')?.finish())
 })

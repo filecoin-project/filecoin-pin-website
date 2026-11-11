@@ -17,10 +17,19 @@
  *    (e.g., shared computers, testing), each wallet maintains its own data set.
  *
  * Storage format: `filecoin-pin-data-set-id-{version}-{walletAddress}` → `{dataSetId}`
+ *
+ * Why a dedicated encrypted generation (v3)?
+ * ------------------------------------------
+ * These ids feed the upload resume path. Since encryption-by-default, every
+ * upload must land in a data set created with `foc/enc` metadata — and
+ * data-set metadata is immutable, so ids recorded by pre-encryption builds
+ * (plain data sets) must never be resumed into. The key bump makes them
+ * invisible: the first encrypted upload creates fresh `foc/enc` data sets and
+ * the store only ever learns encrypted-generation ids from then on.
  */
 
-const DATA_SET_ID_KEY = 'filecoin-pin-data-set-id-v2'
-const DATA_SET_IDS_KEY = 'filecoin-pin-data-set-ids-v1'
+const DATA_SET_ID_KEY = 'filecoin-pin-data-set-id-v3-encrypted'
+const DATA_SET_IDS_KEY = 'filecoin-pin-data-set-ids-v2-encrypted'
 
 const getDataSetIdsKey = (walletAddress: string): string => `${DATA_SET_IDS_KEY}-${walletAddress}`
 

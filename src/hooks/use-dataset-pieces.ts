@@ -43,6 +43,10 @@ export interface DatasetPiece {
   /** Transient child selection; never an independent storage/deletion record. */
   directoryEntry?: { rootCid: string; path: string }
   importedCar?: boolean
+  /** True when the stored piece is an FEE envelope (content encrypted at rest). */
+  encrypted?: boolean
+  /** Plaintext root CID inside an encrypted piece; `cid` stays the public envelope root. Known locally after upload or first decrypt. */
+  contentRootCid?: string
   folderPath?: string
   ipfsIndexed?: boolean
   ipfsCheckAttempts?: number
@@ -162,9 +166,11 @@ export const useDatasetPieces = () => {
       controller.signal.throwIfAborted()
       if (!mounted.current || currentScope.current !== walletAddress) return
       await mutatePieces((current) => mergeIndexedFiles(current, indexed))
-      for (const id of new Set(indexed.map((file) => file.datasetId))) {
+      for (const id of new Set(indexed.map((file) => file.datasetId))) addDataSetId?.(BigInt(id))
+      // Resume cache: only encrypted-generation data sets. Uploads must never
+      // resume into plain data sets — their metadata can never carry foc/enc.
+      for (const id of new Set(indexed.filter((file) => file.encrypted).map((file) => file.datasetId))) {
         addStoredDataSetId(walletAddress, Number(id))
-        addDataSetId?.(BigInt(id))
       }
       void recoverMissingFileSizes(getLatestPieces(), controller.signal, async (file, fileSize, isDirectory) => {
         if (controller.signal.aborted || !mounted.current || currentScope.current !== walletAddress) return

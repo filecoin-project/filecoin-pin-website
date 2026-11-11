@@ -81,6 +81,35 @@ it('paginates wallet datasets and pieces, filters source/owner, and checks queue
   expect(scheduled).toHaveBeenCalledOnce()
   expect(fetcher.mock.calls.some(([url]) => url.includes('/data-sets/2/'))).toBe(false)
 })
+it('marks pieces from foc/enc data sets as encrypted and everything else as public', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) =>
+      Response.json(
+        url.includes('/providers/')
+          ? { data: { name: 'SP', serviceUrl: 'https://sp.example' } }
+          : url.includes('/pieces?')
+            ? { data: [piece(url.includes('/data-sets/1/') ? '1' : '2')], nextCursor: null }
+            : {
+                data: [
+                  {
+                    ...dataset('1'),
+                    metadata: { source: 'filecoin-drive', 'foc/enc': '1', 'foc/ks': '0xaa', 'foc/kc': 'v1.bb' },
+                  },
+                  { ...dataset('2'), metadata: { source: 'filecoin-drive' } },
+                ],
+                nextCursor: null,
+              }
+      )
+    )
+  )
+  const files = await loadDriveFiles(synapse, '0xabc', 'mainnet', signal())
+  expect(files).toHaveLength(2)
+  expect(files.find((file) => file.datasetId === '1')?.encrypted).toBe(true)
+  // Not encrypted = public: no flag, so the UI shows the Public marker.
+  expect(files.find((file) => file.datasetId === '2')?.encrypted).toBeUndefined()
+})
+
 it('recovers unnamed legacy files at the root without storing fallback CIDs as names', async () => {
   vi.stubGlobal(
     'fetch',

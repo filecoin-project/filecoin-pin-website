@@ -9,10 +9,18 @@ import { isCopyRemovalScheduled, isDeletionScheduled } from '../../utils/file-de
 import { formatFileSize } from '../../utils/format-file-size.ts'
 import { normalizeFolder } from '../local-storage/drive-directory.ts'
 import { mergeStorageCopies, storageInstances } from '../local-storage/piece-cache.ts'
+import { ENCRYPTION_VERSION, ENCRYPTION_VERSION_KEY } from './encryption.ts'
 import { APPLICATION_SOURCE } from './synapse.ts'
 
 const API = 'https://api.filecoin.io'
-type DataSet = { dataSetId: string; providerId: string; owner: string; source: string | null; deleted: boolean }
+type DataSet = {
+  dataSetId: string
+  providerId: string
+  owner: string
+  source: string | null
+  deleted: boolean
+  metadata?: Record<string, unknown> | null
+}
 type Piece = {
   dataSetId: string
   pieceId: string
@@ -82,6 +90,10 @@ export async function loadDriveFiles(synapse: Synapse, owner: string, network: s
         throw new Error('Invalid indexed provider.')
       providers.set(dataset.providerId, provider)
     }
+    // Drive's convention (shared with the filecoin-pin CLI): encrypted uploads
+    // only land in data sets created with `foc/enc` = "1". Anything else is
+    // public content and the UI marks it so.
+    const encrypted = dataset.metadata?.[ENCRYPTION_VERSION_KEY] === ENCRYPTION_VERSION
     for (const piece of pieces) {
       if (piece.dataSetId !== dataset.dataSetId || !decimal(piece.pieceId) || typeof piece.removed !== 'boolean')
         throw new Error('Invalid indexed piece.')
@@ -111,6 +123,7 @@ export async function loadDriveFiles(synapse: Synapse, owner: string, network: s
         fileName,
         folderPath,
         importedCar: typeof metadata.carPath === 'string' || undefined,
+        ...(encrypted ? { encrypted: true } : {}),
         fileSize:
           typeof metadata.carPath === 'string' && decimal(piece.rawSize)
             ? formatFileSize(Number(piece.rawSize))

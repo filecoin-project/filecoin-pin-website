@@ -22,11 +22,12 @@ import { useUploadHistory } from '../../context/upload-history-context.tsx'
 import { useUploadTasks } from '../../context/upload-tasks-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { useDownloadQueue } from '../../hooks/use-download-queue.ts'
+import { useEncryptedPreview } from '../../hooks/use-encrypted-preview.ts'
 import { useFileDeletion } from '../../hooks/use-file-deletion.ts'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { IPFS_CHECK_LIMIT, resetIndexingChecks } from '../../hooks/use-ipfs-indexing.ts'
 import { displayFileName } from '../../lib/filecoin-pin/drive-api.ts'
-import { canPreviewFile } from '../../lib/filecoin-pin/file-links.ts'
+import { canDecryptPreview, canPreviewFile } from '../../lib/filecoin-pin/file-links.ts'
 import { directoryFolders } from '../../lib/local-storage/drive-directory.ts'
 import { hasRemovalProgress, isCopyRemovalScheduled, isDeletionScheduled } from '../../utils/file-deletion.ts'
 import {
@@ -39,6 +40,7 @@ import { blocksFileDeletion, hasStoredCopy } from '../../utils/upload/blocks-fil
 import { canRemoveUpload } from '../../utils/upload/can-remove-upload.ts'
 import { customerStatus, fileStatus } from '../../utils/upload/file-status.ts'
 import { storageCopyTransactionHash } from '../../utils/upload/storage-copy-transaction.ts'
+import { BadgePrivacy } from '../ui/badge-privacy.tsx'
 import { ButtonBase as Button, buttonVariants } from '../ui/button/button-base.tsx'
 import { CopyButton } from '../ui/copy-button.tsx'
 import { BatchDeleteDialog } from './batch-delete-dialog.tsx'
@@ -145,6 +147,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
     synapse,
     storageScope
   )
+  const { openPreview, previewingId } = useEncryptedPreview()
   const [deleteConsent, setDeleteConsent] = useState(false)
   const [showFolders, setShowFolders] = useState(false)
   const directoryError = saveError ?? indexError
@@ -657,8 +660,12 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                           </span>
                         </button>
                         {rowIndicator(file)}
+                        <span className="ml-2 inline-flex align-middle">
+                          <BadgePrivacy file={file} />
+                        </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">{file.fileSize}</td>
+
                       <td className="px-4 py-3 whitespace-nowrap text-xs text-muted">
                         {file.uploadedAt
                           ? file.isDirectory &&
@@ -850,9 +857,12 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
             {selected && (
               <>
                 <div className="text-sm space-y-2">
-                  <p>
-                    {selected.fileSize}
-                    {!selected.upload && ` · ${displayStatus(selected)}`}
+                  <p className="flex flex-wrap items-center gap-1.5">
+                    <span>
+                      {selected.fileSize}
+                      {!selected.upload && ` · ${displayStatus(selected)}`}
+                    </span>
+                    <BadgePrivacy detailed file={selected} />
                   </p>
                   {selected.ipfsIndexed === false &&
                     !selected.deletion &&
@@ -912,7 +922,9 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                           : 'Download'}
                     </Button>
                     {(selected.isDirectory
-                      ? Boolean(selected.cid && selected.pieceCid) && selected.ipfsIndexed !== false
+                      ? Boolean(selected.cid && selected.pieceCid) &&
+                        selected.ipfsIndexed !== false &&
+                        !selected.encrypted
                       : canPreviewFile(selected)) && fileStatus(selected) !== 'Deletion scheduled' ? (
                       <a
                         className={buttonVariants({ variant: 'secondary', size: 'sm' })}
@@ -927,11 +939,30 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                         <Eye aria-hidden="true" size={14} />
                         Preview
                       </a>
+                    ) : canDecryptPreview(selected) && fileStatus(selected) !== 'Deletion scheduled' ? (
+                      <Button
+                        disabled={previewingId !== null}
+                        onClick={() => openPreview(selected)}
+                        size="sm"
+                        title="Decrypts in your browser and opens in a new tab. Nothing is sent anywhere."
+                        variant="secondary"
+                      >
+                        <Eye aria-hidden="true" size={14} />
+                        {previewingId === selected.id ? 'Decrypting…' : 'Preview'}
+                      </Button>
                     ) : (
                       <Button
                         disabled
                         size="sm"
-                        title="Preview is unavailable for imported CAR archives, or until a storage copy is confirmed and announced to the IPFS indexer."
+                        title={
+                          selected.encrypted
+                            ? selected.isDirectory
+                              ? 'Folders have no in-browser preview. Download instead.'
+                              : selected.importedCar
+                                ? 'Imported CAR archives have no in-browser preview. Download instead.'
+                                : 'This file type has no in-browser preview. Download it instead.'
+                            : 'Preview is unavailable for imported CAR archives, or until a storage copy is confirmed and announced to the IPFS indexer.'
+                        }
                         variant="secondary"
                       >
                         <Eye aria-hidden="true" size={14} />

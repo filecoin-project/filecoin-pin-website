@@ -14,12 +14,32 @@ vi.mock('filecoin-pin/core/payments', () => ({
   validateGasRequirement: vi.fn().mockReturnValue({ isValid: true }),
 }))
 
-vi.mock('filecoin-pin/core/upload', () => ({
-  executeUpload: mocks.execute,
-  checkUploadReadiness: vi.fn().mockResolvedValue({ status: 'ready' }),
-}))
+vi.mock('filecoin-pin/core/upload', () => ({ executeUpload: mocks.execute }))
 vi.mock('../lib/filecoin-pin/upload-input.ts', () => ({
   prepareUploadInput: vi.fn().mockResolvedValue({
+    rootCid: { toString: () => 'bafkreigh2akiscaildcgck5x5wqlooqkztdxqv5t5uwmybnv5brkw4zj3m' },
+    carBytes: new Uint8Array([1]),
+  }),
+}))
+// These suites exercise checkpoints/recovery, not the envelope format (covered
+// by use-filecoin-upload.test.ts with real crypto): encryption passes bytes
+// through and the outer root mirrors the inner one, keeping cid assertions stable.
+vi.mock('../lib/filecoin-pin/encryption.ts', async (original) => ({
+  ...(await original<object>()),
+  encryptCar: async (_key: string, _credential: unknown, bytes: Uint8Array) => bytes,
+}))
+vi.mock('../lib/filecoin-pin/encrypted-payload.ts', () => ({
+  wrapCarPayload: async (base: { carBytes: Uint8Array; rootCid: { toString(): string } }) => ({
+    carBytes: base.carBytes,
+    rootCid: base.rootCid.toString(),
+  }),
+  buildEncryptedPayload: async (input: { carBytes: Uint8Array }) => ({
+    carBytes: input.carBytes,
+    rootCid: 'bafkreigh2akiscaildcgck5x5wqlooqkztdxqv5t5uwmybnv5brkw4zj3m',
+  }),
+}))
+vi.mock('filecoin-pin/core/unixfs', () => ({
+  createCarFromFile: async () => ({
     rootCid: { toString: () => 'bafkreigh2akiscaildcgck5x5wqlooqkztdxqv5t5uwmybnv5brkw4zj3m' },
     carBytes: new Uint8Array([1]),
   }),
@@ -53,6 +73,16 @@ const context = {
   addDataSetId: vi.fn(),
   ensurePermissions: vi.fn().mockResolvedValue(undefined),
   debugParams: { providerId: null, dataSetId: null },
+  encryption: {
+    ready: true,
+    sessionPrivateKey: `0x${'1'.repeat(64)}`,
+    credential: {
+      grant: 'mGrant',
+      groupKeyId: `0x${'a'.repeat(32)}`,
+      commitment: `v1.${'b'.repeat(32)}`,
+      owner: scope.slice(4).toLowerCase(),
+    },
+  },
 }
 const hashA = `0x${'a'.repeat(64)}`
 const hashB = `0x${'b'.repeat(64)}`
