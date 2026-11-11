@@ -44,7 +44,6 @@ import { BadgePrivacy } from '../ui/badge-privacy.tsx'
 import { ButtonBase as Button, buttonVariants } from '../ui/button/button-base.tsx'
 import { CopyButton } from '../ui/copy-button.tsx'
 import { BatchDeleteDialog } from './batch-delete-dialog.tsx'
-import { DirectoryBrowser } from './directory-browser.tsx'
 import { FileTypeIcon } from './file-type-icon.tsx'
 import { FileUploadDetails } from './file-upload-details.tsx'
 import { FolderInfo } from './folder-info.tsx'
@@ -84,24 +83,15 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
   const connection = useBrowserWallet()
   const [search, setSearch] = useState('')
   const { sort, toggleSort } = useFileSort({ key: 'uploaded', direction: 'desc' })
-  const { sort: directorySort, toggleSort: toggleDirectorySort } = useFileSort()
   const [sessionHintAttempt, setSessionHintAttempt] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedFileIds, setSelectedFileIds] = useState<ReadonlySet<string>>(new Set())
   const [batchRemoveOpen, setBatchRemoveOpen] = useState(false)
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
-  const [directoryId, setDirectoryId] = useState<string | null>(null)
-  const openDirectory = (id: string) => {
-    setSelectedFileIds(new Set())
-    setShowFolders(false)
-    setDirectoryId(id)
-    setSearch('')
-  }
   const onFolderChange = (path: string) => {
     setSelectedFileIds(new Set())
     setShowFolders(false)
     setSearch('')
-    setDirectoryId(null)
     setFolderPath(path)
   }
   const [error, setError] = useState('')
@@ -154,7 +144,6 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
   const visibleHistory = history.filter((file) => !isDeletionScheduled(file))
   const waitingForIndex = isLoading || (!hasLoaded && !directoryError)
   const allFolders = directoryFolders(visibleHistory, [])
-  const openedDirectory = visibleHistory.find((file) => file.id === directoryId && file.isDirectory)
   const uploadedFolders = visibleHistory.filter((file) => file.isDirectory)
   const uploadTasks = useUploadTasks()
   const activeFiles = visibleHistory.filter(
@@ -188,8 +177,8 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
         .map((path) => (
           <Fragment key={path}>
             <button
-              aria-current={!directoryId && folder === path ? 'page' : undefined}
-              className={`flex w-full items-center gap-2.5 rounded-lg py-2.5 pr-2 text-left text-sm transition-colors ${!directoryId && folder === path ? 'bg-brand-800/15 text-accent' : 'text-muted hover:bg-surface-raised hover:text-foreground'}`}
+              aria-current={folder === path ? 'page' : undefined}
+              className={`flex w-full items-center gap-2.5 rounded-lg py-2.5 pr-2 text-left text-sm transition-colors ${folder === path ? 'bg-brand-800/15 text-accent' : 'text-muted hover:bg-surface-raised hover:text-foreground'}`}
               onClick={() => onFolderChange(path)}
               style={{ paddingLeft: 12 + depth * 16 }}
               title={path}
@@ -201,31 +190,6 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
             </button>
             {renderFolderTree(path, depth + 1)}
           </Fragment>
-        ))}
-      {uploadedFolders
-        .filter((file) => (file.folderPath ?? '') === parent)
-        .map((file) => (
-          <button
-            aria-current={directoryId === file.id ? 'page' : undefined}
-            className={`flex w-full items-center gap-2.5 rounded-lg py-2.5 pr-2 text-left text-sm transition-colors ${directoryId === file.id ? 'bg-brand-800/15 text-accent' : 'text-muted hover:bg-surface-raised hover:text-foreground'}`}
-            disabled={!file.cid}
-            key={file.id}
-            onClick={() => openDirectory(file.id)}
-            style={{ paddingLeft: 12 + depth * 16 }}
-            title={[file.folderPath, displayFileName(file)].filter(Boolean).join('/')}
-            type="button"
-          >
-            <FolderUp aria-hidden="true" className="shrink-0" size={16} />
-            <span className="truncate">{displayFileName(file)}</span>
-            {activityIndicator(activeFiles.some((active) => active.id === file.id))}
-            {uploadedFolders.some(
-              (other) => other.id !== file.id && other.fileName === file.fileName && (other.folderPath ?? '') === parent
-            ) && (
-              <span className="ml-auto shrink-0 text-[10px]">
-                {file.uploadedAt ? new Date(file.uploadedAt).toLocaleTimeString() : 'Unknown'}
-              </span>
-            )}
-          </button>
         ))}
     </>
   )
@@ -393,14 +357,14 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
               size={15}
             />
-            <span className="sr-only">{openedDirectory ? 'Search this folder' : 'Search file list'}</span>
+            <span className="sr-only">Search file list</span>
             <input
               className="drive-field h-10 w-full pl-9 pr-3 text-xs"
               onChange={(event) => {
                 setSelectedFileIds(new Set())
                 setSearch(event.target.value)
               }}
-              placeholder={openedDirectory ? 'Search this folder' : 'Search file list'}
+              placeholder="Search file list"
               type="search"
               value={search}
             />
@@ -410,7 +374,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
               aria-label="Upload files"
               className="w-auto"
               disabled={isEditing || connection.busy || (uploadDisabled ?? connection.uploading)}
-              onClick={() => onUpload?.(openedDirectory ? '' : folder)}
+              onClick={() => onUpload?.(folder)}
               size="sm"
             >
               <Upload aria-hidden="true" size={14} />
@@ -512,9 +476,9 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
             className={`${showFolders ? 'block' : 'hidden'} max-h-40 overflow-y-auto md:block md:max-h-none md:overflow-visible`}
           >
             <button
-              aria-current={!directoryId && folder === '' ? 'page' : undefined}
+              aria-current={folder === '' ? 'page' : undefined}
               aria-label="Files (root)"
-              className={`flex w-full items-center gap-2.5 rounded-lg p-2.5 text-left text-sm transition-colors ${!directoryId && folder === '' ? 'bg-brand-800/15 text-accent' : 'text-muted hover:bg-surface-raised hover:text-foreground'}`}
+              className={`flex w-full items-center gap-2.5 rounded-lg p-2.5 text-left text-sm transition-colors ${folder === '' ? 'bg-brand-800/15 text-accent' : 'text-muted hover:bg-surface-raised hover:text-foreground'}`}
               onClick={() => onFolderChange('')}
               type="button"
             >
@@ -528,242 +492,221 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
             </div>
           </div>
         </nav>
-        {openedDirectory ? (
-          <DirectoryBrowser
-            activeDownloadId={download?.id}
-            downloadBlocked={downloadBlocked}
-            file={openedDirectory}
-            isQueued={isQueued}
-            key={openedDirectory.id}
-            onDownload={downloadOriginal}
-            onFolderChange={onFolderChange}
-            onSearchChange={setSearch}
-            search={search}
-            sort={directorySort}
-            toggleSort={toggleDirectorySort}
-          />
-        ) : (
-          <div className="flex min-h-0 min-w-0 flex-col">
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
-              <div className="flex min-w-0 flex-wrap items-center gap-3">
-                <nav aria-label="Current folder" className="flex flex-wrap items-center gap-2 text-sm">
-                  <button className="text-muted hover:text-accent" onClick={() => onFolderChange('')} type="button">
-                    Files
-                  </button>
-                  {folder
-                    .split('/')
-                    .filter(Boolean)
-                    .map((part, index, parts) => (
-                      <span className="flex gap-2" key={parts.slice(0, index + 1).join('/')}>
-                        <ChevronRight aria-hidden="true" className="self-center text-muted" size={13} />
-                        <button
-                          className="hover:text-accent"
-                          onClick={() => onFolderChange(parts.slice(0, index + 1).join('/'))}
-                          type="button"
-                        >
-                          {part}
-                        </button>
-                      </span>
-                    ))}
-                </nav>
-              </div>
+        <div className="flex min-h-0 min-w-0 flex-col">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <nav aria-label="Current folder" className="flex flex-wrap items-center gap-2 text-sm">
+                <button className="text-muted hover:text-accent" onClick={() => onFolderChange('')} type="button">
+                  Files
+                </button>
+                {folder
+                  .split('/')
+                  .filter(Boolean)
+                  .map((part, index, parts) => (
+                    <span className="flex gap-2" key={parts.slice(0, index + 1).join('/')}>
+                      <ChevronRight aria-hidden="true" className="self-center text-muted" size={13} />
+                      <button
+                        className="hover:text-accent"
+                        onClick={() => onFolderChange(parts.slice(0, index + 1).join('/'))}
+                        type="button"
+                      >
+                        {part}
+                      </button>
+                    </span>
+                  ))}
+              </nav>
             </div>
-            <section
-              aria-busy={isLoading}
-              aria-label="Files list"
-              className="drive-file-list"
-              key={`${folder}:${search}`}
-            >
-              <table className={`${files.length || children.length ? 'min-w-[560px]' : ''} w-full text-left text-sm`}>
-                <thead className="text-xs text-muted">
-                  <tr>
-                    <th className="w-12 px-2 py-2">
-                      <label className="flex h-8 w-8 cursor-pointer items-center justify-center">
-                        <input
-                          aria-label="Select all files in this list"
-                          checked={selectableFiles.length > 0 && selectedFiles.length === selectableFiles.length}
-                          className="drive-selection-checkbox"
-                          disabled={!selectableFiles.length}
-                          onChange={() =>
-                            setSelectedFileIds(
-                              selectedFiles.length === selectableFiles.length
-                                ? new Set()
-                                : new Set(selectableFiles.map((file) => file.id))
-                            )
-                          }
-                          ref={(input) => {
-                            if (input)
-                              input.indeterminate =
-                                selectedFiles.length > 0 && selectedFiles.length < selectableFiles.length
-                          }}
-                          type="checkbox"
-                        />
-                      </label>
-                    </th>
-                    <SortHeading column="name" label="Name" onSort={toggleSort} sort={sort} />
-                    <SortHeading column="size" label="Size" onSort={toggleSort} sort={sort} />
-                    <SortHeading column="uploaded" label="Uploaded" onSort={toggleSort} sort={sort} />
-                    <th className="px-4 py-2 font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {!search &&
-                    children.map((path) => (
-                      <tr className="border-t border-border" key={path}>
-                        <td className="px-4 py-3" />
-                        <td className="px-4 py-3 whitespace-nowrap" colSpan={4}>
-                          <button
-                            className="inline-flex items-center gap-2 align-middle text-left hover:underline"
-                            onClick={() => onFolderChange(path)}
-                            type="button"
-                          >
-                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-800/10 text-accent">
-                              <Folder aria-hidden="true" size={16} />
-                            </span>
-                            {path.split('/').at(-1)}
-                            {activityIndicator(activeFolders.has(path))}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  {files.map((file) => (
-                    <tr className="border-t border-border hover:bg-surface" key={file.id}>
-                      <td className="px-2 py-3">
-                        <label className="flex h-8 w-8 cursor-pointer items-center justify-center">
-                          <input
-                            aria-label={`Select ${displayFileName(file)}`}
-                            checked={selectedFileIds.has(file.id) && canSelect(file)}
-                            className="drive-selection-checkbox"
-                            disabled={!canSelect(file)}
-                            onChange={() => toggleSelection(file)}
-                            type="checkbox"
-                          />
-                        </label>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
+          </div>
+          <section
+            aria-busy={isLoading}
+            aria-label="Files list"
+            className="drive-file-list"
+            key={`${folder}:${search}`}
+          >
+            <table className={`${files.length || children.length ? 'min-w-[560px]' : ''} w-full text-left text-sm`}>
+              <thead className="text-xs text-muted">
+                <tr>
+                  <th className="w-12 px-2 py-2">
+                    <label className="flex h-8 w-8 cursor-pointer items-center justify-center">
+                      <input
+                        aria-label="Select all files in this list"
+                        checked={selectableFiles.length > 0 && selectedFiles.length === selectableFiles.length}
+                        className="drive-selection-checkbox"
+                        disabled={!selectableFiles.length}
+                        onChange={() =>
+                          setSelectedFileIds(
+                            selectedFiles.length === selectableFiles.length
+                              ? new Set()
+                              : new Set(selectableFiles.map((file) => file.id))
+                          )
+                        }
+                        ref={(input) => {
+                          if (input)
+                            input.indeterminate =
+                              selectedFiles.length > 0 && selectedFiles.length < selectableFiles.length
+                        }}
+                        type="checkbox"
+                      />
+                    </label>
+                  </th>
+                  <SortHeading column="name" label="Name" onSort={toggleSort} sort={sort} />
+                  <SortHeading column="size" label="Size" onSort={toggleSort} sort={sort} />
+                  <SortHeading column="uploaded" label="Uploaded" onSort={toggleSort} sort={sort} />
+                  <th className="px-4 py-2 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!search &&
+                  children.map((path) => (
+                    <tr className="border-t border-border" key={path}>
+                      <td className="px-4 py-3" />
+                      <td className="px-4 py-3 whitespace-nowrap" colSpan={4}>
                         <button
-                          aria-label={displayFileName(file)}
                           className="inline-flex items-center gap-2 align-middle text-left hover:underline"
-                          onClick={() => (file.isDirectory && file.cid ? openDirectory(file.id) : choose(file))}
+                          onClick={() => onFolderChange(path)}
                           type="button"
                         >
-                          {file.isDirectory ? (
-                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-800/10 text-accent">
-                              <FolderUp aria-hidden="true" size={16} />
-                            </span>
-                          ) : (
-                            <FileTypeIcon fileName={file.fileName} importedCar={file.importedCar} />
-                          )}
-                          <span className="max-w-[260px] truncate">
-                            {search && file.folderPath ? `${file.folderPath}/` : ''}
-                            {displayFileName(file)}
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-800/10 text-accent">
+                            <Folder aria-hidden="true" size={16} />
                           </span>
+                          {path.split('/').at(-1)}
+                          {activityIndicator(activeFolders.has(path))}
                         </button>
-                        {rowIndicator(file)}
-                        <span className="ml-2 inline-flex align-middle">
-                          <BadgePrivacy file={file} />
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">{file.fileSize}</td>
-
-                      <td className="px-4 py-3 whitespace-nowrap text-xs text-muted">
-                        {file.uploadedAt
-                          ? file.isDirectory &&
-                            uploadedFolders.some(
-                              (other) =>
-                                other.id !== file.id &&
-                                other.fileName === file.fileName &&
-                                other.folderPath === file.folderPath
-                            )
-                            ? new Date(file.uploadedAt).toLocaleString()
-                            : new Date(file.uploadedAt).toLocaleDateString()
-                          : 'Unknown'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-4">
-                          <button
-                            aria-label={
-                              isQueued(file.id) ? `Cancel queued download for ${displayFileName(file)}` : undefined
-                            }
-                            className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent disabled:opacity-40"
-                            disabled={downloadBlocked(file)}
-                            onClick={() => downloadOriginal(file)}
-                            type="button"
-                          >
-                            {download?.id === file.id ? (
-                              <Loader2 aria-hidden="true" className="animate-spin" size={14} />
-                            ) : isQueued(file.id) ? (
-                              <X aria-hidden="true" size={14} />
-                            ) : (
-                              <Download aria-hidden="true" size={14} />
-                            )}
-                            {download?.id === file.id
-                              ? 'Downloading…'
-                              : isQueued(file.id)
-                                ? 'Queued · Cancel'
-                                : file.isDirectory
-                                  ? 'Download ZIP'
-                                  : 'Download'}
-                          </button>
-                          <ShareFileButton disabled={deletingPieceCids.has(file.pieceCid)} file={file} />
-                          <button
-                            aria-label="Details"
-                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-raised hover:text-foreground"
-                            onClick={() => choose(file)}
-                            title="File details"
-                            type="button"
-                          >
-                            <MoreHorizontal aria-hidden="true" size={18} />
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   ))}
-                  {files.length === 0 && (search || children.length === 0) && (
-                    <tr>
-                      <td className="px-5 py-16 text-center text-muted" colSpan={5}>
-                        <span
-                          aria-hidden="true"
-                          className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-canvas/40 text-accent"
-                        >
-                          <FolderOpen size={24} />
-                        </span>
-                        <p className="mb-2 text-sm font-medium text-foreground">
-                          {waitingForIndex
-                            ? 'Loading your files…'
-                            : directoryError && !visibleHistory.length
-                              ? 'Unable to load your files'
-                              : search
-                                ? 'No matching files.'
-                                : 'A little space for something new'}
-                        </p>
-                        <p className="text-xs">
-                          {waitingForIndex
-                            ? 'This can take a moment.'
-                            : directoryError && !visibleHistory.length
-                              ? 'Your files are safe. Retry loading the file list.'
-                              : search
-                                ? 'Try a different file name or folder.'
-                                : 'No files here yet. Upload to this folder.'}
-                        </p>
-                        {directoryError && !visibleHistory.length && !isLoading && (
-                          <Button
-                            className="mt-4 w-auto"
-                            onClick={() => refreshHistory()}
-                            size="sm"
-                            variant="secondary"
-                          >
-                            Retry loading
-                          </Button>
+                {files.map((file) => (
+                  <tr className="border-t border-border hover:bg-surface" key={file.id}>
+                    <td className="px-2 py-3">
+                      <label className="flex h-8 w-8 cursor-pointer items-center justify-center">
+                        <input
+                          aria-label={`Select ${displayFileName(file)}`}
+                          checked={selectedFileIds.has(file.id) && canSelect(file)}
+                          className="drive-selection-checkbox"
+                          disabled={!canSelect(file)}
+                          onChange={() => toggleSelection(file)}
+                          type="checkbox"
+                        />
+                      </label>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <button
+                        aria-label={displayFileName(file)}
+                        className="inline-flex items-center gap-2 align-middle text-left hover:underline"
+                        onClick={() => choose(file)}
+                        type="button"
+                      >
+                        {file.isDirectory ? (
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-800/10 text-accent">
+                            <FolderUp aria-hidden="true" size={16} />
+                          </span>
+                        ) : (
+                          <FileTypeIcon fileName={file.fileName} importedCar={file.importedCar} />
                         )}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </section>
-          </div>
-        )}
+                        <span className="max-w-[260px] truncate">
+                          {search && file.folderPath ? `${file.folderPath}/` : ''}
+                          {displayFileName(file)}
+                        </span>
+                      </button>
+                      {rowIndicator(file)}
+                      <span className="ml-2 inline-flex align-middle">
+                        <BadgePrivacy file={file} />
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">{file.fileSize}</td>
+
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-muted">
+                      {file.uploadedAt
+                        ? file.isDirectory &&
+                          uploadedFolders.some(
+                            (other) =>
+                              other.id !== file.id &&
+                              other.fileName === file.fileName &&
+                              other.folderPath === file.folderPath
+                          )
+                          ? new Date(file.uploadedAt).toLocaleString()
+                          : new Date(file.uploadedAt).toLocaleDateString()
+                        : 'Unknown'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-4">
+                        <button
+                          aria-label={
+                            isQueued(file.id) ? `Cancel queued download for ${displayFileName(file)}` : undefined
+                          }
+                          className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent disabled:opacity-40"
+                          disabled={downloadBlocked(file)}
+                          onClick={() => downloadOriginal(file)}
+                          type="button"
+                        >
+                          {download?.id === file.id ? (
+                            <Loader2 aria-hidden="true" className="animate-spin" size={14} />
+                          ) : isQueued(file.id) ? (
+                            <X aria-hidden="true" size={14} />
+                          ) : (
+                            <Download aria-hidden="true" size={14} />
+                          )}
+                          {download?.id === file.id
+                            ? 'Downloading…'
+                            : isQueued(file.id)
+                              ? 'Queued · Cancel'
+                              : file.isDirectory
+                                ? 'Download ZIP'
+                                : 'Download'}
+                        </button>
+                        <ShareFileButton disabled={deletingPieceCids.has(file.pieceCid)} file={file} />
+                        <button
+                          aria-label="Details"
+                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-raised hover:text-foreground"
+                          onClick={() => choose(file)}
+                          title="File details"
+                          type="button"
+                        >
+                          <MoreHorizontal aria-hidden="true" size={18} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {files.length === 0 && (search || children.length === 0) && (
+                  <tr>
+                    <td className="px-5 py-16 text-center text-muted" colSpan={5}>
+                      <span
+                        aria-hidden="true"
+                        className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-canvas/40 text-accent"
+                      >
+                        <FolderOpen size={24} />
+                      </span>
+                      <p className="mb-2 text-sm font-medium text-foreground">
+                        {waitingForIndex
+                          ? 'Loading your files…'
+                          : directoryError && !visibleHistory.length
+                            ? 'Unable to load your files'
+                            : search
+                              ? 'No matching files.'
+                              : 'A little space for something new'}
+                      </p>
+                      <p className="text-xs">
+                        {waitingForIndex
+                          ? 'This can take a moment.'
+                          : directoryError && !visibleHistory.length
+                            ? 'Your files are safe. Retry loading the file list.'
+                            : search
+                              ? 'Try a different file name or folder.'
+                              : 'No files here yet. Upload to this folder.'}
+                      </p>
+                      {directoryError && !visibleHistory.length && !isLoading && (
+                        <Button className="mt-4 w-auto" onClick={() => refreshHistory()} size="sm" variant="secondary">
+                          Retry loading
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </section>
+        </div>
       </div>
       <SidePanel
         description="Cancel queued uploads and remove these local records. Stored files are not deleted."
@@ -864,6 +807,12 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                     </span>
                     <BadgePrivacy detailed file={selected} />
                   </p>
+                  {selected.encrypted && selected.isDirectory && (
+                    <p className="rounded-lg border border-warning-border bg-warning-surface p-3 text-sm text-warning">
+                      Preview and Share grant access to the entire uploaded folder, including all files and subfolders.
+                      Anyone with the link can read them. Access cannot be revoked.
+                    </p>
+                  )}
                   {selected.ipfsIndexed === false &&
                     !selected.deletion &&
                     (!selected.upload || selected.upload.phase === 'complete') &&

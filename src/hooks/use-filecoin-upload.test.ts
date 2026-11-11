@@ -21,7 +21,6 @@ const {
   createContextsMock,
   prepareMock,
   dataSetLiveMock,
-  cacheDirectoryUploadMock,
 } = vi.hoisted(() => ({
   executeUploadMock: vi.fn(),
   prepareUploadInputMock: vi.fn(),
@@ -30,7 +29,6 @@ const {
   createContextsMock: vi.fn(),
   prepareMock: vi.fn(),
   dataSetLiveMock: vi.fn(),
-  cacheDirectoryUploadMock: vi.fn(),
 }))
 
 vi.mock('../lib/filecoin-pin/storage-chain.ts', () => ({ assertCurrentStorageChain: vi.fn() }))
@@ -70,7 +68,6 @@ vi.mock('../lib/filecoin-pin/fresh-contexts.ts', () => ({
 }))
 
 vi.mock('../lib/filecoin-pin/directory.ts', () => ({
-  cacheDirectoryUpload: cacheDirectoryUploadMock,
   zipDirectory: vi.fn(),
 }))
 
@@ -841,7 +838,7 @@ describe('useFilecoinUpload encrypts by default', () => {
     expect(executeUploadMock).toHaveBeenCalledOnce()
   })
 
-  it('caches directory uploads under the outer root with the plaintext inner CAR', async () => {
+  it('marks directory uploads in the label without changing the payload name or adding metadata keys', async () => {
     useFilecoinPinContextMock.mockReturnValue(baseContext)
     prepareUploadInputMock.mockResolvedValue({
       rootCid: baseCar.rootCid,
@@ -852,7 +849,6 @@ describe('useFilecoinUpload encrypts by default', () => {
     await act(async () => {
       await result.current.uploadFile(testFile)
     })
-    const outerRoot = String(executeUploadMock.mock.lastCall?.[2])
-    expect(cacheDirectoryUploadMock).toHaveBeenCalledWith(baseCar.carBytes, outerRoot)
+    expect(executeUploadMock.mock.lastCall?.[3].pieceMetadata).toEqual({ label: `${testFile.name}/`, path: '' })
   })
 })

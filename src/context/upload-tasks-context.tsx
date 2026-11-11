@@ -180,7 +180,7 @@ export function UploadTasksProvider({ children }: { children: ReactNode }) {
       let releasePrevious: (() => Promise<void>) | undefined
       try {
         folder = normalizeFolder(folder)
-        for (const file of files) validateDriveMetadata(file.name, folder)
+        for (const file of files) validateDriveMetadata(file.name, folder, isDirectoryUpload(file))
         if (replaceId) releasePrevious = await acquireContentLock(`${storageScope}:upload-task`, replaceId)
         for (const job of added) {
           job.folder = folder
