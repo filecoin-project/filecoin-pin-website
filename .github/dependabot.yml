@@ -22,6 +22,7 @@ updates:
           - "filecoin-pin"
           - "@filoz/*"
       all-other-dependencies:
+        update-types: ["minor", "patch"]
         patterns:
           - "*"
         exclude-patterns:
