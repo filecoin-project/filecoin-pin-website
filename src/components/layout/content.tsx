@@ -64,6 +64,11 @@ export default function Content() {
           )}
         </Button>
       </div>
+      <Alert
+        description="Uploaded files are public. Anyone with the CID can view their content. Encryption support is coming soon."
+        message="Filecoin Drive is in beta."
+        variant="info"
+      />
       {connection.network === 'calibration' && (
         <p className="text-xs text-muted">Calibration is a test network. Data and infrastructure may reset.</p>
       )}
