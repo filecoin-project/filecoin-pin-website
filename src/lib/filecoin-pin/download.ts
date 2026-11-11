@@ -33,6 +33,7 @@ export type DownloadStage = 'downloading' | 'preparing' | 'unlocking'
 export type DecryptCredentials = {
   session?: { privateKey: Hex; credential: EncryptionCredential }
   ownerSigner?: () => Promise<OwnerSigner | undefined> | OwnerSigner | undefined
+  /** Target-group commitment when no session is supplied; session commitments are matched to envelope labels. */
   commitment?: string
 }
 
@@ -199,12 +200,26 @@ function isIntegrityError(cause: unknown): boolean {
   )
 }
 
+/** A session's commitment is valid only for its own owner and group key. */
+function commitmentForEnvelope(credentials: DecryptCredentials, labels: Record<string, unknown> | undefined) {
+  const credential = credentials.session?.credential
+  if (!credential) return credentials.commitment
+  const owner = labels?.['foc/own']
+  return typeof owner === 'string' &&
+    owner.toLowerCase() === credential.owner.toLowerCase() &&
+    labels?.['foc/ks'] === credential.groupKeyId
+    ? credential.commitment
+    : undefined
+}
+
 /** Grant first (silent), owner wallet second ('unlocking' — may prompt a signature). */
-async function decryptWithCredentials(
+export async function decryptWithCredentials(
   envelope: Uint8Array,
   credentials: DecryptCredentials,
-  onStage?: (stage: DownloadStage) => void
+  onStage?: (stage: DownloadStage) => void,
+  signal?: AbortSignal
 ): Promise<Uint8Array> {
+  signal?.throwIfAborted()
   if (credentials.session) {
     try {
       return await decryptEnvelope(
@@ -214,16 +229,21 @@ async function decryptWithCredentials(
     } catch (cause) {
       // A stale or foreign grant leaves the owner wallet as the way in;
       // tampered or truncated ciphertext does not.
+      signal?.throwIfAborted()
       if (isIntegrityError(cause)) throw cause
     }
   }
+  signal?.throwIfAborted()
   onStage?.('unlocking')
   const signer = await credentials.ownerSigner?.()
+  signal?.throwIfAborted()
+  const info = await fee.parse(envelope)
+  signal?.throwIfAborted()
   // One signature serves the whole page session: later decrypts under the
   // same group key reuse the remembered key with no further prompts.
   return decryptEnvelope(
     envelope,
-    ownerKeyResolver(() => signer, credentials.commitment, { remember: true })
+    ownerKeyResolver(() => signer, commitmentForEnvelope(credentials, info.appMetadata), { remember: true, signal })
   )
 }
 
@@ -329,7 +349,7 @@ export async function encryptedPieceShareLink(
     try {
       return await createShareLink({
         sender: { sessionPrivateKey: credentials.session.privateKey, credential: credentials.session.credential },
-        rootCid: file.cid,
+        rootCid: file.directoryEntry?.rootCid ?? file.cid,
         appMetadata,
       })
     } catch {
@@ -339,8 +359,8 @@ export async function encryptedPieceShareLink(
   const signer = await credentials.ownerSigner?.()
   if (!signer) throw new Error('Connect the wallet that owns this file to share it.')
   return createShareLink({
-    sender: { signer, commitment: credentials.commitment },
-    rootCid: file.cid,
+    sender: { signer, commitment: commitmentForEnvelope(credentials, appMetadata) },
+    rootCid: file.directoryEntry?.rootCid ?? file.cid,
     appMetadata,
   })
 }

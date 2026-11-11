@@ -1,5 +1,6 @@
 import { ChevronRight, Download, Eye, Folder, Loader2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { useEncryptedPreview } from '../../hooks/use-encrypted-preview.ts'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
@@ -50,7 +51,10 @@ export function DirectoryBrowser({
   const [attempt, setAttempt] = useState(0)
   const [page, setPage] = useState<{ items: DirectoryItem[]; hasMore: boolean; cid: string } | null>(null)
   const [error, setError] = useState('')
-  const { encryption } = useFilecoinPinContext()
+  const { encryption, storageScope } = useFilecoinPinContext()
+  const { ownerSigner } = useBrowserWallet()
+  const [unlocking, setUnlocking] = useState(false)
+  const unlockTask = useRef<AbortController | null>(null)
   const { openPreview, previewingId } = useEncryptedPreview()
   const sources = JSON.stringify({
     cid: file.cid,
@@ -64,11 +68,38 @@ export function DirectoryBrowser({
   })
   const [session, setSession] = useState<{ controller: AbortController; reader: ContentReader } | null>(null)
   useEffect(() => {
+    void storageScope
     const controller = new AbortController()
     const credentials = decryptCredentials(encryption)
+    setUnlocking(false)
     setSession({ controller, reader: contentReader(JSON.parse(sources), controller.signal, false, credentials) })
-    return () => controller.abort()
-  }, [sources, encryption])
+    return () => {
+      controller.abort()
+      unlockTask.current?.abort()
+      unlockTask.current = null
+    }
+  }, [sources, encryption, storageScope])
+  const unlockFolder = async () => {
+    if (!storageScope || (unlockTask.current && !unlockTask.current.signal.aborted)) return
+    const controller = new AbortController()
+    unlockTask.current = controller
+    setUnlocking(true)
+    try {
+      const credentials = decryptCredentials(encryption, ownerSigner)
+      const reader = contentReader(JSON.parse(sources), controller.signal, false, credentials)
+      // Explicitly unlock once; later listings reuse this reader without retaining signing consent.
+      await reader.entry()
+      controller.signal.throwIfAborted()
+      setSession({ controller, reader })
+    } catch (cause) {
+      if (!controller.signal.aborted) {
+        setError(cause instanceof Error ? cause.message : 'Unable to unlock folder.')
+        controller.abort()
+      }
+    } finally {
+      if (unlockTask.current === controller) setUnlocking(false)
+    }
+  }
   useEffect(() => {
     void search
     setOffset(0)
@@ -189,7 +220,26 @@ export function DirectoryBrowser({
             <p className="text-sm text-warning" role="alert">
               {error}
             </p>
-            <Button className="w-auto" onClick={() => setAttempt((value) => value + 1)} size="sm" variant="secondary">
+            {file.encrypted && (
+              <div className="space-y-2">
+                <p className="text-sm text-muted">Unlock with your wallet to browse this folder.</p>
+                <Button
+                  className="w-auto"
+                  disabled={unlocking || !storageScope}
+                  onClick={() => void unlockFolder()}
+                  size="sm"
+                >
+                  {unlocking ? 'Unlocking…' : 'Unlock folder'}
+                </Button>
+              </div>
+            )}
+            <Button
+              className="w-auto"
+              disabled={unlocking}
+              onClick={() => setAttempt((value) => value + 1)}
+              size="sm"
+              variant="secondary"
+            >
               Retry loading folder
             </Button>
           </div>

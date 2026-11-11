@@ -253,6 +253,68 @@ describe('ownerKeyResolver (root-wallet fallback)', () => {
   })
 })
 
+describe('cancelled owner derivations', () => {
+  it.each(['abort first', 'abort last', 'wallet first', 'wallet last'] as const)(
+    'does not continue signing or cache keys after %s',
+    async (mode) => {
+      clearRememberedOwnerKeys()
+      const privateKey = generatePrivateKey()
+      const credential = await issueEncryptionCredential(ownerSigner(), privateKey)
+      const envelope = await encryptCar(privateKey, credential, innerCar)
+      const controller = new AbortController()
+      const wallet = ownerSigner()
+      const stopAt = mode.endsWith('first') ? 1 : 2
+      const guarded: OwnerSigner = {
+        address: wallet.address,
+        signTypedData: async (args) => {
+          const result = await wallet.signTypedData(args)
+          if (wallet.signatures() === stopAt) {
+            if (mode.startsWith('abort')) controller.abort()
+            else clearRememberedOwnerKeys()
+          }
+          return result
+        },
+      }
+      await expect(
+        decryptEnvelope(
+          envelope,
+          ownerKeyResolver(guarded, undefined, {
+            remember: true,
+            signal: controller.signal,
+          })
+        )
+      ).rejects.toMatchObject({ name: 'AbortError' })
+      expect(wallet.signatures()).toBe(stopAt)
+      // No cancelled key remains in the page cache: a fresh owner must sign again.
+      const fresh = ownerSigner()
+      expect(
+        await decryptEnvelope(envelope, ownerKeyResolver(fresh, credential.commitment, { remember: true }))
+      ).toEqual(innerCar)
+      expect(fresh.signatures()).toBe(1)
+      clearRememberedOwnerKeys()
+    }
+  )
+
+  it('does not prompt when the task is already aborted', async () => {
+    const privateKey = generatePrivateKey()
+    const credential = await issueEncryptionCredential(ownerSigner(), privateKey)
+    const envelope = await encryptCar(privateKey, credential, innerCar)
+    const controller = new AbortController()
+    controller.abort()
+    const wallet = ownerSigner()
+    await expect(
+      decryptEnvelope(
+        envelope,
+        ownerKeyResolver(wallet, undefined, {
+          remember: true,
+          signal: controller.signal,
+        })
+      )
+    ).rejects.toMatchObject({ name: 'AbortError' })
+    expect(wallet.signatures()).toBe(0)
+  })
+})
+
 describe('createShareLink', () => {
   const rootCid = 'bafkreig4nl6nqu64xpwqfimx5bwhcntmpbgbjnly7dzs6u6zkeqfkimtfe'
 
@@ -266,6 +328,28 @@ describe('createShareLink', () => {
     const link = await createShareLink({ sender: { sessionPrivateKey, credential }, rootCid, appMetadata })
     return { sessionPrivateKey, credential, envelope, appMetadata, link }
   }
+
+  it.each([1, 2])('discards an owner share when the wallet changes after signature %s', async (stopAt) => {
+    clearRememberedOwnerKeys()
+    const { appMetadata } = await shared()
+    const wallet = ownerSigner()
+    const signer: OwnerSigner = {
+      address: wallet.address,
+      signTypedData: async (args) => {
+        const signature = await wallet.signTypedData(args)
+        if (wallet.signatures() === stopAt) clearRememberedOwnerKeys()
+        return signature
+      },
+    }
+    await expect(createShareLink({ sender: { signer }, rootCid, appMetadata })).rejects.toMatchObject({
+      name: 'AbortError',
+    })
+    expect(wallet.signatures()).toBe(stopAt)
+    const fresh = ownerSigner()
+    await expect(createShareLink({ sender: { signer: fresh }, rootCid, appMetadata })).resolves.toContain('#v1/')
+    expect(fresh.signatures()).toBe(2)
+    clearRememberedOwnerKeys()
+  })
 
   it('mints a filecoin-pin v1 share link whose fragment alone opens the upload', async () => {
     const { envelope, appMetadata, link } = await shared()
