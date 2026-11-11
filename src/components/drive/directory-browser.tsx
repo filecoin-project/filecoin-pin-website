@@ -12,7 +12,7 @@ import {
 } from '../../lib/filecoin-pin/directory.ts'
 import { decryptCredentials } from '../../lib/filecoin-pin/download.ts'
 import { displayFileName } from '../../lib/filecoin-pin/drive-api.ts'
-import { canDecryptPreview, canPreviewFile } from '../../lib/filecoin-pin/file-links.ts'
+import { canPreviewEncryptedFile, canPreviewFile } from '../../lib/filecoin-pin/file-links.ts'
 import { type ContentReader, contentReader } from '../../lib/filecoin-pin/ipfs-content.ts'
 import { formatFileSize } from '../../utils/format-file-size.ts'
 import { getIpfsGatewayPreviewLink } from '../../utils/links.ts'
@@ -55,7 +55,7 @@ export function DirectoryBrowser({
   const { ownerSigner } = useBrowserWallet()
   const [unlocking, setUnlocking] = useState(false)
   const unlockTask = useRef<AbortController | null>(null)
-  const { openPreview, previewingId } = useEncryptedPreview()
+  const { preparePreview, previewingId, getPreviewLink } = useEncryptedPreview()
   const sources = JSON.stringify({
     cid: file.cid,
     serviceURL: file.serviceURL,
@@ -209,6 +209,12 @@ export function DirectoryBrowser({
           <ShareFileButton disabled={Boolean(path) && !page} file={currentFolder} variant="button" />
         </div>
       </div>
+      {file.encrypted && (
+        <p className="border-b border-warning-border bg-warning-surface px-5 py-3 text-sm text-warning">
+          Preview and Share grant access to the entire uploaded folder, including all files and subfolders. Anyone with
+          the link can read them. Access cannot be revoked.
+        </p>
+      )}
       <section aria-label="Files list" className="drive-file-list" key={`${path}:${search}:${offset}`}>
         {!page && !error && (
           <p className="flex items-center gap-2 p-6 text-sm text-muted" role="status">
@@ -269,7 +275,7 @@ export function DirectoryBrowser({
                 .map((item) => {
                   const child = selection(item)
                   const preview = !item.isDirectory && canPreviewFile(child)
-                  const decryptPreview = !item.isDirectory && canDecryptPreview(child)
+                  const decryptPreview = !item.isDirectory && canPreviewEncryptedFile(child)
                   return (
                     <tr className="border-t border-border hover:bg-surface" key={item.path}>
                       <td className="pl-16 pr-4 py-3">
@@ -319,17 +325,33 @@ export function DirectoryBrowser({
                               <Eye size={14} /> Preview
                             </a>
                           )}
-                          {decryptPreview && (
-                            <button
-                              className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent disabled:opacity-40"
-                              disabled={previewingId !== null}
-                              onClick={() => openPreview(child)}
-                              title="Decrypts in your browser and opens in a new tab."
-                              type="button"
-                            >
-                              <Eye size={14} /> {previewingId === child.id ? 'Decrypting…' : 'Preview'}
-                            </button>
-                          )}
+                          {decryptPreview &&
+                            (getPreviewLink(child) ? (
+                              <a
+                                className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent"
+                                href={getPreviewLink(child)}
+                                rel="noopener noreferrer"
+                                target="_blank"
+                                title="Open the entire uploaded folder in the external viewer."
+                              >
+                                <Eye size={14} /> Open preview
+                              </a>
+                            ) : (
+                              <button
+                                className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent disabled:opacity-40"
+                                disabled={previewingId !== null}
+                                onClick={() => preparePreview(child)}
+                                title="Prepare a link to the entire uploaded folder in the external viewer."
+                                type="button"
+                              >
+                                {previewingId === child.id ? (
+                                  <Loader2 aria-hidden="true" className="animate-spin" size={14} />
+                                ) : (
+                                  <Eye size={14} />
+                                )}
+                                {previewingId === child.id ? 'Preparing…' : 'Preview'}
+                              </button>
+                            ))}
                           <ShareFileButton file={child} />
                         </div>
                       </td>
