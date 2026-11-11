@@ -2,21 +2,44 @@ import { useRef, useState } from 'react'
 import { useUploadHistory } from '../../context/upload-history-context.tsx'
 import { useUploadTasks } from '../../context/upload-tasks-context.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
+import { useUploadReadiness } from '../../hooks/use-upload-readiness.ts'
 import { formatFundingAmount } from '../../lib/filecoin-pin/upload-funding.ts'
 import { getTxExplorerLink } from '../../utils/links.ts'
 import { canRemoveUpload } from '../../utils/upload/can-remove-upload.ts'
 import { copyProgress, customerStatus, fileStatusColors } from '../../utils/upload/file-status.ts'
 import { getStepLabel } from '../../utils/upload/step-utils.ts'
+import {
+  classifyUploadFailure,
+  getRetryBlocker,
+  type SetupTarget,
+  uploadFailureMessage,
+} from '../../utils/upload/upload-readiness.ts'
 import { ButtonBase as Button } from '../ui/button/button-base.tsx'
 import { FolderPicker } from './folder-picker.tsx'
 
-export function FileUploadDetails({ file, onOpenWallet }: { file: DatasetPiece; onOpenWallet: () => void }) {
+export function FileUploadDetails({
+  file,
+  onOpenWallet,
+}: {
+  file: DatasetPiece
+  onOpenWallet: (target?: SetupTarget) => void
+}) {
+  const readiness = useUploadReadiness()
   const tasks = useUploadTasks()
   const { mutateHistory, hasUnsavedChanges } = useUploadHistory()
   const upload = file.upload
   const picker = useRef<HTMLInputElement>(null)
   const [error, setError] = useState('')
   if (!upload) return null
+  const failureCode =
+    upload.phase === 'funding'
+      ? upload.funding && BigInt(upload.funding.depositNeeded) > 0n
+        ? 'deposit'
+        : 'approval'
+      : (upload.errorCode ?? classifyUploadFailure(upload.error))
+  const retryBlocker = getRetryBlocker(failureCode, readiness)
+  const failureTarget =
+    failureCode === 'unsupported_wallet' ? 'encryption' : failureCode === 'unknown' ? undefined : failureCode
   const active = tasks?.activeIds.has(file.id)
   const retryable =
     upload.phase === 'funding' || upload.phase === 'failed' || (upload.phase === 'interrupted' && !file.pieceCid)
@@ -34,6 +57,17 @@ export function FileUploadDetails({ file, onOpenWallet }: { file: DatasetPiece; 
           {status}
         </span>
       </div>
+      {upload.error && (
+        <div className="space-y-2" role="alert">
+          <p className="break-words text-xs text-warning">{uploadFailureMessage(upload.error, failureCode)}</p>
+          {failureTarget && (
+            <button className="text-xs text-link underline" onClick={() => onOpenWallet(failureTarget)} type="button">
+              Review Wallet setup
+            </button>
+          )}
+        </div>
+      )}
+      {canRetry && retryBlocker && <p className="text-xs text-muted">Retry unavailable: {retryBlocker.message}</p>}
       {upload.phase === 'interrupted' && (file.copyCount ?? 0) > 0 && (
         <p className="text-xs text-muted">
           Your confirmed copies remain stored. Remaining upload work has stopped. Check status refreshes the file index
@@ -55,7 +89,7 @@ export function FileUploadDetails({ file, onOpenWallet }: { file: DatasetPiece; 
           </p>
           <button
             className="inline-flex items-center gap-1 text-xs font-medium text-link underline decoration-border underline-offset-4 hover:text-link-hover focus:brand-outline"
-            onClick={onOpenWallet}
+            onClick={() => onOpenWallet(failureTarget)}
             type="button"
           >
             {upload.funding && BigInt(upload.funding.depositNeeded) > 0n
@@ -105,7 +139,14 @@ export function FileUploadDetails({ file, onOpenWallet }: { file: DatasetPiece; 
           )}
           {canRetry &&
             (upload.phase === 'funding' && tasks?.retainedIds.has(file.id) ? (
-              <Button className="w-auto" onClick={() => void tasks.resume(file.id)} size="sm">
+              <Button
+                className="w-auto"
+                disabled={Boolean(retryBlocker)}
+                onClick={() => {
+                  if (!retryBlocker) void tasks.resume(file.id)
+                }}
+                size="sm"
+              >
                 Check funding and continue
               </Button>
             ) : file.isDirectory ? (
@@ -113,9 +154,9 @@ export function FileUploadDetails({ file, onOpenWallet }: { file: DatasetPiece; 
                 <summary className="w-fit cursor-pointer text-link">Retry folder upload</summary>
                 <div className="mt-3">
                   <FolderPicker
-                    disabled={!tasks}
+                    disabled={!tasks || Boolean(retryBlocker)}
                     onUpload={(source) => {
-                      void tasks?.start(source, file.folderPath ?? '', file.id)
+                      if (!retryBlocker) void tasks?.start(source, file.folderPath ?? '', file.id)
                     }}
                   />
                 </div>
@@ -124,7 +165,7 @@ export function FileUploadDetails({ file, onOpenWallet }: { file: DatasetPiece; 
               <>
                 <Button
                   className="w-auto px-3 py-1.5 text-xs sm:min-h-8"
-                  disabled={!tasks}
+                  disabled={!tasks || Boolean(retryBlocker)}
                   onClick={() => picker.current?.click()}
                   size="sm"
                 >
@@ -135,7 +176,7 @@ export function FileUploadDetails({ file, onOpenWallet }: { file: DatasetPiece; 
                   className="hidden"
                   onChange={(event) => {
                     const selected = event.target.files?.[0]
-                    if (selected) void tasks?.start(selected, file.folderPath ?? '', file.id)
+                    if (selected && !retryBlocker) void tasks?.start(selected, file.folderPath ?? '', file.id)
                     event.target.value = ''
                   }}
                   ref={picker}
@@ -197,7 +238,6 @@ export function FileUploadDetails({ file, onOpenWallet }: { file: DatasetPiece; 
           IPFS indexing ·{' '}
           {file.ipfsIndexed === true ? 'Indexed' : file.ipfsIndexed === false ? 'Not confirmed' : 'Unknown'}
         </p>
-        {upload.error && <p className="mt-3 break-words text-xs text-warning">{upload.error}</p>}
         {!active && file.pieceCid && upload.phase !== 'complete' && (
           <p className="mt-3 text-xs text-muted">
             Files received but not confirmed may be removed by the provider. Check status before uploading the same

@@ -40,6 +40,7 @@ import { blocksFileDeletion, hasStoredCopy } from '../../utils/upload/blocks-fil
 import { canRemoveUpload } from '../../utils/upload/can-remove-upload.ts'
 import { customerStatus, fileStatus } from '../../utils/upload/file-status.ts'
 import { storageCopyTransactionHash } from '../../utils/upload/storage-copy-transaction.ts'
+import { uploadFailureMessage } from '../../utils/upload/upload-readiness.ts'
 import { BadgePrivacy } from '../ui/badge-privacy.tsx'
 import { ButtonBase as Button, buttonVariants } from '../ui/button/button-base.tsx'
 import { CopyButton } from '../ui/copy-button.tsx'
@@ -127,7 +128,12 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
       )
     if (status === 'Upload failed')
       return (
-        <span className="ml-2 inline-flex items-center rounded-md bg-red-500/10 px-2 py-0.5 align-middle text-[11px] text-danger">
+        <span
+          aria-label={`Upload failed: ${uploadFailureMessage(file.upload?.error, file.upload?.errorCode)}`}
+          className="ml-2 inline-flex items-center rounded-md bg-red-500/10 px-2 py-0.5 align-middle text-[11px] text-danger"
+          role="status"
+          title={`Upload failed: ${uploadFailureMessage(file.upload?.error, file.upload?.errorCode)}`}
+        >
           Upload failed
         </span>
       )
@@ -320,7 +326,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
     <section className="drive-panel overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4 sm:px-6">
         <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3">
-          <h2 className="flex items-center gap-2.5 text-base font-semibold">Files</h2>
+          <h2 className="flex items-center gap-2.5 text-base font-semibold">My Drive</h2>
         </div>
         <div className="flex w-full flex-wrap items-center justify-end gap-2 md:w-auto">
           {selectedFiles.length > 0 && (
@@ -464,7 +470,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
           >
             <span className="flex min-w-0 items-center gap-2">
               <Folder size={15} />
-              <span className="truncate">{folder || 'Files'}</span>
+              <span className="truncate">{folder || 'My Drive'}</span>
             </span>
             <ChevronRight
               aria-hidden="true"
@@ -477,14 +483,14 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
           >
             <button
               aria-current={folder === '' ? 'page' : undefined}
-              aria-label="Files (root)"
+              aria-label="My Drive (root)"
               className={`flex w-full items-center gap-2.5 rounded-lg p-2.5 text-left text-sm transition-colors ${folder === '' ? 'bg-brand-800/15 text-accent' : 'text-muted hover:bg-surface-raised hover:text-foreground'}`}
               onClick={() => onFolderChange('')}
               type="button"
             >
               <ChevronDown aria-hidden="true" className="shrink-0" size={14} />
               <FolderOpen aria-hidden="true" className="shrink-0" size={16} />
-              Files
+              My Drive
               {activityIndicator(activeFolders.has(''))}
             </button>
             <div className="ml-8 max-h-52 overflow-y-auto border-l border-border pl-2 md:max-h-80">
@@ -497,7 +503,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
             <div className="flex min-w-0 flex-wrap items-center gap-3">
               <nav aria-label="Current folder" className="flex flex-wrap items-center gap-2 text-sm">
                 <button className="text-muted hover:text-accent" onClick={() => onFolderChange('')} type="button">
-                  Files
+                  My Drive
                 </button>
                 {folder
                   .split('/')
@@ -979,9 +985,9 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                 </section>
                 <FileUploadDetails
                   file={selected}
-                  onOpenWallet={() => {
+                  onOpenWallet={(target) => {
                     setSelectedId(null)
-                    window.dispatchEvent(new Event('drive-open-wallet'))
+                    window.dispatchEvent(new CustomEvent('drive-open-wallet', { detail: { target } }))
                   }}
                 />
                 <section className="space-y-3">

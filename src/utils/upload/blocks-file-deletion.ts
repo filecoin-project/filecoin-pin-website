@@ -13,6 +13,6 @@ export function blocksFileDeletion(file: DatasetPiece): boolean {
 }
 
 /** Target eligibility is separate from whether a related upload still blocks deletion. */
-export function hasStoredCopy(file: DatasetPiece): boolean {
+export function hasStoredCopy(file: Pick<DatasetPiece, 'upload' | 'copyCount'>): boolean {
   return !file.upload || (file.copyCount ?? 0) > 0
 }

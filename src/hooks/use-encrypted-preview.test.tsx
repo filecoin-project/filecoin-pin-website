@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   ownerSigner: vi.fn(),
   mint: vi.fn(),
   toast: vi.fn(),
+  neutral: vi.fn(),
 }))
 vi.mock('../context/browser-wallet-provider.tsx', () => ({
   useBrowserWallet: () => ({ ownerSigner: mocks.ownerSigner }),
@@ -20,7 +21,7 @@ vi.mock('../lib/filecoin-pin/download.ts', () => ({
   decryptCredentials: (_state: unknown, ownerSigner: unknown) => ({ ownerSigner }),
   encryptedPieceShareLink: mocks.mint,
 }))
-vi.mock('../utils/toast.tsx', () => ({ toast: { error: mocks.toast } }))
+vi.mock('../utils/toast.tsx', () => ({ toast: { error: mocks.toast, neutral: mocks.neutral } }))
 
 import { useEncryptedPreview } from './use-encrypted-preview.ts'
 
@@ -30,6 +31,7 @@ beforeEach(() => {
   mocks.scope = '314:owner'
   mocks.mint.mockReset()
   mocks.toast.mockReset()
+  mocks.neutral.mockReset()
   vi.spyOn(window, 'open').mockReturnValue(null)
 })
 
@@ -131,4 +133,19 @@ it('clears prepared links when switching wallets, including switching back', asy
   mocks.scope = '314:owner'
   view.rerender()
   expect(view.result.current.getPreviewLink(file)).toBeUndefined()
+})
+
+it('treats wallet cancellation as neutral and permits another attempt', async () => {
+  mocks.mint
+    .mockRejectedValueOnce(new Error('RPC rejected', { cause: Object.assign(new Error('Rejected'), { code: 4001 }) }))
+    .mockResolvedValueOnce(viewerUrl)
+  const { result } = renderHook(() => useEncryptedPreview())
+  act(() => result.current.preparePreview(file))
+  await waitFor(() =>
+    expect(mocks.neutral).toHaveBeenCalledWith('Preview cancelled. Sign with your wallet to open this upload.')
+  )
+  expect(mocks.toast).not.toHaveBeenCalled()
+  expect(result.current.previewingId).toBeNull()
+  act(() => result.current.preparePreview(file))
+  await waitFor(() => expect(result.current.getPreviewLink(file)).toBe(viewerUrl))
 })

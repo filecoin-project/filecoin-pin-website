@@ -306,7 +306,7 @@ it('keeps removed files hidden after restore and reload, but shows a new identic
   await screen.findByText('No files here yet. Upload to this folder.')
   expect(screen.queryByRole('button', { name: 'first.txt' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'old' })).toBeNull()
-  expect(screen.getByRole('heading', { name: 'Files' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'My Drive' })).toBeTruthy()
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search file list' }), { target: { value: 'first' } })
   expect(screen.getByText('No matching files.')).toBeTruthy()
   expect(getCachedPieces(scope)?.[0].deletion).toEqual(archived.deletion)
@@ -315,7 +315,7 @@ it('keeps removed files hidden after restore and reload, but shows a new identic
   mount()
   expect(await screen.findByRole('button', { name: 'new.txt' })).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'first.txt' })).toBeNull()
-  expect(screen.getByRole('heading', { name: 'Files' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'My Drive' })).toBeTruthy()
   expect(getCachedPieces(scope)).toHaveLength(2)
   expect(getCachedPieces(scope)?.find((record) => record.id === 'new-upload')?.deletion).toBeUndefined()
 })
@@ -1070,7 +1070,7 @@ it('shows folder activity on every ancestor without marking similarly named fold
       <FileBrowser folder="" onFolderChange={vi.fn()} />
     </UploadHistoryProvider>
   )
-  const root = await screen.findByRole('button', { name: 'Files (root)' })
+  const root = await screen.findByRole('button', { name: 'My Drive (root)' })
   const parent = within(screen.getByRole('navigation', { name: 'File folders' })).getByRole('button', {
     name: 'parent',
   })

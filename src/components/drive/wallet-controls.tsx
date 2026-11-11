@@ -12,7 +12,7 @@ import {
   Sun,
   Wallet,
 } from 'lucide-react'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { parseUnits } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
@@ -161,7 +161,9 @@ export function WalletControls() {
 export function WalletSetup({
   inDrawer = false,
   onContinueUpload,
+  setupRequest,
 }: {
+  setupRequest?: { target: SetupTarget }
   inDrawer?: boolean
   onContinueUpload?: () => void
 }) {
@@ -187,14 +189,14 @@ export function WalletSetup({
   const pendingFundingTarget = useRef<HTMLElement>(null)
   const approvalTarget = useRef<HTMLDivElement>(null)
   const encryptionTarget = useRef<HTMLElement>(null)
-  const reviewStep = (target: SetupTarget) => {
+  const reviewStep = useCallback((target: SetupTarget) => {
     const node = {
       session: sessionTarget,
       encryption: encryptionTarget,
       gas: gasTarget,
       deposit: pendingFundingTarget.current ? pendingFundingTarget : depositTarget,
       approval: approvalTarget,
-    }[target].current
+    }[target]?.current
     if (!node) return
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     node.scrollIntoView({ behavior: reducedMotion ? 'instant' : 'smooth', block: 'center' })
@@ -210,7 +212,12 @@ export function WalletSetup({
         { duration: 1400, easing: 'ease-out' }
       )
     }
-  }
+  }, [])
+  useEffect(() => {
+    if (!setupRequest) return
+    const frame = requestAnimationFrame(() => reviewStep(setupRequest.target))
+    return () => cancelAnimationFrame(frame)
+  }, [setupRequest, reviewStep])
   const applyDepositAmount = (value: string) => {
     setAmount(value)
     depositTarget.current?.scrollIntoView({ behavior: 'instant', block: 'center' })

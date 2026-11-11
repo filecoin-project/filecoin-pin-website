@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useBrowserWallet } from '../context/browser-wallet-provider.tsx'
 import { decryptCredentials, encryptedPieceShareLink } from '../lib/filecoin-pin/download.ts'
+import { describeFileAccessError } from '../utils/file-access-error.ts'
 import { toast } from '../utils/toast.tsx'
 import type { DatasetPiece } from './use-dataset-pieces.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
@@ -47,8 +48,11 @@ export function useEncryptedPreview() {
           setPrepared({ id: file.id, rootCid: file.directoryEntry?.rootCid ?? file.cid, url, scope: storageScope })
       })
       .catch((cause: unknown) => {
-        if (!controller.signal.aborted)
-          toast.error(cause instanceof Error ? cause.message : 'Unable to prepare the external viewer.')
+        if (!controller.signal.aborted) {
+          const failure = describeFileAccessError(cause, 'preview')
+          if (failure.cancelled) toast.neutral(failure.message)
+          else toast.error(failure.message)
+        }
       })
       .finally(() => {
         if (active.current === controller) {

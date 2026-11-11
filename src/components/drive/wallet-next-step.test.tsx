@@ -27,6 +27,7 @@ vi.mock('../../hooks/use-filecoin-pin-context.ts', () => ({
   useFilecoinPinContext: () => ({
     wallet: { status: state.walletStatus },
     synapse: {},
+    encryption: { ready: state.encryptionReady },
     refreshWallet: state.refresh,
     storageSetup: {
       status: state.storageStatus,

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { checkDirectoryTabs } from './check-drive-directory-tabs.mjs'
+import { checkFileAccessErrors } from './check-drive-file-access-errors.mjs'
 import { checkSessionTabs } from './check-drive-session-tabs.mjs'
 import { checkUploadTasks } from './check-drive-upload-tasks.mjs'
 import { checkWalletSelection } from './check-drive-wallet-selection.mjs'
@@ -11,6 +12,7 @@ import { landingFrame, openDrive, waitForLanding } from './drive-browser-navigat
 const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || undefined })
 try {
   if (!process.env.DRIVE_TEST_WALLETCONNECT) {
+    await checkFileAccessErrors(browser)
     await checkWalletSelection(browser)
     await checkUploadTasks(browser)
   }
@@ -284,7 +286,8 @@ try {
     await blockedPage.goto(process.env.DRIVE_TEST_URL || 'http://127.0.0.1:5173/')
     await openDrive(blockedPage)
     await blockedPage.getByRole('button', { name: 'Connect wallet', exact: true }).click()
-    await blockedPage.getByRole('button', { name: 'Upload files', exact: true }).click()
+    assert.equal(await blockedPage.getByRole('button', { name: 'Upload files', exact: true }).isDisabled(), true)
+    await blockedPage.getByRole('button', { name: 'Wallet and Storage', exact: true }).click()
     await blockedPage.getByRole('dialog', { name: 'Wallet and Storage', exact: true }).waitFor()
     await blockedPage
       .getByRole('checkbox', {

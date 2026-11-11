@@ -236,7 +236,7 @@ export async function checkUploadTasks(browser) {
     const interrupted = page.getByRole('dialog', { name: 'interrupted.txt', exact: true })
     await interrupted.getByRole('button', { name: 'Check status', exact: true }).click()
     await interrupted.getByText('Upload failed', { exact: true }).waitFor()
-    assert.equal(await interrupted.getByText(/Background upload work has stopped/).isVisible(), false)
+    assert.equal(await interrupted.getByText(/Background upload work has stopped/).isVisible(), true)
     assert.equal(
       await interrupted.getByText('File transfer · Received by provider', { exact: true }).isVisible(),
       false
