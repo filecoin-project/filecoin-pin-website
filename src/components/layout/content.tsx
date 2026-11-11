@@ -1,8 +1,10 @@
-import { File, Folder, Loader2, ShieldCheck, Wallet } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { File, Folder, Loader2, TriangleAlert, Wallet } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useUploadTasks } from '../../context/upload-tasks-context.tsx'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
+import { useUploadReadiness } from '../../hooks/use-upload-readiness.ts'
+import type { SetupTarget } from '../../utils/upload/upload-readiness.ts'
 import { DeveloperFooter } from '../drive/developer-footer.tsx'
 import { FileBrowser } from '../drive/file-browser.tsx'
 import { FolderPicker } from '../drive/folder-picker.tsx'
@@ -14,28 +16,33 @@ import DragNDrop from '../upload/drag-n-drop.tsx'
 
 export default function Content() {
   const connection = useBrowserWallet()
-  const { wallet, synapse, storageSetup } = useFilecoinPinContext()
+  const { wallet, refreshWallet } = useFilecoinPinContext()
   const tasks = useUploadTasks()
   const [folder, setFolder] = useState('')
   const [uploadFolder, setUploadFolder] = useState('')
   const [uploadKind, setUploadKind] = useState<'file' | 'folder'>('file')
   const [panel, setPanel] = useState<'wallet' | 'upload' | null>(null)
+  const [setupRequest, setSetupRequest] = useState<{ target: SetupTarget } | undefined>()
+  const readiness = useUploadReadiness()
+  const canUpload = readiness.canUpload
+  const setupChecking = readiness.checking
+  const openWallet = useCallback((target?: SetupTarget) => {
+    setSetupRequest(target ? { target } : undefined)
+    setPanel('wallet')
+  }, [])
   useEffect(() => {
-    const open = () => setPanel('wallet')
+    const open = (event: Event) => openWallet((event as CustomEvent<{ target?: SetupTarget }>).detail?.target)
     window.addEventListener('drive-open-wallet', open)
     return () => window.removeEventListener('drive-open-wallet', open)
-  }, [])
-  const canUpload = Boolean(
-    connection.sessionStatus === 'active' && synapse && wallet.status === 'ready' && storageSetup?.status === 'ready'
-  )
-  const setupChecking =
-    connection.sessionStatus === 'checking' ||
-    wallet.status === 'idle' ||
-    wallet.status === 'loading' ||
-    storageSetup?.status === 'checking'
+  }, [openWallet])
+  const handleSetupAction = () => {
+    if (readiness.checkFailed) void refreshWallet()
+    else openWallet(readiness.actionTarget)
+  }
   const openUpload = (location: string) => {
     setUploadFolder(location)
-    setPanel(canUpload ? 'upload' : 'wallet')
+    if (canUpload) setPanel('upload')
+    else handleSetupAction()
   }
 
   return (
@@ -50,7 +57,7 @@ export default function Content() {
           className="w-auto"
           onClick={() => {
             setUploadFolder(folder)
-            setPanel('wallet')
+            openWallet()
           }}
           size="sm"
           variant="secondary"
@@ -68,17 +75,17 @@ export default function Content() {
         <p className="text-xs text-muted">Calibration is a test network. Data and infrastructure may reset.</p>
       )}
       {!canUpload && !setupChecking && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-surface px-4 py-3">
-          <p className="flex items-center gap-2 text-sm text-muted">
-            <ShieldCheck aria-hidden="true" className="shrink-0 text-accent" size={16} />
-            Configure your wallet to upload and delete files.
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning-border bg-warning-surface px-4 py-2">
+          <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <TriangleAlert aria-hidden="true" className="shrink-0 text-warning" size={16} />
+            {readiness.message}
           </p>
           <button
-            className="text-sm text-link hover:text-link-hover underline focus:brand-outline"
-            onClick={() => setPanel('wallet')}
+            className="inline-flex min-h-8 shrink-0 items-center rounded-md border border-warning-border bg-surface px-3 py-1 text-sm font-medium text-foreground transition-colors hover:bg-warning/10 focus:brand-outline"
+            onClick={handleSetupAction}
             type="button"
           >
-            Set up wallet
+            {readiness.actionLabel}
           </button>
         </div>
       )}
@@ -86,12 +93,7 @@ export default function Content() {
       <span className="sr-only" role="status">
         {setupChecking ? 'Checking wallet setup…' : canUpload ? 'Session ready' : 'Setup required'}
       </span>
-      <FileBrowser
-        folder={folder}
-        onFolderChange={setFolder}
-        onUpload={openUpload}
-        uploadDisabled={setupChecking || connection.busy}
-      />
+      <FileBrowser folder={folder} onFolderChange={setFolder} onUpload={openUpload} uploadDisabled={!canUpload} />
       <div className="flex flex-wrap justify-between gap-2 text-xs text-muted">
         <span>
           File records sync from the Filecoin index. Recent changes may take time to appear on another browser.
@@ -107,7 +109,13 @@ export default function Content() {
         open={panel === 'wallet'}
         title="Wallet and Storage"
       >
-        <WalletSetup inDrawer onContinueUpload={() => setPanel('upload')} />
+        <WalletSetup
+          inDrawer
+          onContinueUpload={() => {
+            if (canUpload) setPanel('upload')
+          }}
+          setupRequest={setupRequest}
+        />
       </SidePanel>
       <SidePanel
         description="Choose a location, then upload a file or an entire folder."
@@ -125,7 +133,7 @@ export default function Content() {
                 Upload location
               </label>
               <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent">
-                <span className="shrink-0 text-sm text-muted">Files /</span>
+                <span className="shrink-0 text-sm text-muted">My Drive /</span>
                 <input
                   aria-describedby="upload-path-help"
                   className="h-11 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted"
@@ -137,7 +145,7 @@ export default function Content() {
                 />
               </div>
               <p className="mt-2 text-xs leading-relaxed text-muted" id="upload-path-help">
-                Leave empty to upload to Files. Use / for subfolders, e.g. documents/2026.
+                Leave empty to upload to My Drive. Use / for subfolders, e.g. documents/2026.
               </p>
               <details className="mt-3 text-xs text-muted">
                 <summary className="w-fit cursor-pointer hover:text-foreground">Name and folder requirements</summary>
@@ -191,7 +199,7 @@ export default function Content() {
         ) : (
           <>
             <p className="text-sm text-muted">Complete wallet setup before uploading.</p>
-            <Button onClick={() => setPanel('wallet')} size="sm">
+            <Button onClick={handleSetupAction} size="sm">
               Set up wallet
             </Button>
           </>

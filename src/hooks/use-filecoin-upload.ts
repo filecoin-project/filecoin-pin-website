@@ -23,6 +23,7 @@ import { requireDirectoryLocks } from '../lib/local-storage/directory-store.ts'
 import { getCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import type { StepState } from '../types/upload/step.ts'
 import { hasRemovalProgress, isDeletionScheduled } from '../utils/file-deletion.ts'
+import { classifyUploadFailure, type UploadFailureCode, UploadSetupError } from '../utils/upload/upload-readiness.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 import { useWaitableRef } from './use-waitable-ref.ts'
 
@@ -34,6 +35,7 @@ export interface UploadState {
   isUploading: boolean
   stepStates: StepState[]
   error?: string
+  errorCode?: UploadFailureCode
   funding?: { depositNeeded: string; needsApproval: boolean }
   currentCid?: string
   /** Plaintext root CID inside the encrypted envelope; the stable content identity. `currentCid` stays the public envelope root. */
@@ -168,7 +170,8 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
 
         // Encryption is never silently skipped: without a usable credential the
         // upload is blocked, exactly like an unauthorized session.
-        if (!encryption.ready) throw new Error('Add your encryption key in Wallet setup before uploading.')
+        if (!encryption.ready)
+          throw new UploadSetupError('encryption', 'Add your encryption key in Wallet setup before uploading.')
         const dataSetMetadata = encryptedDataSetMetadata(encryption.credential)
         // Plaintext payload (filecoin-pin wire profile: metadata-first CAR under
         // an anonymous wrapper directory, so the CLI and the share viewer unpack
@@ -237,7 +240,8 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
 
         const gas = await checkFILBalance(synapse)
         const gasCheck = validateGasRequirement(gas.balance, gas.isCalibnet)
-        if (!gasCheck.isValid) throw new Error(gasCheck.errorMessage)
+        if (!gasCheck.isValid)
+          throw new UploadSetupError('gas', gasCheck.errorMessage ?? 'Insufficient FIL for transaction fees.')
 
         logger.info('Uploading CAR to Synapse')
         // Distinguishes resolution failures (safe to retry into fresh data
@@ -592,6 +596,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
         setUploadState((prev) => ({
           ...prev,
           error: errorMessage,
+          errorCode: error instanceof UploadSetupError ? error.code : classifyUploadFailure(errorMessage),
           expectedCopies: error instanceof UploadFundingRequired ? error.copies : prev.expectedCopies,
           funding:
             error instanceof UploadFundingRequired

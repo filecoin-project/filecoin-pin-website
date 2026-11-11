@@ -237,3 +237,21 @@ it('warns about whole-upload access before a nested file share link is ready', a
   expect(screen.getByRole('note').textContent).toContain('Access cannot be revoked.')
   expect(screen.queryByRole('textbox', { name: 'Share link' })).toBeNull()
 })
+
+it('shows cancellation without an error alert and retries only on request', async () => {
+  mocks.encryption = { ready: false }
+  mocks.mint
+    .mockReset()
+    .mockRejectedValueOnce(Object.assign(new Error('Rejected'), { code: 4001 }))
+    .mockResolvedValueOnce('https://viewer.example/#test')
+  render(<ShareFileButton file={{ ...file, id: 'cancelled-share', encrypted: true } as DatasetPiece} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+  await waitFor(() =>
+    expect(screen.getByText('Sharing cancelled. Sign with your wallet to create a share link.')).toBeTruthy()
+  )
+  expect(screen.queryByRole('alert')).toBeNull()
+  expect(mocks.mint).toHaveBeenCalledTimes(1)
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Share link' })).toBeTruthy())
+  expect(mocks.mint).toHaveBeenCalledTimes(2)
+})

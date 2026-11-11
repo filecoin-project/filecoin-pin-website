@@ -30,6 +30,7 @@ import { base64, base64url } from 'multiformats/bases/base64'
 import type { Address, Hex } from 'viem'
 import { concat, hexToBytes, isAddress, keccak256, slice, toHex } from 'viem'
 import { generatePrivateKey } from 'viem/accounts'
+import { readStreamBytes } from './read-stream.ts'
 
 /** A wallet that can sign for a group key (Keysmith's `KeyspaceKey` message): the owner's own key, never a session key. */
 export type OwnerSigner = TypedDataSigner & { address: Address }
@@ -161,7 +162,7 @@ export function encryptedDataSetMetadata(credential: EncryptionCredential): Reco
 
 async function throughStream(bytes: Uint8Array, pair: ReadableWritablePair<Uint8Array, Uint8Array>) {
   const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(pair)
-  return new Uint8Array(await new Response(stream).arrayBuffer())
+  return readStreamBytes(stream)
 }
 
 /**

@@ -8,7 +8,9 @@ import {
   downloadFile,
 } from '../lib/filecoin-pin/download.ts'
 import { displayFileName } from '../lib/filecoin-pin/drive-api.ts'
+import { describeFileAccessError } from '../utils/file-access-error.ts'
 import { isDeletionScheduled } from '../utils/file-deletion.ts'
+import { toast } from '../utils/toast.tsx'
 import type { DatasetPiece } from './use-dataset-pieces.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 
@@ -67,10 +69,11 @@ export function useDownloadQueue(synapse: Synapse | null, scope: string | undefi
           })
       })
     } catch (cause) {
-      if (!worker.stopped)
-        setDownloadError(
-          `${displayFileName(job.file)}: ${cause instanceof Error ? cause.message : 'Unable to download the file'}`
-        )
+      if (!worker.stopped) {
+        const failure = describeFileAccessError(cause, 'download')
+        if (failure.cancelled) toast.neutral(failure.message)
+        else setDownloadError(`${displayFileName(job.file)}: ${failure.message}`)
+      }
     } finally {
       worker.active = null
       if (!worker.stopped) {

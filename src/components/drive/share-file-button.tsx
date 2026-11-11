@@ -12,6 +12,7 @@ import { decryptCredentials, encryptedPieceShareLink } from '../../lib/filecoin-
 import { displayFileName } from '../../lib/filecoin-pin/drive-api.ts'
 import { fileShareLink } from '../../lib/filecoin-pin/file-links.ts'
 import { cn } from '../../utils/cn.ts'
+import { describeFileAccessError } from '../../utils/file-access-error.ts'
 import { buttonVariants } from '../ui/button/button-base.tsx'
 import { CopyButton } from '../ui/copy-button.tsx'
 
@@ -28,7 +29,7 @@ export function ShareFileButton({
   const { encryption, synapse, storageScope } = useFilecoinPinContext()
   const { ownerSigner } = useBrowserWallet()
   const [minted, setMinted] = useState<{ id: string; link: string; gateway?: boolean } | null>(null)
-  const [mintError, setMintError] = useState('')
+  const [mintError, setMintError] = useState<ReturnType<typeof describeFileAccessError> | null>(null)
   // The local ipfsIndexed flag goes stale: the post-upload checker gives up
   // after a few minutes while IPNI often indexes later. The dialog asks the
   // index live, but shares the same reservation budget as the background
@@ -75,7 +76,7 @@ export function ShareFileButton({
         })
     }
     if (minted?.id === file.id) return
-    setMintError('')
+    setMintError(null)
     encryptedPieceShareLink(synapse, file, decryptCredentials(encryption, ownerSigner))
       .then((created) => setMinted({ id: file.id, link: created }))
       .catch((cause) => {
@@ -86,7 +87,7 @@ export function ShareFileButton({
           ? fileShareLink({ ...file, encrypted: false, ipfsIndexed: undefined })
           : undefined
         if (publicLink) setMinted({ id: file.id, link: publicLink, gateway: true })
-        else setMintError(message)
+        else setMintError(describeFileAccessError(cause, 'share'))
       })
   }
   return (
@@ -181,7 +182,17 @@ export function ShareFileButton({
                 </div>
               </>
             ) : mintError ? (
-              <p className="my-6 text-sm text-destructive">{mintError}</p>
+              <div className="my-6 space-y-3">
+                <p
+                  className={cn('text-sm', mintError.cancelled ? 'text-muted' : 'text-danger')}
+                  role={mintError.cancelled ? 'status' : 'alert'}
+                >
+                  {mintError.message}
+                </p>
+                <button className="text-sm text-link underline" onClick={() => onOpenChange(true)} type="button">
+                  Try again
+                </button>
+              </div>
             ) : (
               <p className="my-6 flex items-center gap-2 text-sm text-muted">
                 <Loader2 aria-hidden="true" className="animate-spin" size={16} />

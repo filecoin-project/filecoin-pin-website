@@ -30,3 +30,72 @@ it('keeps the same Public pill in both variants', () => {
   render(<BadgePrivacy detailed file={{}} />)
   expect(screen.getByText('Public')).toBeTruthy()
 })
+
+for (const phase of ['uploading', 'failed', 'confirming'] as const) {
+  for (const detailed of [false, true]) {
+    it(`shows N/A for ${phase} without confirmed copies (detailed=${detailed})`, () => {
+      render(
+        <BadgePrivacy
+          detailed={detailed}
+          file={{
+            encrypted: true,
+            upload: {
+              phase,
+              expectedCopies: 1,
+              providers: [],
+              steps: [],
+              checks: 0,
+              nextCheckAt: 0,
+            },
+          }}
+        />
+      )
+      expect(screen.getByText('N/A').getAttribute('title')).toMatch(/no confirmed stored copy/i)
+      expect(screen.queryByText('Public')).toBeNull()
+      expect(screen.queryByLabelText('Encrypted')).toBeNull()
+      expect(screen.queryByText('Encrypted')).toBeNull()
+    })
+  }
+}
+
+it('keeps the privacy marker for a confirmed copy when another copy fails', () => {
+  render(
+    <BadgePrivacy
+      detailed
+      file={{
+        encrypted: true,
+        copyCount: 1,
+        upload: {
+          phase: 'failed',
+          expectedCopies: 2,
+          providers: [],
+          steps: [],
+          checks: 0,
+          nextCheckAt: 0,
+        },
+      }}
+    />
+  )
+  expect(screen.getByText('Encrypted')).toBeTruthy()
+  expect(screen.queryByText('N/A')).toBeNull()
+})
+
+it('shows N/A rather than Public when encryption metadata is absent before storage', () => {
+  render(
+    <BadgePrivacy
+      file={{
+        copyCount: 0,
+        upload: {
+          phase: 'failed',
+          expectedCopies: 1,
+          providers: [],
+          steps: [],
+          checks: 0,
+          nextCheckAt: 0,
+        },
+      }}
+    />
+  )
+  expect(screen.getByText('N/A')).toBeTruthy()
+  expect(screen.queryByText('Public')).toBeNull()
+})

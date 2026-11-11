@@ -16,7 +16,8 @@ vi.mock('../../hooks/use-filecoin-pin-context.ts', () => ({
     wallet: { status: 'ready', data: { address: scope.slice(4), network: 'mainnet' } },
     storageScope: scope,
     synapse: {},
-    storageSetup: { status: 'ready' },
+    storageSetup: { status: 'ready', gasReady: true, depositReady: true, approvalReady: true },
+    encryption: { ready: true },
     refreshWallet: mocks.refreshWallet,
   }),
 }))

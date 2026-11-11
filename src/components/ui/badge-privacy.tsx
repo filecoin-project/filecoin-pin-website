@@ -1,6 +1,7 @@
 import { Globe, Lock } from 'lucide-react'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { cn } from '../../utils/cn.ts'
+import { hasStoredCopy } from '../../utils/upload/has-stored-copy.ts'
 
 const ENCRYPTED_TITLE = 'Encrypted at rest. Only your wallet and people you share with can read this file.'
 
@@ -17,10 +18,16 @@ function BadgePrivacy({
   detailed = false,
   className,
 }: {
-  file: Pick<DatasetPiece, 'encrypted'>
+  file: Pick<DatasetPiece, 'encrypted' | 'upload' | 'copyCount'>
   detailed?: boolean
   className?: string
 }) {
+  if (!hasStoredCopy(file))
+    return (
+      <span className={cn('text-[11px] text-muted', className)} title="No confirmed stored copy yet.">
+        N/A
+      </span>
+    )
   if (file.encrypted)
     return detailed ? (
       <span
