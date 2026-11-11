@@ -108,11 +108,11 @@ body{font-family:'Funnel Sans',Arial,sans-serif}h1,h2,.brand,.large-number{font-
 </aside>
 <div id="file-preview" class="file-preview" hidden><div class="preview-paper"><img src="/filecoin-mark.svg" alt="Filecoin logo"></div><div id="finish-action" hidden><button class="primary launch">Launch your drive <span>↗</span></button></div></div>
 <section class="status"><h2 id="mode">Browse your files</h2><p id="detail">Your workspace runs in your browser.</p></section>
-<section class="tour" aria-label="Interactive storage tour"><div class="tour-top"><span><i class="dot"></i>HOW YOUR FILES MOVE</span></div><div class="tour-controls"><input aria-label="Tour playhead" id="timeline" class="rail" type="range" min="0" max="39" value="0" step="0.01"></div><div class="steps"><button data-time="0" class="active">01 BROWSER</button><button data-time="5">02 UPLOAD</button><button data-time="10">03 STORE</button><button data-time="20">04 VERIFY</button><button data-time="25">05 FETCH</button></div></section>
+<section class="tour" aria-label="Interactive storage tour"><div class="tour-top"><span><i class="dot"></i>HOW YOUR FILES MOVE</span></div><div class="tour-controls"><input aria-label="Tour playhead" id="timeline" class="rail" type="range" min="0" max="39" value="0" step="0.01"></div><div class="steps"><button data-time="0" class="active">01 BROWSER</button><button data-time="5">02 ENCRYPT</button><button data-time="7.5">03 UPLOAD</button><button data-time="10">04 STORE</button><button data-time="20">05 VERIFY</button><button data-time="25">06 FETCH</button></div></section>
 <footer class="footer"><span>FILECOIN DRIVE</span><a href="https://github.com/filecoin-project/filecoin-pin-website" target="_blank" rel="noopener">Built with 💙 by FilOZ</a><span>BROWSER APP · DISTRIBUTED STORAGE</span></footer>
 <p class="fallback" id="fallback" hidden>The 3D explorer couldn’t load. You can still launch Drive and access your files.</p>
 </div>
-<dialog id="how" aria-labelledby="how-title"><button id="close-how" aria-label="Close explanation">✕</button><h2 id="how-title">How Filecoin Drive works</h2><ol><li><strong>Connect your wallet.</strong> Your browser is your workspace. Authorize a session and fund storage from Drive.</li><li><strong>Add your files.</strong> Each file gets a content identifier (CID), an address derived from its contents.</li><li><strong>Store on Filecoin.</strong> Independent storage providers hold the data, with storage proofs recorded on the network.</li><li><strong>Keep control.</strong> Browse, download and manage your files. Your content addresses work beyond this app.</li></ol></dialog>
+<dialog id="how" aria-labelledby="how-title"><button id="close-how" aria-label="Close explanation">✕</button><h2 id="how-title">How Filecoin Drive works</h2><ol><li><strong>Connect your wallet.</strong> Your browser is your workspace. Authorize a session and fund storage from Drive.</li><li><strong>Add your files.</strong> Files are encrypted in your browser, and each gets a content identifier (CID), an address derived from its contents.</li><li><strong>Store on Filecoin.</strong> Independent storage providers hold the encrypted data, with storage proofs recorded on the network.</li><li><strong>Keep control.</strong> Browse, download and manage your files. Your content addresses work beyond this app.</li></ol></dialog>
 <script>
 function setLandingTheme(theme) {
   if(theme!=='light'&&theme!=='dark')return;
@@ -346,9 +346,28 @@ try {
   const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let t=reduced?2:0,last=performance.now(),section=-1,yaw=0,pitch=0,targetYaw=0,targetPitch=0,drag=null,scrubbing=false,carryingLaunch=false,zoom=1,targetZoom=1;
   const rail=$('timeline');
-  const modes=['Browse your files','Upload from your browser','Store on Filecoin','Verify storage','Fetch your files'];
-  const details=['Your workspace runs in your browser.','Choose documents, photos, videos, or folders.','Store your files with independent storage providers.','Storage proofs are recorded on the network.','Retrieve your files and check their content addresses.'];
-  rail.oninput=()=>{carryingLaunch=false;t=Number(rail.value);};
+  const modes=['Browse your files','Encrypt in your browser','Upload from your browser','Store on Filecoin','Verify storage','Fetch your files'];
+  const details=['Your workspace runs in your browser.','Documents, photos, videos, and folders are encrypted before they leave your browser.','Your encrypted files upload straight from your browser.','Store your files with independent storage providers.','Storage proofs are recorded on the network.','Retrieve your files and check their content addresses.'];
+  // The rail shows label-space progress: step starts (playhead 0,5,7.5,10,20,25) are unevenly
+  // spaced, so a piecewise map lands the dot on each step's measured label center as it begins.
+  // The dot reaches the rail end as the fetch completes (playhead 30), then rests there.
+  const stepStarts=[0,5,7.5,10,20,25],railEnd=30,thumbWidth=16;
+  let railStops=[0,.2,.4,.6,.8,1];
+  function measureRail(){
+    const track=rail.getBoundingClientRect(),span=track.width-thumbWidth;
+    if(span<=0)return;
+    let previous=0;
+    railStops=[...document.querySelectorAll('.steps button')].map(button=>{
+      const r=button.getBoundingClientRect();
+      return previous=Math.min(1,Math.max(previous,(r.left+r.width/2-track.left-thumbWidth/2)/span));
+    });
+  }
+  measureRail();document.fonts.ready.then(measureRail);
+  addEventListener('resize',measureRail);
+  document.querySelector('.steps').addEventListener('scroll',measureRail,{passive:true});
+  const railFrom=value=>{value=Math.min(value,railEnd);const T=[...stepStarts,railEnd],F=[...railStops,1];for(let k=T.length-2;k>=0;k--)if(value>=T[k])return F[k]+(F[k+1]-F[k])*(value-T[k])/(T[k+1]-T[k]);return railStops[0];};
+  const railTo=fraction=>{const T=[...stepStarts,railEnd],F=[...railStops,1];for(let k=F.length-2;k>=0;k--)if(fraction>=F[k])return F[k+1]>F[k]?T[k]+(T[k+1]-T[k])*(fraction-F[k])/(F[k+1]-F[k]):T[k];return 0;};
+  rail.oninput=()=>{carryingLaunch=false;t=railTo(Number(rail.value)/39);};
   rail.onpointerdown=()=>scrubbing=true;
   const endScrub=()=>scrubbing=false;window.addEventListener('pointerup',endScrub);window.addEventListener('pointercancel',endScrub);
   document.querySelectorAll('[data-time]').forEach(b=>b.onclick=()=>{carryingLaunch=false;t=Number(b.dataset.time);});
@@ -485,11 +504,11 @@ try {
     zoom+=(targetZoom-zoom)*(1-Math.exp(-dt*10));
     camera.position.sub(cameraTarget).multiplyScalar(zoom).add(cameraTarget);
     camera.lookAt(cameraTarget);key.target.position.copy(field.position);
-    const s=time<10?Math.floor(time/5):time<20?2:time<25?3:4;
+    const s=time<5?0:time<7.5?1:time<10?2:time<20?3:time<25?4:5;
     if(s!==section){section=s;$('mode').textContent=modes[s];$('detail').textContent=details[s];document.querySelectorAll('[data-time]').forEach((b,i)=>{b.classList.toggle('active',i===s);b.setAttribute('aria-pressed',String(i===s));});}
-    rail.value=String(t);
-    $('phase-label').textContent=['CONTENT ADDRESS','CONTENT ADDRESS','STORAGE','STORAGE PROOF','CONTENT CHECK'][s];
-    $('phase-state').textContent=['READY','ADDRESSING',time<15?'STORING':'STORED','VERIFIED','VERIFIED'][s];
+    rail.value=String(railFrom(t)*39);
+    $('phase-label').textContent=['CONTENT ADDRESS','ENCRYPTION','CONTENT ADDRESS','STORAGE','STORAGE PROOF','CONTENT CHECK'][s];
+    $('phase-state').textContent=['READY','ENCRYPTING','ADDRESSING',time<15?'STORING':'STORED','VERIFIED','VERIFIED'][s];
     const verified=smooth(20,23,time);Array.from($('load-bar').children).forEach((bar,i)=>bar.classList.toggle('on',i<(time<20?6+smooth(5,15,time)*7:13+verified*11)));
     if(t>=3.5)carryingLaunch=false;
     const preview=$('file-preview');preview.hidden=time<28.1&&!carryingLaunch;
