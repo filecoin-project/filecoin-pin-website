@@ -54,13 +54,11 @@ export function WalletNextStep({
     // gas, which the remaining on-chain steps need — but never the session step.
     if (connection.session?.encryption) {
       title = 'Restore encryption access'
-      description =
-        'Your session was re-authorized, so encryption access needs 1 wallet signature to be restored — no transaction, no fee. Only sign it here.'
+      description = 'Restore encryption access to continue uploading.'
       action = 'Restore encryption access'
     } else {
       title = 'Add your encryption key'
-      description =
-        'Uploads are encrypted by default. Your wallet signs 1 message (2 for a brand-new key) — no transaction, no fee. This signature is your encryption key, so only sign it here, never from a link or another site.'
+      description = 'Set up your encryption key to upload files securely.'
       action = 'Review encryption key'
     }
     target = 'encryption'

@@ -397,7 +397,7 @@ export function WalletSetup({
             )}
           </section>
           <section
-            className={`scroll-mt-24 space-y-4 rounded-lg ${inDrawer ? 'border-t border-border pt-6' : ''}`}
+            className={`scroll-mt-24 space-y-4 ${inDrawer ? 'border-t border-solid border-border pt-6' : ''}`}
             data-setup-target="encryption"
             ref={encryptionTarget}
           >
@@ -406,10 +406,8 @@ export function WalletSetup({
               Encryption key
             </h2>
             <p className="text-sm leading-6 text-muted">
-              Uploads are encrypted by default. Your wallet signs 1 message (2 for a brand-new key) — no transaction, no
-              fee, and no further prompts after. This signature is your encryption key, so only sign it here. If a link,
-              email, or any other site asks for the same signature, don't: it would hand over the key to every file
-              you've encrypted.
+              Sign with your wallet to enable encryption. No transaction or fee. Only sign here: the same signature on
+              another site could expose all your encrypted files.
             </p>
             {encryption.ready && connection.session?.encryption && (
               <p className="rounded-lg border border-border bg-canvas/40 p-3 text-xs leading-5 text-muted break-all">

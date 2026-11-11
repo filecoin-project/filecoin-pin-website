@@ -3,9 +3,9 @@ import { exporter } from 'ipfs-unixfs-exporter'
 import { CID } from 'multiformats/cid'
 import { sha256 } from 'multiformats/hashes/sha2'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
-import { carRootFileBytes, type DecryptCredentials, fetchPieceCar } from './download.ts'
+import { carRootFileBytes, type DecryptCredentials, decryptWithCredentials, fetchPieceCar } from './download.ts'
 import { payloadEntry } from './encrypted-payload.ts'
-import { decryptEnvelope, grantKeyResolver, isEncryptionEnvelope } from './encryption.ts'
+import { isEncryptionEnvelope } from './encryption.ts'
 
 const MAX_BLOCK_BYTES = 2 * 1024 * 1024
 const CACHE_BYTES = 16 * 1024 * 1024
@@ -13,7 +13,7 @@ const CACHE_BYTES = 16 * 1024 * 1024
 /**
  * Browsing an encrypted piece cannot stream ciphertext blocks: fetch the whole
  * envelope once from the piece's providers, decrypt it with the session grant
- * (never a wallet prompt — this is passive browsing), and walk the inner CAR.
+ * or an explicitly supplied owner signer, and walk the inner CAR.
  * The reader stays keyed by the outer root so directory caching is unchanged.
  */
 function encryptedContentReader(file: DatasetPiece, signal: AbortSignal, credentials: DecryptCredentials) {
@@ -21,13 +21,13 @@ function encryptedContentReader(file: DatasetPiece, signal: AbortSignal, credent
   const open = () => {
     opened ??= (async () => {
       const session = credentials.session
-      if (!session) throw new Error('Connect your wallet to browse this encrypted folder.')
+      if (!session && !credentials.ownerSigner) throw new Error('Connect your wallet to browse this encrypted folder.')
       const carBytes = await fetchPieceCar(null, file)
       signal.throwIfAborted()
       const envelope = await carRootFileBytes(carBytes)
       if (!envelope || !(await isEncryptionEnvelope(envelope)))
         throw new Error('This record is marked encrypted but is not an encryption envelope.')
-      const inner = await decryptEnvelope(envelope, grantKeyResolver(session.privateKey, session.credential))
+      const inner = await decryptWithCredentials(envelope, credentials, undefined, signal)
       signal.throwIfAborted()
       const reader = await CarReader.fromBytes(inner)
       const [root] = await reader.getRoots()

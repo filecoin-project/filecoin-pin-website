@@ -37,6 +37,8 @@ export function ShareFileButton({
   // caches the CID for the public indexer, working against the very thing
   // we're waiting for.
   const [indexed, setIndexed] = useState<{ id: string; onIpni: boolean } | null>(null)
+  const shareRootCid = file.encrypted ? (file.directoryEntry?.rootCid ?? file.cid) : file.cid
+  const sharesWholeFolder = Boolean(file.encrypted && (file.isDirectory || file.directoryEntry))
   const gatewayLink = fileShareLink(file)
   // Deletion/upload-state gating is shared with plaintext links. An encrypted
   // piece needs no grant (the owner wallet signs once at mint) and no IPNI
@@ -53,21 +55,21 @@ export function ShareFileButton({
     if (indexed?.id !== file.id) {
       if (file.ipfsIndexed) setIndexed({ id: file.id, onIpni: true })
       else if (storageScope)
-        void reserveIndexingCheck(storageScope, file.cid, Date.now()).then((reservation) => {
+        void reserveIndexingCheck(storageScope, shareRootCid, Date.now()).then((reservation) => {
           if (!reservation) {
             // Already reserved or confirmed elsewhere (the background
             // checker, or an earlier mount of this dialog): report that
             // outcome instead of querying the indexer again.
-            const stored = readIndexingChecks(storageScope)[file.cid]
+            const stored = readIndexingChecks(storageScope)[shareRootCid]
             setIndexed({ id: file.id, onIpni: stored?.indexed === true })
             return
           }
-          void checkIpniIndexer(CID.parse(file.cid), { maxAttempts: 1, ipniIndexerUrl: 'https://cid.contact' })
+          void checkIpniIndexer(CID.parse(shareRootCid), { maxAttempts: 1, ipniIndexerUrl: 'https://cid.contact' })
             .then((onIpni) => {
               setIndexed({ id: file.id, onIpni })
               // Clear the exhausted check budget so the background watcher
               // re-confirms and the file row catches up.
-              if (onIpni) void resetIndexingChecks(storageScope, file.cid)
+              if (onIpni) void resetIndexingChecks(storageScope, shareRootCid)
             })
             .catch(() => setIndexed(null))
         })
@@ -118,7 +120,7 @@ export function ShareFileButton({
           <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
           <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border bg-surface p-6 text-foreground shadow-xl focus:outline-none">
             <Dialog.Title className="pr-8 text-lg font-semibold">
-              Share {file.isDirectory ? 'folder' : 'file'}
+              Share {sharesWholeFolder || file.isDirectory ? 'folder' : 'file'}
             </Dialog.Title>
             <Dialog.Description className="mt-2 break-words text-sm text-muted">
               {displayFileName(file)}
@@ -129,6 +131,18 @@ export function ShareFileButton({
             >
               <X aria-hidden="true" size={20} />
             </Dialog.Close>
+            {sharesWholeFolder && (
+              <div
+                className="mt-4 rounded-lg border border-warning-border bg-warning-surface p-3 text-sm text-warning"
+                role="note"
+              >
+                <p className="font-semibold">This link shares the entire uploaded folder.</p>
+                <p className="mt-1">
+                  Anyone with this link can read every file and subfolder in the original upload, including files
+                  outside your selection. Access cannot be revoked.
+                </p>
+              </div>
+            )}
             {link ? (
               <>
                 <div className="mx-auto my-5 w-fit rounded-xl border border-border bg-white p-2">
@@ -136,7 +150,9 @@ export function ShareFileButton({
                 </div>
                 <p className="mb-3 text-center text-sm text-muted">
                   {file.encrypted && !(minted?.id === file.id && minted.gateway)
-                    ? 'Anyone with this link can read this file. The key travels in the link and never reaches a server. Share links cannot be revoked.'
+                    ? sharesWholeFolder
+                      ? 'Scan to open the entire uploaded folder.'
+                      : 'Anyone with this link can read this file. The key travels in the link and never reaches a server. Share links cannot be revoked.'
                     : file.isDirectory
                       ? 'Scan to browse this folder.'
                       : file.importedCar

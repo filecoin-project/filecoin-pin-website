@@ -210,3 +210,30 @@ it('still reports mint failures that are not the plain-piece case', async () => 
   await waitFor(() => expect(screen.getByText(/Unable to download the file/)).toBeTruthy())
   expect(screen.queryByRole('textbox', { name: 'Share link' })).toBeNull()
 })
+
+it('warns about whole-upload access before a nested file share link is ready', async () => {
+  mocks.encryption = { ready: false }
+  mocks.mint.mockImplementation(
+    () =>
+      new Promise<string>(() => {
+        // Keep minting pending to verify the warning appears before the link.
+      })
+  )
+  render(
+    <ShareFileButton
+      file={
+        {
+          ...file,
+          id: 'nested-share',
+          encrypted: true,
+          directoryEntry: { rootCid: file.cid, path: 'docs/hello.txt' },
+        } as DatasetPiece
+      }
+    />
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+  expect(screen.getByRole('dialog', { name: 'Share folder' })).toBeTruthy()
+  expect(screen.getByRole('note').textContent).toContain('This link shares the entire uploaded folder.')
+  expect(screen.getByRole('note').textContent).toContain('Access cannot be revoked.')
+  expect(screen.queryByRole('textbox', { name: 'Share link' })).toBeNull()
+})

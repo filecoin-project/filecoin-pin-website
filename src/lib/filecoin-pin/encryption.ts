@@ -263,11 +263,34 @@ export class NotOwnerError extends KeyAccessError {
  * as the vaulted grant+session pair, for a shorter lifetime.
  */
 const rememberedOwnerKeys = new Map<string, Uint8Array>()
+let ownerKeyGeneration = 0
 
 /** Drop every remembered group key (tests; wallet disconnect). */
 export function clearRememberedOwnerKeys(): void {
+  ownerKeyGeneration += 1
   for (const key of rememberedOwnerKeys.values()) key.fill(0)
   rememberedOwnerKeys.clear()
+}
+
+/** Reject stale derivations before each wallet prompt and after each response. */
+function guardedOwnerSigner(wallet: OwnerSigner, check: () => void): OwnerSigner {
+  return {
+    address: wallet.address,
+    signTypedData: async (args) => {
+      check()
+      const signature = await wallet.signTypedData(args)
+      check()
+      return signature
+    },
+  }
+}
+
+function ownerKeyGuard(signal?: AbortSignal): () => void {
+  const generation = ownerKeyGeneration
+  return () => {
+    signal?.throwIfAborted()
+    if (generation !== ownerKeyGeneration) throw new DOMException('Wallet changed during unlock.', 'AbortError')
+  }
 }
 
 /**
@@ -281,9 +304,11 @@ export function clearRememberedOwnerKeys(): void {
 export function ownerKeyResolver(
   signer: OwnerSigner | (() => OwnerSigner | undefined),
   commitment?: string,
-  options?: { remember?: boolean }
+  options?: { remember?: boolean; signal?: AbortSignal }
 ): fee.KeyResolver {
+  const check = ownerKeyGuard(options?.signal)
   return async ({ appMetadata }) => {
+    check()
     const groupKeyId = appMetadata?.['foc/ks']
     if (appMetadata?.['foc/v'] !== 1 || typeof groupKeyId !== 'string') throw new Error('not a Keysmith envelope')
     const owner = appMetadata['foc/own']
@@ -299,19 +324,21 @@ export function ownerKeyResolver(
     const remembered = options?.remember ? rememberedOwnerKeys.get(cacheKey) : undefined
     if (remembered) return keyForEnvelope(remembered, appMetadata)
     const keys = await keyspaceKeys(
-      wallet,
+      guardedOwnerSigner(wallet, check),
       { owner: wallet.address, keyspace: groupKeyId as Hex },
       commitment == null ? {} : { commitment }
     )
-    if (options?.remember) {
-      // Derivation already verified the signer (commitment or double-sign).
-      rememberedOwnerKeys.set(cacheKey, keys.kk)
-      return keyForEnvelope(keys.kk, appMetadata)
-    }
+    let retained = false
     try {
-      return keyForEnvelope(keys.kk, appMetadata)
+      check()
+      const key = keyForEnvelope(keys.kk, appMetadata)
+      if (options?.remember) {
+        rememberedOwnerKeys.set(cacheKey, keys.kk)
+        retained = true
+      }
+      return key
     } finally {
-      keys.kk.fill(0)
+      if (!retained) keys.kk.fill(0)
     }
   }
 }
@@ -344,6 +371,7 @@ export async function createShareLink(options: {
   rootCid: string
   appMetadata: Record<string, unknown>
 }): Promise<string> {
+  const check = ownerKeyGuard()
   const labels = options.appMetadata
   const owner = labels['foc/own']
   const keyspace = labels['foc/ks']
@@ -368,13 +396,18 @@ export async function createShareLink(options: {
     let node = rememberedOwnerKeys.get(cacheKey)
     if (node == null) {
       const keys = await keyspaceKeys(
-        wallet,
+        guardedOwnerSigner(wallet, check),
         { owner: wallet.address, keyspace: keyspace as Hex },
         options.sender.commitment == null ? {} : { commitment: options.sender.commitment }
       )
-      // One signature serves the page session, same cache the decrypt fallback uses.
-      rememberedOwnerKeys.set(cacheKey, keys.kk)
-      node = keys.kk
+      try {
+        check()
+        rememberedOwnerKeys.set(cacheKey, keys.kk)
+        node = keys.kk
+      } catch (cause) {
+        keys.kk.fill(0)
+        throw cause
+      }
     }
     pieceEnvelopeKey = keyForEnvelope(node, labels as never)
   }
