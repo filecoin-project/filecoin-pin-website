@@ -9,8 +9,8 @@ import { canRemoveUpload } from '../../utils/upload/can-remove-upload.ts'
 import { copyProgress, customerStatus, fileStatusColors } from '../../utils/upload/file-status.ts'
 import { getStepLabel } from '../../utils/upload/step-utils.ts'
 import {
-  classifyUploadFailure,
-  getRetryBlocker,
+  getUploadFailureCode,
+  getUploadRetryBlocker,
   type SetupTarget,
   uploadFailureMessage,
 } from '../../utils/upload/upload-readiness.ts'
@@ -31,15 +31,11 @@ export function FileUploadDetails({
   const picker = useRef<HTMLInputElement>(null)
   const [error, setError] = useState('')
   if (!upload) return null
-  const failureCode =
-    upload.phase === 'funding'
-      ? upload.funding && BigInt(upload.funding.depositNeeded) > 0n
-        ? 'deposit'
-        : 'approval'
-      : (upload.errorCode ?? classifyUploadFailure(upload.error))
-  const retryBlocker = getRetryBlocker(failureCode, readiness)
+  const failureCode = getUploadFailureCode(upload)
+  const retryBlocker = getUploadRetryBlocker(upload, readiness)
   const failureTarget =
-    failureCode === 'unsupported_wallet' ? 'encryption' : failureCode === 'unknown' ? undefined : failureCode
+    retryBlocker?.target ??
+    (failureCode === 'unsupported_wallet' ? 'encryption' : failureCode === 'unknown' ? undefined : failureCode)
   const active = tasks?.activeIds.has(file.id)
   const retryable =
     upload.phase === 'funding' || upload.phase === 'failed' || (upload.phase === 'interrupted' && !file.pieceCid)

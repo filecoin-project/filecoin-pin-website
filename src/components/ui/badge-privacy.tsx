@@ -1,7 +1,7 @@
 import { Globe, Lock } from 'lucide-react'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { cn } from '../../utils/cn.ts'
-import { hasStoredCopy } from '../../utils/upload/blocks-file-deletion.ts'
+import { hasStoredCopy } from '../../utils/upload/has-stored-copy.ts'
 
 const ENCRYPTED_TITLE = 'Encrypted at rest. Only your wallet and people you share with can read this file.'
 

@@ -1,3 +1,5 @@
+import type { UploadCheckpoint } from '../../lib/filecoin-pin/upload-checkpoint.ts'
+
 export type SetupTarget = 'session' | 'encryption' | 'gas' | 'deposit' | 'approval'
 export type UploadFailureCode = SetupTarget | 'unsupported_wallet' | 'unknown'
 export class UploadSetupError extends Error {
@@ -84,7 +86,10 @@ export function getUploadReadiness(input: UploadSetupInput) {
     message,
   }
 }
-export function getRetryBlocker(code: UploadFailureCode, readiness: ReturnType<typeof getUploadReadiness>) {
+export function getRetryBlocker(
+  code: UploadFailureCode,
+  readiness: ReturnType<typeof getUploadReadiness>
+): UploadBlocker | undefined {
   if (code === 'unknown') return undefined
   if (readiness.checkFailed) return { code, message: 'Unable to verify wallet setup. Retry the setup checks.' }
   if (readiness.checking) return { code, message: 'Checking wallet setup before retrying.' }
@@ -92,6 +97,18 @@ export function getRetryBlocker(code: UploadFailureCode, readiness: ReturnType<t
     (blocker) => blocker.code === code || (code === 'unsupported_wallet' && blocker.code === 'encryption')
   )
   if (blocker) return blocker
+  if (readiness.blockers.length > 0) return readiness.blockers[0]
   if (!readiness.canUpload && readiness.blockers.length === 0) return { code, message: readiness.message }
   return undefined
+}
+
+export function getUploadFailureCode(
+  upload: Pick<UploadCheckpoint, 'phase' | 'funding' | 'errorCode' | 'error'>
+): UploadFailureCode {
+  if (upload.phase === 'funding')
+    return upload.funding && BigInt(upload.funding.depositNeeded) > 0n ? 'deposit' : 'approval'
+  return upload.errorCode ?? classifyUploadFailure(upload.error)
+}
+export function getUploadRetryBlocker(upload: UploadCheckpoint, readiness: ReturnType<typeof getUploadReadiness>) {
+  return getRetryBlocker(getUploadFailureCode(upload), readiness)
 }

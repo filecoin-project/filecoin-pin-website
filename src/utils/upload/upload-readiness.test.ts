@@ -87,3 +87,12 @@ it('offers the actual missing step once reads succeed', () => {
   expect(state.actionLabel).toBe('Add FIL')
   expect(state.actionTarget).toBe('gas')
 })
+
+it.each([
+  ['session', { sessionStatus: 'inactive' }],
+  ['encryption', { encryptionReady: false }],
+] as const)('blocks a deposit retry when %s becomes unavailable', (code, change) => {
+  const state = getUploadReadiness({ ...ready, ...change })
+  expect(getRetryBlocker('deposit', state)?.code).toBe(code)
+  expect(getRetryBlocker('unknown', state)).toBeUndefined()
+})

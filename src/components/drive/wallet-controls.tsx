@@ -20,11 +20,13 @@ import { useTheme } from '../../context/theme-provider.tsx'
 import { useUploadHistory } from '../../context/upload-history-context.tsx'
 import { useUploadTasks } from '../../context/upload-tasks-context.tsx'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
+import { useUploadReadiness } from '../../hooks/use-upload-readiness.ts'
 import { chains } from '../../lib/filecoin-pin/browser-wallet.ts'
 import { DEFAULT_SESSION_DAYS } from '../../lib/filecoin-pin/config.ts'
 import { approveStoragePayments, depositStorageFunds } from '../../lib/filecoin-pin/payments.ts'
 import { formatFundingAmount } from '../../lib/filecoin-pin/upload-funding.ts'
 import { shortenAddress } from '../../lib/filecoin-pin/wallet.ts'
+import { getUploadRetryBlocker } from '../../utils/upload/upload-readiness.ts'
 import { ButtonBase } from '../ui/button/button-base.tsx'
 import { Select } from '../ui/select.tsx'
 import { ConnectWalletButton } from './connect-wallet-button.tsx'
@@ -170,6 +172,7 @@ export function WalletSetup({
   const connection = useBrowserWallet()
   const { history } = useUploadHistory()
   const tasks = useUploadTasks()
+  const readiness = useUploadReadiness()
   const fundingRequests = history.filter((file) => file.upload?.phase === 'funding')
   const { wallet, refreshWallet, storageSetup, encryption } = useFilecoinPinContext()
   const [days, setDays] = useState(DEFAULT_SESSION_DAYS)
@@ -490,45 +493,54 @@ export function WalletSetup({
               </section>
             )}
             {wallet.data && <StorageRunway />}
-            {fundingRequests.map((file, index) => (
-              <section
-                aria-label="Pending upload funding"
-                className="space-y-3 rounded-xl border border-border bg-surface p-4"
-                key={file.id}
-                ref={index === 0 ? pendingFundingTarget : undefined}
-              >
-                <h3 className="text-sm font-medium">Paused · {file.fileName}</h3>
-                <p className="text-xs leading-5 text-muted">{file.upload?.error}</p>
-                <div className="flex flex-wrap gap-2">
-                  {file.upload?.funding && BigInt(file.upload.funding.depositNeeded) > 0n && (
-                    <ButtonBase
-                      className="w-auto"
-                      disabled={disabled}
-                      onClick={() =>
-                        applyDepositAmount(formatFundingAmount(BigInt(file.upload?.funding?.depositNeeded ?? '0')))
-                      }
-                      size="sm"
-                      variant="secondary"
-                    >
-                      Use upload minimum
-                    </ButtonBase>
+            {fundingRequests.map((file, index) => {
+              const retryBlocker = file.upload ? getUploadRetryBlocker(file.upload, readiness) : undefined
+              return (
+                <section
+                  aria-label="Pending upload funding"
+                  className="space-y-3 rounded-xl border border-border bg-surface p-4"
+                  key={file.id}
+                  ref={index === 0 ? pendingFundingTarget : undefined}
+                >
+                  <h3 className="text-sm font-medium">Paused · {file.fileName}</h3>
+                  <p className="text-xs leading-5 text-muted">{file.upload?.error}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {file.upload?.funding && BigInt(file.upload.funding.depositNeeded) > 0n && (
+                      <ButtonBase
+                        className="w-auto"
+                        disabled={disabled}
+                        onClick={() =>
+                          applyDepositAmount(formatFundingAmount(BigInt(file.upload?.funding?.depositNeeded ?? '0')))
+                        }
+                        size="sm"
+                        variant="secondary"
+                      >
+                        Use upload minimum
+                      </ButtonBase>
+                    )}
+                    {tasks?.retainedIds.has(file.id) && (
+                      <ButtonBase
+                        className="w-auto"
+                        disabled={disabled || Boolean(retryBlocker)}
+                        onClick={() => {
+                          if (!disabled && !retryBlocker) void tasks.resume(file.id)
+                        }}
+                        size="sm"
+                      >
+                        Check funding and continue
+                      </ButtonBase>
+                    )}
+                  </div>
+                  {tasks?.retainedIds.has(file.id) && retryBlocker && (
+                    <p className="text-xs text-muted">Retry unavailable: {retryBlocker.message}</p>
                   )}
-                  {tasks?.retainedIds.has(file.id) && (
-                    <ButtonBase
-                      className="w-auto"
-                      disabled={disabled}
-                      onClick={() => void tasks.resume(file.id)}
-                      size="sm"
-                    >
-                      Check funding and continue
-                    </ButtonBase>
-                  )}
-                </div>
-                <p className="text-xs text-muted">
-                  Last checked upload minimum. Rechecked before continuing; the budget below includes additional usage.
-                </p>
-              </section>
-            ))}
+                  <p className="text-xs text-muted">
+                    Last checked upload minimum. Rechecked before continuing; the budget below includes additional
+                    usage.
+                  </p>
+                </section>
+              )
+            })}
             <StorageBudget disabled={disabled} onSuggestedAmount={updateSuggestedAmount}>
               <div
                 className="scroll-mt-24 space-y-3 border-t border-border p-4 sm:p-5"

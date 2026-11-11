@@ -36,9 +36,10 @@ import {
   getPieceExplorerLink,
   getTxExplorerLink,
 } from '../../utils/links.ts'
-import { blocksFileDeletion, hasStoredCopy } from '../../utils/upload/blocks-file-deletion.ts'
+import { blocksFileDeletion } from '../../utils/upload/blocks-file-deletion.ts'
 import { canRemoveUpload } from '../../utils/upload/can-remove-upload.ts'
 import { customerStatus, fileStatus } from '../../utils/upload/file-status.ts'
+import { hasStoredCopy } from '../../utils/upload/has-stored-copy.ts'
 import { storageCopyTransactionHash } from '../../utils/upload/storage-copy-transaction.ts'
 import { uploadFailureMessage } from '../../utils/upload/upload-readiness.ts'
 import { BadgePrivacy } from '../ui/badge-privacy.tsx'

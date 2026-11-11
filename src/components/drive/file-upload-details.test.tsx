@@ -3,9 +3,9 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { FileUploadDetails } from './file-upload-details.tsx'
 
-const state = vi.hoisted(() => ({ encryptionReady: false, start: vi.fn() }))
+const state = vi.hoisted(() => ({ encryptionReady: false, sessionStatus: 'active', start: vi.fn() }))
 vi.mock('../../context/browser-wallet-provider.tsx', () => ({
-  useBrowserWallet: () => ({ sessionStatus: 'active', busy: false }),
+  useBrowserWallet: () => ({ sessionStatus: state.sessionStatus, busy: false }),
 }))
 vi.mock('../../hooks/use-filecoin-pin-context.ts', () => ({
   useFilecoinPinContext: () => ({
@@ -51,6 +51,7 @@ const file = {
   },
 } as DatasetPiece
 beforeEach(() => {
+  state.sessionStatus = 'active'
   state.encryptionReady = false
   state.start.mockClear()
 })
@@ -79,4 +80,29 @@ it('allows retry for a provider failure even if encryption is currently unavaila
   )
   expect((screen.getByRole('button', { name: 'Retry upload' }) as HTMLButtonElement).disabled).toBe(false)
   expect(screen.queryByRole('button', { name: 'Review Wallet setup' })).toBeNull()
+})
+
+it('blocks a funded upload after session expiry and routes repair to the current missing step', () => {
+  state.encryptionReady = true
+  state.sessionStatus = 'inactive'
+  const open = vi.fn()
+  render(
+    <FileUploadDetails
+      file={{
+        ...file,
+        upload: {
+          ...(file.upload as NonNullable<DatasetPiece['upload']>),
+          phase: 'funding',
+          funding: { depositNeeded: '1000000000000000000', needsApproval: false },
+          error: 'Add storage funds to continue.',
+        },
+      }}
+      onOpenWallet={open}
+    />
+  )
+  expect((screen.getByRole('button', { name: 'Retry upload' }) as HTMLButtonElement).disabled).toBe(true)
+  expect(screen.getByText('Retry unavailable: Authorize this browser to upload.')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Review Wallet setup' }))
+  expect(open).toHaveBeenCalledWith('session')
+  expect(state.start).not.toHaveBeenCalled()
 })
