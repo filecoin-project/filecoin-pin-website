@@ -1,13 +1,80 @@
+import { CarReader } from '@ipld/car'
 import { exporter } from 'ipfs-unixfs-exporter'
 import { CID } from 'multiformats/cid'
 import { sha256 } from 'multiformats/hashes/sha2'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
+import { carRootFileBytes, type DecryptCredentials, fetchPieceCar } from './download.ts'
+import { payloadEntry } from './encrypted-payload.ts'
+import { decryptEnvelope, grantKeyResolver, isEncryptionEnvelope } from './encryption.ts'
 
 const MAX_BLOCK_BYTES = 2 * 1024 * 1024
 const CACHE_BYTES = 16 * 1024 * 1024
 
+/**
+ * Browsing an encrypted piece cannot stream ciphertext blocks: fetch the whole
+ * envelope once from the piece's providers, decrypt it with the session grant
+ * (never a wallet prompt — this is passive browsing), and walk the inner CAR.
+ * The reader stays keyed by the outer root so directory caching is unchanged.
+ */
+function encryptedContentReader(file: DatasetPiece, signal: AbortSignal, credentials: DecryptCredentials) {
+  let opened: Promise<{ reader: CarReader; root: string; prefix: string }> | undefined
+  const open = () => {
+    opened ??= (async () => {
+      const session = credentials.session
+      if (!session) throw new Error('Connect your wallet to browse this encrypted folder.')
+      const carBytes = await fetchPieceCar(null, file)
+      signal.throwIfAborted()
+      const envelope = await carRootFileBytes(carBytes)
+      if (!envelope || !(await isEncryptionEnvelope(envelope)))
+        throw new Error('This record is marked encrypted but is not an encryption envelope.')
+      const inner = await decryptEnvelope(envelope, grantKeyResolver(session.privateKey, session.credential))
+      signal.throwIfAborted()
+      const reader = await CarReader.fromBytes(inner)
+      const [root] = await reader.getRoots()
+      if (!root) throw new Error('The decrypted content is missing its root CID.')
+      // New payloads wrap the folder in an anonymous directory with one named
+      // entry; browsing paths stay relative to the folder itself.
+      const prefix = await payloadEntry(reader).then(
+        (entry) => entry.name,
+        () => ''
+      )
+      return { reader, root: root.toString(), prefix }
+    })().catch((cause: unknown) => {
+      // A failed fetch or missing grant must not stick to the reader; the next
+      // entry() call starts over.
+      opened = undefined
+      throw cause
+    })
+    return opened
+  }
+  return {
+    rootCid: file.cid,
+    entry: async (path = '') => {
+      const { reader, root, prefix } = await open()
+      signal.throwIfAborted()
+      const blockstore = {
+        get: async function* (cid: CID) {
+          const block = await reader.get(CID.parse(cid.toString()))
+          if (!block) throw new Error('Missing file block in the decrypted content')
+          yield block.bytes
+        },
+      }
+      const inside = [prefix, path].filter(Boolean).join('/')
+      return exporter(`${root}${inside ? `/${inside}` : ''}`, blockstore)
+    },
+  }
+}
+
 /** Direct, bounded provider reads. Never trust a block without checking its CID. */
-export function contentReader(file: DatasetPiece, signal: AbortSignal, rootOnly = false) {
+export function contentReader(
+  file: DatasetPiece,
+  signal: AbortSignal,
+  rootOnly = false,
+  credentials: DecryptCredentials = {}
+) {
+  // Root-only inspection stays on gateway reads: the outer root block of an
+  // encrypted piece is public, and size probes must never trigger a decrypt.
+  if (file.encrypted && !rootOnly) return encryptedContentReader(file, signal, credentials)
   const urls = [
     ...new Set([
       ...(file.serviceURLs ?? [file.serviceURL]),

@@ -41,6 +41,7 @@ vi.mock('../../hooks/use-filecoin-pin-context.ts', () => ({
     dataSet: { status: 'ready', dataSetIds: [1n, 2n] },
     ensurePermissions: mocks.permissions,
     addDataSetId: vi.fn(),
+    encryption: { ready: false },
   }),
 }))
 vi.mock('../../context/browser-wallet-provider.tsx', () => ({
@@ -664,6 +665,40 @@ it.each([false, true])('keeps original downloads without a gateway download link
   if (importedCar) expect(screen.getByRole('button', { name: 'Preview' })).toHaveProperty('disabled', true)
   else expect(screen.getByRole('link', { name: 'Preview' })).toBeTruthy()
   expect(screen.queryByText(/The gateway exports a new CAR/)).toBeNull()
+})
+it('names the real blocker when an encrypted file has no in-browser preview format, instead of the unrelated gateway/CAR copy', async () => {
+  setCachedPieces(scope, [{ ...file, fileName: 'archive.zip', encrypted: true }])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'archive.zip' }))
+  const preview = screen.getByRole('button', { name: 'Preview' })
+  expect(preview).toHaveProperty('disabled', true)
+  expect(preview.getAttribute('title')).toMatch(/no in-browser preview/i)
+  expect(preview.getAttribute('title')).not.toMatch(/IPFS indexer|imported CAR/i)
+})
+
+it('names folders and imported CARs correctly rather than blaming format, when encrypted', async () => {
+  setCachedPieces(scope, [
+    { ...file, id: 'enc-dir', fileName: 'Photos', isDirectory: true, encrypted: true, cid: '' },
+    { ...file, id: 'enc-car', fileName: 'backup.car', importedCar: true, encrypted: true },
+  ])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  await screen.findByRole('checkbox', { name: 'Select Photos' })
+  const photosRow = screen.getByRole('checkbox', { name: 'Select Photos' }).closest('tr') as HTMLElement
+  fireEvent.click(within(photosRow).getByRole('button', { name: 'Details' }))
+  expect(screen.getByRole('button', { name: 'Preview' }).getAttribute('title')).toMatch(/folders have no/i)
+  fireEvent.click(screen.getByRole('button', { name: 'Close details' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'backup.car' }))
+  expect(screen.getByRole('button', { name: 'Preview' }).getAttribute('title')).toMatch(
+    /imported car archives have no/i
+  )
 })
 
 it.each([

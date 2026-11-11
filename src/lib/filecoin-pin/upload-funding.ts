@@ -85,7 +85,8 @@ export async function resolveUploadContexts(
       synapse,
       getOrCreateClientId(),
       DEFAULT_STORAGE_COPIES - contexts.length,
-      contexts.map((context) => context.provider.id)
+      contexts.map((context) => context.provider.id),
+      options.metadata
     )
     contexts = [...contexts, ...additional]
   }

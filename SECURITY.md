@@ -31,6 +31,27 @@ for qualifying vulnerabilities. See the
 [Coordinated Disclosure Policy](https://fil.org/security/coordinated-disclosure-policy)
 for the full process, timelines, and Safe Harbor provisions.
 
+## Encryption threat model
+
+Uploads are encrypted by default with Keysmith-derived keys (see the
+README's Encryption section). Two properties deserve a security
+reviewer's attention:
+
+- **The session vault is the boundary.** The browser session key and
+  the group-key grant wrapped to it live together in IndexedDB. The
+  vault record is AES-GCM encrypted, but its wrapping key is stored in
+  the same IndexedDB record: this is at-rest obfuscation, not a
+  hardware boundary. Any code running on the origin, or a local
+  attacker reading the browser profile, recovers both — which yields
+  write access (until session expiry) and, new with encryption, read
+  access to every file under the group key.
+- **Key compromise is permanent.** The group key derives
+  deterministically from an owner-wallet signature over a fixed
+  message; grants and share links cannot be revoked and do not expire.
+  Revoking the session key does not retract decryption ability already
+  extracted. Recovery from a compromise means creating a new group key
+  and re-encrypting and re-uploading all content.
+
 ## What to include in a report
 
 - Description of the vulnerability and its potential impact

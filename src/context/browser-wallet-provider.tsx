@@ -4,9 +4,16 @@ import { getSignerClient } from '@filoz/synapse-react'
 import { Synapse } from '@filoz/synapse-sdk'
 import { useQueryClient } from '@tanstack/react-query'
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { type Address, BaseError, getAddress, type Hash, UserRejectedRequestError } from 'viem'
+import {
+  type Address,
+  BaseError,
+  getAddress,
+  type Hash,
+  type SignTypedDataParameters,
+  UserRejectedRequestError,
+} from 'viem'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
-import { writeContract } from 'viem/actions'
+import { signTypedData, writeContract } from 'viem/actions'
 import { type Connector, useConfig, useConnections, useConnectors } from 'wagmi'
 import { connect, disconnect, getConnectorClient, reconnect, switchChain } from 'wagmi/actions'
 import { injected } from 'wagmi/connectors'
@@ -20,6 +27,12 @@ import {
   SessionPermissionError,
   scopeFor,
 } from '../lib/filecoin-pin/browser-wallet.ts'
+import {
+  clearRememberedOwnerKeys,
+  issueEncryptionCredential,
+  type OwnerSigner,
+} from '../lib/filecoin-pin/encryption.ts'
+import { scanGroupKey } from '../lib/filecoin-pin/group-key-scan.ts'
 import { APPLICATION_SOURCE } from '../lib/filecoin-pin/synapse.ts'
 import {
   type BrowserProvider,
@@ -61,6 +74,13 @@ interface WalletConnection {
   switchNetwork: (network: DriveNetwork) => Promise<void>
   authorize: (days: number) => Promise<void>
   revoke: () => Promise<void>
+  addEncryptionKey: () => Promise<void>
+  /**
+   * EIP-712 signer for the connected owner wallet, built on demand. Used by
+   * downloads as the decrypt fallback when no session grant is usable; the
+   * wallet prompt only fires when the signer actually signs.
+   */
+  ownerSigner: () => Promise<OwnerSigner | undefined>
   paymentAction: (
     action: (synapse: Synapse, confirm: (hash: Hash) => Promise<void>) => Promise<unknown>,
     kind?: 'deposit' | 'approve'
@@ -361,6 +381,9 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
     } else {
       setSession(null)
       setAddress(next)
+      // A different account must never silently decrypt with the old
+      // account's still-cached root key.
+      clearRememberedOwnerKeys()
       if (!next) setProvider(null)
     }
   }, [selectedConnection?.accounts, address, provider])
@@ -369,6 +392,7 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
     if (!busy && !uploading && !deleting && deferredAccount.current !== undefined) {
       setSession(null)
       setAddress(deferredAccount.current)
+      clearRememberedOwnerKeys()
       if (!deferredAccount.current) setProvider(null)
       deferredAccount.current = undefined
     }
@@ -545,6 +569,8 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
             setSession(null)
             setProvider(null)
             setError(null)
+            // Root-derived group keys cached for silent decrypts die with the wallet.
+            clearRememberedOwnerKeys()
           }),
         switchNetwork: (target) =>
           run(async () => {
@@ -566,6 +592,9 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
                 privateKey: current?.privateKey ?? generatePrivateKey(),
                 expiresAt: Math.floor(Date.now() / 1000) + days * 86400,
                 revision: crypto.randomUUID(),
+                // The grant is wrapped to the session key pair. Re-authorizing reuses
+                // the key, so a preserved credential stays valid: no new signature.
+                ...(current?.encryption ? { encryption: current.encryption } : {}),
               }
             })
             if (!next) throw new Error('Unable to save the upload session.')
@@ -620,6 +649,41 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
               revision: session.revision,
             })
           }, 'session'),
+        addEncryptionKey: () =>
+          run(async () => {
+            if (!address || !session || session.expiresAt <= Math.floor(Date.now() / 1000))
+              throw new Error('Authorize an upload session first.')
+            const scope = scopeFor(address, network)
+            const client = await requireOwner()
+            const signer: OwnerSigner = {
+              address,
+              signTypedData: (args) =>
+                signTypedData(client, { account: address, ...args } as unknown as SignTypedDataParameters),
+            }
+            // A renewed session restores access with 1 signature: the vault still
+            // records the group key. First-time setup scans the owner's data sets
+            // so Drive lands on the same group key the CLI would.
+            const recorded = session.encryption
+              ? { groupKeyId: session.encryption.groupKeyId, commitment: session.encryption.commitment }
+              : await scanGroupKey(new Synapse({ client: asClient(client), source: APPLICATION_SOURCE }))
+            const credential = await issueEncryptionCredential(signer, session.privateKey, recorded)
+            // No transaction: the grant never leaves this browser. Persist it beside
+            // the session key it is wrapped to; a rotated key keeps nothing stale.
+            const saved = await updateBrowserSession(scope, (current) =>
+              current && current.privateKey === session.privateKey ? { ...current, encryption: credential } : current
+            )
+            if (identity.current === scope && saved) setSession(saved)
+          }, 'session'),
+        ownerSigner: async () => {
+          if (!address) return undefined
+          const client = await requireOwner()
+          const owner = address
+          return {
+            address: owner,
+            signTypedData: (args) =>
+              signTypedData(client, { account: owner, ...args } as unknown as SignTypedDataParameters),
+          }
+        },
         paymentAction: (action, kind = 'deposit') =>
           run(async () => {
             if (transaction.pending) return

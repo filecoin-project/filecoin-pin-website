@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   setUploading: vi.fn(),
   refresh: vi.fn(),
   removalError: vi.fn(),
+  lastRoot: '',
 }))
 vi.mock('../lib/filecoin-pin/drive-api.ts', async (original) => ({
   ...(await original<object>()),
@@ -18,19 +19,37 @@ vi.mock('filecoin-pin/core/payments', () => ({
   checkFILBalance: vi.fn().mockResolvedValue({ balance: 10n ** 18n, isCalibnet: false }),
   validateGasRequirement: vi.fn().mockReturnValue({ isValid: true }),
 }))
-vi.mock('filecoin-pin/core/upload', () => ({
-  executeUpload: mocks.execute,
-  checkUploadReadiness: vi.fn().mockResolvedValue({ status: 'ready' }),
-}))
+vi.mock('filecoin-pin/core/upload', () => ({ executeUpload: mocks.execute }))
 vi.mock('../lib/filecoin-pin/upload-input.ts', () => ({
-  prepareUploadInput: async (file: File) => ({
-    rootCid: {
-      toString: () =>
-        file.name === 'first.txt'
-          ? 'bafkreigh2akiscaildcgck5x5wqlooqkztdxqv5t5uwmybnv5brkw4zj3m'
-          : 'bafkreig4nl6nqu64xpwqfimx5bwhcntmpbgbjnly7dzs6u6zkeqfkimtfe',
-    },
-    carBytes: new Uint8Array([1]),
+  prepareUploadInput: async (file: File) => {
+    mocks.lastRoot =
+      file.name === 'first.txt'
+        ? 'bafkreigh2akiscaildcgck5x5wqlooqkztdxqv5t5uwmybnv5brkw4zj3m'
+        : 'bafkreig4nl6nqu64xpwqfimx5bwhcntmpbgbjnly7dzs6u6zkeqfkimtfe'
+    return { rootCid: { toString: () => mocks.lastRoot }, carBytes: new Uint8Array([1]) }
+  },
+}))
+// These suites exercise queueing/checkpoints, not the envelope format (covered
+// by use-filecoin-upload.test.ts with real crypto): encryption passes bytes
+// through and the outer root mirrors the inner one, keeping cid assertions stable.
+vi.mock('../lib/filecoin-pin/encryption.ts', async (original) => ({
+  ...(await original<object>()),
+  encryptCar: async (_key: string, _credential: unknown, bytes: Uint8Array) => bytes,
+}))
+vi.mock('../lib/filecoin-pin/encrypted-payload.ts', () => ({
+  wrapCarPayload: async (base: { carBytes: Uint8Array; rootCid: { toString(): string } }) => ({
+    carBytes: base.carBytes,
+    rootCid: base.rootCid.toString(),
+  }),
+  buildEncryptedPayload: async (input: { carBytes: Uint8Array }) => ({
+    carBytes: input.carBytes,
+    rootCid: mocks.lastRoot,
+  }),
+}))
+vi.mock('filecoin-pin/core/unixfs', () => ({
+  createCarFromFile: async (file: File) => ({
+    rootCid: { toString: () => mocks.lastRoot },
+    carBytes: new Uint8Array(await file.arrayBuffer()),
   }),
 }))
 vi.mock('../lib/filecoin-pin/fresh-contexts.ts', () => ({
@@ -64,6 +83,16 @@ const context = {
   ensurePermissions: async () => undefined,
   addDataSetId: vi.fn(),
   debugParams: { providerId: null, dataSetId: null },
+  encryption: {
+    ready: true,
+    sessionPrivateKey: `0x${'1'.repeat(64)}`,
+    credential: {
+      grant: 'mGrant',
+      groupKeyId: `0x${'a'.repeat(32)}`,
+      commitment: `v1.${'b'.repeat(32)}`,
+      owner: scope.slice(4).toLowerCase(),
+    },
+  },
 }
 const pieceCid = 'bafkzcibcd4bdomn3tgwgrh3g532zopskstnbrd2n3sxfqbze7rxt7vqn7veigmy'
 type Operation = {

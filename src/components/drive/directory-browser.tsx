@@ -1,14 +1,17 @@
 import { ChevronRight, Download, Eye, Folder, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
+import { useEncryptedPreview } from '../../hooks/use-encrypted-preview.ts'
+import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import {
   DIRECTORY_PAGE_SIZE,
   type DirectoryItem,
   listDirectory,
   searchDirectory,
 } from '../../lib/filecoin-pin/directory.ts'
+import { decryptCredentials } from '../../lib/filecoin-pin/download.ts'
 import { displayFileName } from '../../lib/filecoin-pin/drive-api.ts'
-import { canPreviewFile } from '../../lib/filecoin-pin/file-links.ts'
+import { canDecryptPreview, canPreviewFile } from '../../lib/filecoin-pin/file-links.ts'
 import { type ContentReader, contentReader } from '../../lib/filecoin-pin/ipfs-content.ts'
 import { formatFileSize } from '../../utils/format-file-size.ts'
 import { getIpfsGatewayPreviewLink } from '../../utils/links.ts'
@@ -47,18 +50,25 @@ export function DirectoryBrowser({
   const [attempt, setAttempt] = useState(0)
   const [page, setPage] = useState<{ items: DirectoryItem[]; hasMore: boolean; cid: string } | null>(null)
   const [error, setError] = useState('')
+  const { encryption } = useFilecoinPinContext()
+  const { openPreview, previewingId } = useEncryptedPreview()
   const sources = JSON.stringify({
     cid: file.cid,
     serviceURL: file.serviceURL,
     serviceURLs: file.serviceURLs,
     upload: file.upload ? { providers: file.upload.providers } : undefined,
+    // Encrypted pieces cannot stream ciphertext blocks: the reader fetches the
+    // whole envelope by pieceCid and decrypts it with the session grant.
+    encrypted: file.encrypted,
+    pieceCid: file.pieceCid,
   })
   const [session, setSession] = useState<{ controller: AbortController; reader: ContentReader } | null>(null)
   useEffect(() => {
     const controller = new AbortController()
-    setSession({ controller, reader: contentReader(JSON.parse(sources), controller.signal) })
+    const credentials = decryptCredentials(encryption)
+    setSession({ controller, reader: contentReader(JSON.parse(sources), controller.signal, false, credentials) })
     return () => controller.abort()
-  }, [sources])
+  }, [sources, encryption])
   useEffect(() => {
     void search
     setOffset(0)
@@ -209,6 +219,7 @@ export function DirectoryBrowser({
                 .map((item) => {
                   const child = selection(item)
                   const preview = !item.isDirectory && canPreviewFile(child)
+                  const decryptPreview = !item.isDirectory && canDecryptPreview(child)
                   return (
                     <tr className="border-t border-border hover:bg-surface" key={item.path}>
                       <td className="pl-16 pr-4 py-3">
@@ -257,6 +268,17 @@ export function DirectoryBrowser({
                             >
                               <Eye size={14} /> Preview
                             </a>
+                          )}
+                          {decryptPreview && (
+                            <button
+                              className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent disabled:opacity-40"
+                              disabled={previewingId !== null}
+                              onClick={() => openPreview(child)}
+                              title="Decrypts in your browser and opens in a new tab."
+                              type="button"
+                            >
+                              <Eye size={14} /> {previewingId === child.id ? 'Decrypting…' : 'Preview'}
+                            </button>
                           )}
                           <ShareFileButton file={child} />
                         </div>

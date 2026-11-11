@@ -33,10 +33,26 @@ For wallet setup, downloads, deletion and recovery, see the [user guide](docs/us
 ## Important limits
 
 - Mainnet operations spend real FIL and USDFC. Keep FIL available for gas.
-- Content is not encrypted. File names, paths and content identifiers are public.
+- Content is encrypted by default (see [Encryption](#encryption)). File names, paths, content identifiers and sizes remain public.
 - Browser uploads have a 200 MB limit. For folder uploads, both selected content and the packed CAR must fit this limit. The selected file or folder name and the **Upload location** value each have a separate 96-byte UTF-8 limit; see the [naming example](docs/user-guide.md#names-and-upload-location).
 - Keep the tab open while upload or deletion work is running. Recent files may take time to appear in another browser.
 - Deletion is scheduled rather than immediate. IPFS caches may retain content, and removal does not immediately stop every storage charge.
+
+## Encryption
+
+Every upload is encrypted by default with [Keysmith](https://github.com/FilOzone/synapse-sdk/tree/master/packages/keysmith) keys and the Filecoin Encryption Envelope, the same conventions the filecoin-pin CLI uses — `filecoin-pin get` and the share viewer can read Drive's uploads, and Drive lands on the same group key a CLI user already set up. The content is packed into a CAR under the filecoin-pin payload profile, encrypted under a fresh per-upload key, and the ciphertext envelope is what storage providers hold and IPNI indexes.
+
+**Key model.** Your group key is derived from a wallet signature over a fixed message — nothing is stored on a server, and no one else can derive it. During setup the group key is wrapped to this browser's session key as a grant kept in the session vault, so routine uploads, downloads, previews and folder browsing never prompt the wallet. As the owner you always have access: with no session, an expired grant, or a brand-new browser, the first decrypt signs one message with your wallet (two when no commitment is reachable) and is remembered for the page session. Wallets that cannot produce deterministic ECDSA signatures (some smart accounts and embedded wallets) cannot derive encryption keys; uploads stay blocked for them.
+
+**What stays public.** Content bytes and the plaintext content CID are encrypted. File names (`label`), folder paths (`path`), your wallet address, the group key id, the per-upload salt, ciphertext size, piece CIDs and data-set metadata remain publicly visible — Drive deliberately keeps names and paths public so the file browser works on every device without decrypting. This is content encryption, not metadata privacy. Files stored without encryption (uploads from before this feature) are flagged **Public** in the file list.
+
+**CIDs are no longer deterministic.** Each upload uses a fresh salt, so uploading identical content twice produces different stored CIDs and piece CIDs. Drive deduplicates and locks on the plaintext content CID it records locally. The public CID of an encrypted file identifies the envelope, not the content; gateway links to it serve ciphertext, which is why encrypted files decrypt in the browser for preview and their Share button mints a Keysmith share link instead of a gateway URL.
+
+**Sharing.** Share on an encrypted file wraps that one file's key to a fresh throwaway key and builds a viewer link carrying everything in the URL fragment, so nothing reaches a server. Anyone with the link can read that one file, forever: share links cannot be revoked. The same link opens with `filecoin-pin get --share`.
+
+**Data sets and cost.** Encrypted uploads go to data sets created with the Keysmith metadata (`foc/enc`, `foc/ks`, `foc/kc`). Existing plain data sets cannot be upgraded (data-set metadata is immutable), so the first encrypted upload creates new data sets and older ones remain for files uploaded before encryption; wallets with legacy files pay for both generations until the legacy files are deleted. Legacy plaintext files keep downloading and sharing exactly as before.
+
+**Compromise is permanent.** The group key is deterministic and grants are irrevocable. Anyone who extracts the session vault (grant plus session key) from this browser profile can read everything under the group key, and revoking the session key does not undo that. Recovery means a new group key and re-encrypting and re-uploading everything. See [SECURITY.md](SECURITY.md).
 
 ## Development
 

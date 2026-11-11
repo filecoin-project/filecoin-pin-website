@@ -8,6 +8,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { BaseError, UserRejectedRequestError } from 'viem'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import * as encryptionModule from '../lib/filecoin-pin/encryption.ts'
 
 const mocks = vi.hoisted(() => ({
   write: vi.fn(),
@@ -330,6 +331,19 @@ describe('BYOW browser sessions', () => {
     act(() => result.current.setUploading(false))
     await waitFor(() => expect(result.current.address).toBe(BOB))
     expect(mocks.load).toHaveBeenLastCalledWith(`314:${BOB}`)
+  })
+  it('clears root-derived group keys cached for the old account on an extension account switch', async () => {
+    const clear = vi.spyOn(encryptionModule, 'clearRememberedOwnerKeys')
+    const { result } = renderHook(useBrowserWallet, { wrapper })
+    await act(async () => result.current.connect())
+    clear.mockClear()
+    act(() => {
+      accounts = [BOB]
+      listeners.get('accountsChanged')?.(accounts)
+    })
+    await waitFor(() => expect(result.current.address).toBe(BOB))
+    // Bob's wallet must never silently decrypt with Alice's still-cached key.
+    expect(clear).toHaveBeenCalled()
   })
   it('does not enable a session when its authorization transaction reverts', async () => {
     mocks.receipt.mockResolvedValue({ status: 'reverted' })

