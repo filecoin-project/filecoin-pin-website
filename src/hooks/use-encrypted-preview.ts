@@ -1,40 +1,62 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useBrowserWallet } from '../context/browser-wallet-provider.tsx'
-import { decryptCredentials, previewBlob } from '../lib/filecoin-pin/download.ts'
+import { decryptCredentials, encryptedPieceShareLink } from '../lib/filecoin-pin/download.ts'
 import { toast } from '../utils/toast.tsx'
 import type { DatasetPiece } from './use-dataset-pieces.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 
-/**
- * Client-side preview of encrypted files: fetch the envelope, decrypt with
- * the session grant (owner-wallet signature as fallback), and open the
- * plaintext in a new tab as an object URL. The tab is opened synchronously on
- * the click so popup blockers allow it; it navigates once decryption lands.
- */
+/** Prepare an external viewer link; navigation remains a direct user click. */
 export function useEncryptedPreview() {
-  const { synapse, encryption } = useFilecoinPinContext()
+  const { synapse, encryption, storageScope } = useFilecoinPinContext()
   const { ownerSigner } = useBrowserWallet()
   const [previewingId, setPreviewingId] = useState<string | null>(null)
+  const [prepared, setPrepared] = useState<{
+    id: string
+    rootCid: string
+    url: string
+    scope?: string
+  } | null>(null)
+  const active = useRef<AbortController | null>(null)
 
-  const openPreview = (file: DatasetPiece) => {
-    if (!synapse || previewingId) return
-    const tab = window.open('', '_blank')
+  useEffect(() => {
+    void storageScope
+    setPreviewingId(null)
+    setPrepared(null)
+    return () => {
+      active.current?.abort()
+      active.current = null
+    }
+  }, [storageScope])
+
+  const getPreviewLink = (file: DatasetPiece) =>
+    prepared?.scope === storageScope &&
+    prepared?.id === file.id &&
+    prepared?.rootCid === (file.directoryEntry?.rootCid ?? file.cid)
+      ? prepared.url
+      : undefined
+
+  const preparePreview = (file: DatasetPiece) => {
+    if (!synapse || active.current || getPreviewLink(file)) return
+    const controller = new AbortController()
+    active.current = controller
     setPreviewingId(file.id)
     const credentials = decryptCredentials(encryption, ownerSigner)
-    void previewBlob(synapse, file, credentials)
-      .then((blob) => {
-        const url = URL.createObjectURL(blob)
-        if (tab) tab.location.replace(url)
-        else window.open(url, '_blank')
-        // Long enough for the tab to load; media elements keep playing from memory.
-        setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    void encryptedPieceShareLink(synapse, file, credentials, controller.signal)
+      .then((url) => {
+        if (!controller.signal.aborted)
+          setPrepared({ id: file.id, rootCid: file.directoryEntry?.rootCid ?? file.cid, url, scope: storageScope })
       })
       .catch((cause: unknown) => {
-        tab?.close()
-        toast.error(cause instanceof Error ? cause.message : 'Unable to preview this file.')
+        if (!controller.signal.aborted)
+          toast.error(cause instanceof Error ? cause.message : 'Unable to prepare the external viewer.')
       })
-      .finally(() => setPreviewingId(null))
+      .finally(() => {
+        if (active.current === controller) {
+          active.current = null
+          setPreviewingId(null)
+        }
+      })
   }
 
-  return { openPreview, previewingId }
+  return { preparePreview, previewingId, getPreviewLink }
 }

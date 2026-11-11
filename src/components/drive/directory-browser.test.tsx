@@ -16,7 +16,7 @@ vi.mock('../../hooks/use-filecoin-pin-context.ts', () => ({
   useFilecoinPinContext: () => ({ encryption, storageScope: mocks.scope }),
 }))
 vi.mock('../../hooks/use-encrypted-preview.ts', () => ({
-  useEncryptedPreview: () => ({ openPreview: vi.fn(), previewingId: null }),
+  useEncryptedPreview: () => ({ preparePreview: vi.fn(), previewingId: null, getPreviewLink: () => undefined }),
 }))
 vi.mock('./share-file-button.tsx', () => ({ ShareFileButton: () => null }))
 vi.mock('../../lib/filecoin-pin/download.ts', () => ({

@@ -351,6 +351,29 @@ describe('createShareLink', () => {
     clearRememberedOwnerKeys()
   })
 
+  it('stops an aborted viewer authorization before a second signature or key-cache write', async () => {
+    clearRememberedOwnerKeys()
+    const { appMetadata } = await shared()
+    const controller = new AbortController()
+    const wallet = ownerSigner()
+    const signer: OwnerSigner = {
+      address: wallet.address,
+      signTypedData: async (args) => {
+        const signature = await wallet.signTypedData(args)
+        controller.abort()
+        return signature
+      },
+    }
+    await expect(
+      createShareLink({ sender: { signer }, rootCid, appMetadata, signal: controller.signal })
+    ).rejects.toMatchObject({ name: 'AbortError' })
+    expect(wallet.signatures()).toBe(1)
+    const fresh = ownerSigner()
+    await createShareLink({ sender: { signer: fresh }, rootCid, appMetadata })
+    expect(fresh.signatures()).toBe(2)
+    clearRememberedOwnerKeys()
+  })
+
   it('mints a filecoin-pin v1 share link whose fragment alone opens the upload', async () => {
     const { envelope, appMetadata, link } = await shared()
     // Wire format: <viewer>#v1/<rootCid>&d=<b64url grant>&k=fak1_<b64url T>.

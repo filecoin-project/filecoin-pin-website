@@ -19,7 +19,6 @@ import {
   type OwnerSigner,
   ownerKeyResolver,
 } from './encryption.ts'
-import { decryptPreviewMimeType } from './file-links.ts'
 import { contentReader } from './ipfs-content.ts'
 
 /** Stages surfaced to the download queue; 'unlocking' marks the owner-wallet signature fallback. */
@@ -337,13 +336,17 @@ export async function downloadFile(
 export async function encryptedPieceShareLink(
   synapse: Synapse | null,
   file: DatasetPiece,
-  credentials: DecryptCredentials
+  credentials: DecryptCredentials,
+  signal?: AbortSignal
 ): Promise<string> {
+  signal?.throwIfAborted()
   const bytes = await fetchPieceCar(synapse, file)
   const envelope = await carRootFileBytes(bytes)
   if (!envelope || !(await isEncryptionEnvelope(envelope)))
     throw new Error('This record is not an encrypted upload; share its public link instead.')
+  signal?.throwIfAborted()
   const info = await fee.parse(envelope)
+  signal?.throwIfAborted()
   const appMetadata = info.appMetadata as Record<string, unknown>
   if (credentials.session) {
     try {
@@ -351,41 +354,21 @@ export async function encryptedPieceShareLink(
         sender: { sessionPrivateKey: credentials.session.privateKey, credential: credentials.session.credential },
         rootCid: file.directoryEntry?.rootCid ?? file.cid,
         appMetadata,
+        signal,
       })
     } catch {
+      signal?.throwIfAborted()
       // A stale or foreign grant leaves the owner wallet as the way in.
     }
   }
+  signal?.throwIfAborted()
   const signer = await credentials.ownerSigner?.()
+  signal?.throwIfAborted()
   if (!signer) throw new Error('Connect the wallet that owns this file to share it.')
   return createShareLink({
     sender: { signer, commitment: commitmentForEnvelope(credentials, appMetadata) },
     rootCid: file.directoryEntry?.rootCid ?? file.cid,
     appMetadata,
+    signal,
   })
-}
-
-/**
- * Decrypt an encrypted piece in memory and return its plaintext as a Blob
- * typed for in-browser rendering (object-URL preview). Handles single files
- * and single children of encrypted folders. The caller owns the object URL.
- */
-export async function previewBlob(
-  synapse: Synapse,
-  file: DatasetPiece,
-  credentials: DecryptCredentials,
-  onStage?: (stage: DownloadStage) => void
-): Promise<Blob> {
-  onStage?.('downloading')
-  const bytes = await fetchPieceCar(synapse, file)
-  const envelope = await carRootFileBytes(bytes)
-  if (!envelope || !(await isEncryptionEnvelope(envelope)))
-    throw new Error('This record is not encrypted; preview it through its public link.')
-  const inner = await decryptWithCredentials(envelope, credentials, onStage)
-  const target = await decryptedTarget(inner)
-  const path = [target.prefix, file.directoryEntry?.path ?? ''].filter(Boolean).join('/')
-  const blob = await unpackFile(inner, target.root, path)
-  const type = decryptPreviewMimeType(displayFileName(file))
-  if (!type) throw new Error('This file type has no in-browser preview. Download it instead.')
-  return new Blob([await blob.arrayBuffer()], { type })
 }

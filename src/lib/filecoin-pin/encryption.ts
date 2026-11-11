@@ -370,8 +370,10 @@ export async function createShareLink(options: {
   sender: ShareSender
   rootCid: string
   appMetadata: Record<string, unknown>
+  signal?: AbortSignal
 }): Promise<string> {
-  const check = ownerKeyGuard()
+  const check = ownerKeyGuard(options.signal)
+  check()
   const labels = options.appMetadata
   const owner = labels['foc/own']
   const keyspace = labels['foc/ks']
@@ -424,5 +426,6 @@ export async function createShareLink(options: {
   } finally {
     pieceEnvelopeKey.fill(0)
   }
+  check()
   return `${DEFAULT_SHARE_VIEWER_URL}#v1/${options.rootCid}&d=${base64url.baseEncode(payload)}&k=fak1_${base64url.baseEncode(hexToBytes(throwaway))}`
 }

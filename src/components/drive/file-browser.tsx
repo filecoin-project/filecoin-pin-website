@@ -27,7 +27,7 @@ import { useFileDeletion } from '../../hooks/use-file-deletion.ts'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { IPFS_CHECK_LIMIT, resetIndexingChecks } from '../../hooks/use-ipfs-indexing.ts'
 import { displayFileName } from '../../lib/filecoin-pin/drive-api.ts'
-import { canDecryptPreview, canPreviewFile } from '../../lib/filecoin-pin/file-links.ts'
+import { canPreviewEncryptedFile, canPreviewFile } from '../../lib/filecoin-pin/file-links.ts'
 import { directoryFolders } from '../../lib/local-storage/drive-directory.ts'
 import { hasRemovalProgress, isCopyRemovalScheduled, isDeletionScheduled } from '../../utils/file-deletion.ts'
 import {
@@ -147,7 +147,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
     synapse,
     storageScope
   )
-  const { openPreview, previewingId } = useEncryptedPreview()
+  const { preparePreview, previewingId, getPreviewLink } = useEncryptedPreview()
   const [deleteConsent, setDeleteConsent] = useState(false)
   const [showFolders, setShowFolders] = useState(false)
   const directoryError = saveError ?? indexError
@@ -939,28 +939,45 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                         <Eye aria-hidden="true" size={14} />
                         Preview
                       </a>
-                    ) : canDecryptPreview(selected) && fileStatus(selected) !== 'Deletion scheduled' ? (
-                      <Button
-                        disabled={previewingId !== null}
-                        onClick={() => openPreview(selected)}
-                        size="sm"
-                        title="Decrypts in your browser and opens in a new tab. Nothing is sent anywhere."
-                        variant="secondary"
-                      >
-                        <Eye aria-hidden="true" size={14} />
-                        {previewingId === selected.id ? 'Decrypting…' : 'Preview'}
-                      </Button>
+                    ) : canPreviewEncryptedFile(selected) && fileStatus(selected) !== 'Deletion scheduled' ? (
+                      getPreviewLink(selected) ? (
+                        <a
+                          className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+                          href={getPreviewLink(selected)}
+                          rel="noopener noreferrer"
+                          target="_blank"
+                          title="Open in the external encrypted-file viewer."
+                        >
+                          <Eye aria-hidden="true" size={14} />
+                          Open preview
+                        </a>
+                      ) : (
+                        <Button
+                          disabled={previewingId !== null}
+                          onClick={() => preparePreview(selected)}
+                          size="sm"
+                          title="Prepare a link to the external encrypted-file viewer."
+                          variant="secondary"
+                        >
+                          {previewingId === selected.id ? (
+                            <Loader2 aria-hidden="true" className="animate-spin" size={14} />
+                          ) : (
+                            <Eye aria-hidden="true" size={14} />
+                          )}
+                          {previewingId === selected.id ? 'Preparing…' : 'Preview'}
+                        </Button>
+                      )
                     ) : (
                       <Button
                         disabled
                         size="sm"
                         title={
                           selected.encrypted
-                            ? selected.isDirectory
-                              ? 'Folders have no in-browser preview. Download instead.'
-                              : selected.importedCar
-                                ? 'Imported CAR archives have no in-browser preview. Download instead.'
-                                : 'This file type has no in-browser preview. Download it instead.'
+                            ? selected.importedCar
+                              ? 'Imported CAR archives have no in-browser preview. Download instead.'
+                              : selected.ipfsIndexed === false
+                                ? 'Preview is unavailable until the upload is announced to the IPFS indexer.'
+                                : 'Preview requires a stored copy and an IPFS root CID.'
                             : 'Preview is unavailable for imported CAR archives, or until a storage copy is confirmed and announced to the IPFS indexer.'
                         }
                         variant="secondary"
