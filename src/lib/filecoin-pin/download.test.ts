@@ -2,7 +2,7 @@
 
 import { decodeGrant, keyForEnvelope, keyspaceKeys, unwrapWith } from '@filoz/keysmith'
 import type { Synapse } from '@filoz/synapse-sdk'
-import { CarWriter } from '@ipld/car'
+import { CarReader, CarWriter } from '@ipld/car'
 import * as fee from 'filecoin-encryption-envelope'
 import { base64url } from 'multiformats/bases/base64'
 import { CID } from 'multiformats/cid'
@@ -17,6 +17,7 @@ import {
 } from '../../../node_modules/filecoin-pin/dist/core/unixfs/browser.js'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import {
+  carRootFileBytes,
   type DecryptCredentials,
   decryptWithCredentials,
   downloadFile,
@@ -30,6 +31,33 @@ import {
   issueEncryptionCredential,
   type OwnerSigner,
 } from './encryption.ts'
+
+async function packCar(roots: CID[], blocks: { cid: CID; bytes: Uint8Array }[]) {
+  const { writer, out } = CarWriter.create(roots)
+  const chunks: Uint8Array[] = []
+  const drain = (async () => {
+    for await (const chunk of out) chunks.push(chunk)
+  })()
+  for (const block of blocks) await writer.put(block)
+  await writer.close()
+  await drain
+  return new Uint8Array(Buffer.concat(chunks))
+}
+
+async function partialFileCar() {
+  const complete = await createCarFromFile(new File([new Uint8Array(2 * 1024 * 1024)], 'large.bin'))
+  const reader = await CarReader.fromBytes(complete.carBytes)
+  const roots = await reader.getRoots()
+  const root = await reader.get(roots[0])
+  if (!root) throw new Error('Fixture root missing')
+  return { root: roots[0], bytes: await packCar(roots, [root]) }
+}
+
+it('does not classify malformed CAR framing or missing roots as plaintext', async () => {
+  await expect(carRootFileBytes(new Uint8Array([255]))).rejects.toThrow()
+  const root = CID.createV1(0x55, await sha256.digest(new Uint8Array([1])))
+  await expect(carRootFileBytes(await packCar([root], []))).rejects.toThrow(/missing its root block/)
+})
 
 describe('original file retrieval', () => {
   it('round-trips a multi-block UnixFS CAR produced by the actual upload library', async () => {
@@ -241,6 +269,49 @@ describe('encrypted piece retrieval', () => {
       },
     }
   }
+
+  it.each(['missing child', 'malformed root'] as const)(
+    'surfaces a %s instead of saving ciphertext or offering a public share',
+    async (damage) => {
+      const badBlock = new Uint8Array([255])
+      const root = CID.createV1(0x70, await sha256.digest(badBlock))
+      const damaged =
+        damage === 'missing child'
+          ? await partialFileCar()
+          : { root, bytes: await packCar([root], [{ cid: root, bytes: badBlock }]) }
+      const file = piece({ cid: damaged.root.toString(), importedCar: true })
+      const signer = vi.fn(() => owner())
+      const save = captureSaves()
+      try {
+        await expect(downloadFile(synapseFor(damaged.bytes), file, { ownerSigner: signer })).rejects.toThrow()
+        await expect(
+          encryptedPieceShareLink(synapseFor(damaged.bytes), file, { ownerSigner: signer })
+        ).rejects.not.toThrow(/not an encrypted upload/i)
+        expect(save.blobs).toHaveLength(0)
+        expect(signer).not.toHaveBeenCalled()
+      } finally {
+        save.restore()
+      }
+    }
+  )
+
+  it('preserves a known plaintext partial CAR archive byte-for-byte', async () => {
+    const partial = await partialFileCar()
+    const save = captureSaves()
+    try {
+      await downloadFile(
+        synapseFor(partial.bytes),
+        piece({
+          cid: partial.root.toString(),
+          importedCar: true,
+          encrypted: false,
+        })
+      )
+      expect(new Uint8Array(await save.blobs[0].arrayBuffer())).toEqual(partial.bytes)
+    } finally {
+      save.restore()
+    }
+  })
 
   it('decrypts through the session grant silently and saves the original bytes', async () => {
     const original = Uint8Array.from({ length: 3000 }, (_, index) => index % 199)

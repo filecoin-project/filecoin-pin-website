@@ -97,20 +97,27 @@ export function saveBlob(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
+class MissingCarBlockError extends Error {}
+
 /**
- * The bytes of the single UnixFS file at a CAR's root, or undefined when the
- * root is anything else (a directory, several roots, a partial imported DAG).
- * Encrypted pieces store exactly one file — the FEE envelope.
+ * Extract a single root file, or return undefined for a non-file layout.
+ * Only known plaintext CAR imports may omit descendant blocks: their original
+ * archive bytes remain downloadable without pretending the DAG is complete.
  */
-export async function carRootFileBytes(carBytes: Uint8Array): Promise<Uint8Array | undefined> {
+export async function carRootFileBytes(
+  carBytes: Uint8Array,
+  allowPartialArchive = false
+): Promise<Uint8Array | undefined> {
+  const reader = await CarReader.fromBytes(carBytes)
+  const roots = await reader.getRoots()
+  if (!roots.length) throw new Error('Downloaded CAR is missing its root CID')
+  for (const root of roots) if (!(await reader.has(root))) throw new Error('Downloaded CAR is missing its root block')
+  if (roots.length !== 1 || ![0x55, 0x70, 0x00].includes(roots[0].code)) return undefined
   try {
-    const reader = await CarReader.fromBytes(carBytes)
-    const roots = await reader.getRoots()
-    if (roots.length !== 1) return undefined
     const blockstore = {
       get: async function* (cid: CID) {
         const block = await reader.get(CID.parse(cid.toString()))
-        if (!block) throw new Error('Missing file block in downloaded CAR')
+        if (!block) throw new MissingCarBlockError('Missing file block in downloaded CAR')
         yield block.bytes
       },
     }
@@ -130,8 +137,9 @@ export async function carRootFileBytes(carBytes: Uint8Array): Promise<Uint8Array
       offset += chunk.length
     }
     return bytes
-  } catch {
-    return undefined
+  } catch (cause) {
+    if (allowPartialArchive && cause instanceof MissingCarBlockError) return undefined
+    throw cause
   }
 }
 
@@ -294,7 +302,7 @@ export async function downloadFile(
   onStage?.('preparing')
   // Detection is by content, not trust: a piece is encrypted exactly when its
   // root is a single file that parses as an FEE envelope.
-  const envelope = await carRootFileBytes(bytes)
+  const envelope = await carRootFileBytes(bytes, file.importedCar === true && !file.encrypted)
   if (envelope && (await isEncryptionEnvelope(envelope))) {
     const inner = await decryptWithCredentials(envelope, credentials, onStage)
     const target = await decryptedTarget(inner)
