@@ -268,6 +268,7 @@ async function decryptedTarget(inner: Uint8Array): Promise<{ root: string; prefi
   return { root: root.toString(), prefix: entry?.name ?? '' }
 }
 
+/** Save the original file; return its inner CID only after a successful encrypted download. */
 export async function downloadFile(
   synapse: Synapse,
   file: DatasetPiece,
@@ -307,16 +308,16 @@ export async function downloadFile(
       // uploads carried the raw CAR with no wrapper); save it byte-exact.
       if (target.prefix === '') {
         saveBlob(new Blob([new Uint8Array(inner).buffer], { type: CAR_CONTENT_TYPE }), displayFileName(file))
-        return
+        return target.root
       }
       const archive = await unpackFile(inner, target.root, target.prefix)
       saveBlob(new Blob([await archive.arrayBuffer()], { type: CAR_CONTENT_TYPE }), displayFileName(file))
-      return
+      return target.root
     }
     const path = [target.prefix, file.directoryEntry?.path ?? ''].filter(Boolean).join('/')
     const blob = await unpackFile(inner, target.root, path, displayFileName(file))
     saveBlob(blob, `${displayFileName(file)}${blob.type === 'application/zip' ? '.zip' : ''}`)
-    return
+    return target.root
   }
   if (file.importedCar) {
     saveBlob(new Blob([new Uint8Array(bytes).buffer], { type: CAR_CONTENT_TYPE }), displayFileName(file))

@@ -321,12 +321,13 @@ describe('encrypted piece retrieval', () => {
     const save = captureSaves()
     const stages: string[] = []
     try {
-      await downloadFile(
+      const contentRootCid = await downloadFile(
         synapseFor(outer.carBytes),
         piece({ cid: outer.rootCid.toString() }),
         { session: { privateKey: sessionPrivateKey, credential } },
         (stage) => stages.push(stage)
       )
+      expect(contentRootCid).toBe(inner.rootCid.toString())
       expect(stages).toContain('downloading')
       expect(stages).not.toContain('unlocking')
       expect(save.anchor.download).toBe('secret.bin')

@@ -8,6 +8,7 @@ import {
   downloadFile,
 } from '../lib/filecoin-pin/download.ts'
 import { displayFileName } from '../lib/filecoin-pin/drive-api.ts'
+import { mutateCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import { describeFileAccessError } from '../utils/file-access-error.ts'
 import { isDeletionScheduled } from '../utils/file-deletion.ts'
 import { toast } from '../utils/toast.tsx'
@@ -60,7 +61,7 @@ export function useDownloadQueue(synapse: Synapse | null, scope: string | undefi
     syncQueue(worker)
     setDownload({ id: job.file.id, name: displayFileName(job.file), stage: 'Downloading from storage provider' })
     try {
-      await downloadFile(job.synapse, job.file, job.credentials, (stage) => {
+      const contentRootCid = await downloadFile(job.synapse, job.file, job.credentials, (stage) => {
         if (!worker.stopped && worker.active === job)
           setDownload({
             id: job.file.id,
@@ -68,6 +69,24 @@ export function useDownloadQueue(synapse: Synapse | null, scope: string | undefi
             stage: STAGE_LABELS[stage],
           })
       })
+      if (contentRootCid && worker.scope && !worker.stopped) {
+        try {
+          await mutateCachedPieces(worker.scope, (current) =>
+            worker.stopped
+              ? current
+              : current.map((record) =>
+                  record.cid === (job.file.directoryEntry?.rootCid ?? job.file.cid) &&
+                  record.pieceCid === job.file.pieceCid
+                    ? { ...record, contentRootCid }
+                    : record
+                )
+          )
+        } catch (cause) {
+          throw new Error('File downloaded, but its content identity could not be saved. Retry saving in Drive.', {
+            cause,
+          })
+        }
+      }
     } catch (cause) {
       if (!worker.stopped) {
         const failure = describeFileAccessError(cause, 'download')

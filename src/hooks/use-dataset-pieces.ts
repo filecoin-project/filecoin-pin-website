@@ -45,7 +45,7 @@ export interface DatasetPiece {
   importedCar?: boolean
   /** True when the stored piece is an FEE envelope (content encrypted at rest). */
   encrypted?: boolean
-  /** Plaintext root CID inside an encrypted piece; `cid` stays the public envelope root. Known after a local upload; discovery and downloads do not populate it. */
+  /** Plaintext root CID inside an encrypted piece; `cid` stays the public envelope root. Known after a local upload or successful decrypted download; discovery alone does not populate it. */
   contentRootCid?: string
   folderPath?: string
   ipfsIndexed?: boolean

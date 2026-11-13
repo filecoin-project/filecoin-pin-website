@@ -1,6 +1,7 @@
 import type { Synapse } from '@filoz/synapse-sdk'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
+import { getCachedPieces, setCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import type { DatasetPiece } from './use-dataset-pieces.ts'
 
 const mocks = vi.hoisted(() => ({ download: vi.fn(), neutral: vi.fn() }))
@@ -51,4 +52,64 @@ it('keeps real network errors visible', async () => {
   act(() => result.current.enqueueDownload(file))
   await waitFor(() => expect(result.current.downloadError).toBe('report.pdf: Failed to fetch'))
   expect(mocks.neutral).not.toHaveBeenCalled()
+})
+
+it('persists a decrypted root against the latest directory without replacing concurrent changes', async () => {
+  setCachedPieces('owner', [file])
+  let finish!: (root: string) => void
+  mocks.download.mockImplementation(
+    () =>
+      new Promise<string>((resolve) => {
+        finish = resolve
+      })
+  )
+  const { result } = renderHook(() => useDownloadQueue({} as Synapse, 'owner'))
+  act(() => result.current.enqueueDownload(file))
+  const updated = { ...file, fileName: 'new name.pdf', deletion: { '7': { transactionHash: 'tx', confirmed: false } } }
+  const unrelated = { ...file, id: 'another', cid: 'another-root' }
+  setCachedPieces('owner', [updated, unrelated])
+  await act(async () => finish('inner-root'))
+  expect(getCachedPieces('owner')).toEqual([{ ...updated, contentRootCid: 'inner-root' }, unrelated])
+  expect(result.current.downloadError).toBeNull()
+})
+
+it.each(['removed', 'replaced', 'wallet changed', 'unmounted'] as const)(
+  'does not write a decrypted root after the record is %s',
+  async (change) => {
+    setCachedPieces('owner', [file])
+    setCachedPieces('other-owner', [file])
+    let finish!: (root: string) => void
+    mocks.download.mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          finish = resolve
+        })
+    )
+    const view = renderHook(({ scope }) => useDownloadQueue({} as Synapse, scope), { initialProps: { scope: 'owner' } })
+    act(() => view.result.current.enqueueDownload(file))
+    const current = change === 'removed' ? [] : change === 'replaced' ? [{ ...file, cid: 'replacement' }] : [file]
+    setCachedPieces('owner', current)
+    if (change === 'wallet changed') view.rerender({ scope: 'other-owner' })
+    if (change === 'unmounted') view.unmount()
+    await act(async () => finish('inner-root'))
+    expect(getCachedPieces('owner')).toEqual(current)
+    expect(getCachedPieces('other-owner')).toEqual([file])
+  }
+)
+
+it('reports metadata persistence failure separately from the completed download', async () => {
+  setCachedPieces('owner', [file])
+  mocks.download.mockResolvedValue('inner-root')
+  const write = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+    throw new Error('Quota exceeded')
+  })
+  try {
+    const { result } = renderHook(() => useDownloadQueue({} as Synapse, 'owner'))
+    act(() => result.current.enqueueDownload(file))
+    await waitFor(() => expect(result.current.downloadError).toContain('File downloaded, but'))
+    expect(result.current.download).toBeNull()
+  } finally {
+    write.mockRestore()
+    setCachedPieces('owner', [])
+  }
 })
