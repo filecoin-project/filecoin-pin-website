@@ -3,6 +3,7 @@ import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { CarReader } from '@ipld/car'
+import { createCarFromFile } from 'filecoin-pin/core/unixfs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 // Node selects the filesystem export; exercise the same browser builder Vite uses.
@@ -53,12 +54,19 @@ describe('buildEncryptedPayload (filecoin-pin wire layout)', () => {
     expect(await readFile(join(dir, 'docs', 'sub', 'b.txt'), 'utf8')).toBe('beta')
   })
 
-  it('packs an imported CAR as a named file whose bytes round-trip exactly', async () => {
-    const carBytes = Uint8Array.from({ length: 4096 }, (_, i) => (i * 31) % 256)
-    const payload = await buildEncryptedPayload({ kind: 'car', carBytes, name: 'archive.car' })
-    const { dir } = await unpackWithReferenceCli(payload.carBytes)
-    expect(new Uint8Array(await readFile(join(dir, 'archive.car')))).toEqual(carBytes)
-  })
+  it.each([4096, 2 * 1024 * 1024 + 17])(
+    'round-trips an imported CAR through the CLI unpacker (%i source bytes)',
+    async (size) => {
+      const bytes = Uint8Array.from({ length: size }, (_, i) => i % 251)
+      const { carBytes } = await createCarFromFile(new File([bytes as BlobPart], 'source.bin'))
+      const payload = await buildEncryptedPayload({ kind: 'car', carBytes, name: 'archive.car' })
+      const { dir, result } = await unpackWithReferenceCli(payload.carBytes)
+      const restored = await readFile(join(dir, 'archive.car'))
+      expect(result.files).toBe(1)
+      expect(restored.byteLength).toBe(carBytes.byteLength)
+      expect(Buffer.compare(restored, Buffer.from(carBytes))).toBe(0)
+    }
+  )
 
   it('names the wrapper entry so Drive can descend without guessing', async () => {
     const payload = await buildEncryptedPayload({ kind: 'file', file: new File(['x'], 'tiny.txt') })
