@@ -17,7 +17,8 @@ After a successful connection, the app remembers the chosen wallet type (and the
 1. Connect a wallet compatible with Filecoin Mainnet.
 2. Choose a session lifetime of 1, 7 or 30 days and review its permissions. New browser authorizations can create datasets, upload pieces and schedule piece removals. Service termination is not requested. Authorize it with your wallet.
 3. Deposit USDFC into Filecoin Pay and approve Warm Storage payments if needed. Payment approval uses unlimited rate and lockup allowances and requires explicit consent. These setup actions require owner-wallet confirmations.
-4. Upload files with the session key. Before sending file bytes, the app checks chain permissions and obtains a read-only funding quote for the actual selected storage copies, including dataset creation, operation fees and lockups. If more funds are needed, it displays the additional USDFC amount; deposits and payment approvals remain separate owner-wallet actions. Reauthorize expired or revoked sessions in Wallet setup.
+4. Choose **Add encryption key** in Wallet setup and approve the owner-wallet signature requests. This gives the browser encryption access to your group of files. Only sign these requests on trusted apps; another app receiving the same signature can derive the same encryption key.
+5. Upload files with the session key. Before sending file bytes, the app checks chain permissions and obtains a read-only funding quote for the actual selected storage copies, including dataset creation, operation fees and lockups. If more funds are needed, it displays the additional USDFC amount; deposits and payment approvals remain separate owner-wallet actions. Reauthorize expired or revoked sessions in Wallet setup.
 
 The Wallet and Storage panel shows **Runway**, the estimated time before a top-up is needed at the account’s current recurring payment rate. It excludes locked reserves and covers the wallet’s USDFC Filecoin Pay account, including other services billed there. Accounts with no recurring spend show **No recurring charges**. This is an estimate, not a file retention guarantee. A failed runway read does not block funding or uploads. **Refresh balances** also refreshes the visible estimate.
 
@@ -29,7 +30,7 @@ Selecting several files creates independent uploads. Transfers run one at a time
 
 Choose **Upload**, select files and an upload location, then start the upload. Each ordinary upload targets two copies on different providers, but may finish with fewer copies if a provider fails. Check the confirmed copy count in the file list.
 
-Keep the tab open while uploads are running. **Stored** means at least one copy is confirmed; other copies may still be processing. Share and Preview become available as soon as one copy is confirmed and announced to the IPFS indexer, even while further copies are still processing.
+Keep the tab open while uploads are running. **Stored** means at least one copy is confirmed; other copies may still be processing. Preview waits for indexing availability. Encrypted Share can prepare a link from a stored copy before indexing finishes and warns when the viewer may not yet retrieve it.
 
 ### Names and upload location
 
@@ -42,7 +43,7 @@ For example, upload the folder `photos` into **Upload location** `trips/2026`. D
 
 `trips/2026` organizes separate uploads in Drive. The uploaded `photos` folder is stored as one unit, with its internal files and folders preserved. See [Folders and search](#folders-and-search) for how these behave.
 
-UTF-8 bytes are not the same as characters: English letters and digits normally take one byte each, while a Chinese character commonly takes three. Rename the selected file or folder, or shorten **Upload location**, if its value is too long. Names, paths and content identifiers are public. Content is not encrypted.
+UTF-8 bytes are not the same as characters: English letters and digits normally take one byte each, while a Chinese character commonly takes three. Rename the selected file or folder, or shorten **Upload location**, if its value is too long. New upload contents are encrypted in the browser before storage. Names, upload paths, sizes, content identifiers and storage metadata remain public. Existing unencrypted uploads are marked **Public**.
 
 ## Folders and search
 
@@ -56,13 +57,15 @@ An organizing folder groups independent uploads through their Upload location. I
 
 ## Downloads, previews and sharing
 
-Use **Download** to retrieve the original file from a recorded storage provider. File details offer gateway previews for every downloadable file; whether the browser displays or saves it depends on the format, browser and encoding.
+Use **Download** to retrieve the original file from a recorded storage provider. Encrypted uploads are decrypted in your browser using the saved encryption credentials. If those credentials are unavailable or cannot open the upload, Drive asks the owner wallet to sign to unlock it. Cancelling the signature cancels access without changing the stored file.
 
-Gateway links use the external `inbrowser.link` browser gateway. One confirmed provider with a synced piece and an advertised root CID is enough to enable gateway links; remaining replicas continue their own upload checks. Gateway availability is separate from IPNI indexing: an indexed CID does not guarantee successful gateway retrieval.
+For encrypted uploads, **Preview** prepares a link, then **Open preview** opens the external viewer. Preview and Share links contain access credentials for the entire upload, including every file in an uploaded folder. Anyone with the link can read that upload permanently. These links cannot be revoked; disconnecting or revoking a browser session does not retract access already obtained.
+
+Legacy plaintext previews use the external `inbrowser.link` browser gateway. One confirmed provider with a synced piece and an advertised root CID is enough to enable gateway links; remaining replicas continue their own upload checks. Gateway availability is separate from IPNI indexing: an indexed CID does not guarantee successful gateway retrieval.
 
 Original-file downloads can run alongside an upload. Additional downloads are queued and run one at a time; repeated requests for the same file record are deduplicated. Queued files show **Queued · Cancel** in the list and details. Expand the queue above the file list to manage pending downloads across folders. Pending downloads can be cancelled; an active download cannot be cancelled. A failed download reports its file name and the queue continues. The queue is kept only in the current page and is cleared on reload or a wallet/network change; an already running download may still finish. Closing file details keeps downloads running.
 
-**Share** displays a public link and its QR code. **Copy link** copies the link and shows confirmation only after copying succeeds. Ordinary files open on inbrowser.link without forcing a download; the gateway and browser determine whether to display or download them. Imported CARs share the provider’s Piece URL to preserve the original archive. CAR records do not offer an IPFS gateway export.
+**Share** prepares an encrypted viewer link and its QR code, using the same owner-wallet fallback when needed. It can create the link before public indexing finishes, but the viewer may not retrieve the upload until indexing completes. **Copy link** copies the link and shows confirmation only after copying succeeds. Legacy plaintext files share public gateway links; legacy plaintext CARs share the provider’s Piece URL to preserve the original archive. CAR records do not offer an IPFS gateway export.
 
 Imported CAR archives appear as one record and download as the original archive. Drive does not expand their internal directories or offer a gateway preview.
 
