@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   clearRememberedOwnerKeys,
   createShareLink,
-  DEFAULT_SHARE_VIEWER_URL,
+  DEFAULT_VIEWER_URL,
   decryptEnvelope,
   defaultGroupKeyId,
   encryptCar,
@@ -377,7 +377,7 @@ describe('createShareLink', () => {
   it('mints a filecoin-pin v1 share link whose fragment alone opens the upload', async () => {
     const { envelope, appMetadata, link } = await shared()
     // Wire format: <viewer>#v1/<rootCid>&d=<b64url grant>&k=fak1_<b64url T>.
-    expect(link.startsWith(`${DEFAULT_SHARE_VIEWER_URL}#v1/${rootCid}&d=`)).toBe(true)
+    expect(link.startsWith(`${DEFAULT_VIEWER_URL}#v1/${rootCid}&d=`)).toBe(true)
     const [, fragment] = link.split('#')
     const params = Object.fromEntries(
       fragment

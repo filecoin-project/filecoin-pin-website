@@ -344,13 +344,8 @@ export function ownerKeyResolver(
   }
 }
 
-/**
- * The v1 share-link viewer Drive links open in (FilOzone/synapse-sdk#1036
- * line; build updated 2026-11-05 to handle gateways that ignore Range
- * requests by consuming the full response).
- */
-export const DEFAULT_SHARE_VIEWER_URL =
-  'https://bafkreignymhjvidv5bx5tvggzvob775a7avje43er4tvzyyww7af5vcksy.ipfs.inbrowser.link/'
+/** The v1 share-link viewer Drive links open in. */
+export const DEFAULT_VIEWER_URL = 'https://viewer.filecoin.cloud/'
 
 /** Who signs for a share: this browser's session grant, or the owner wallet directly. */
 export type ShareSender =
@@ -428,5 +423,5 @@ export async function createShareLink(options: {
     pieceEnvelopeKey.fill(0)
   }
   check()
-  return `${DEFAULT_SHARE_VIEWER_URL}#v1/${options.rootCid}&d=${base64url.baseEncode(payload)}&k=fak1_${base64url.baseEncode(hexToBytes(throwaway))}`
+  return `${DEFAULT_VIEWER_URL}#v1/${options.rootCid}&d=${base64url.baseEncode(payload)}&k=fak1_${base64url.baseEncode(hexToBytes(throwaway))}`
 }
