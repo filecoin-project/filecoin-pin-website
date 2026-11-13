@@ -37,7 +37,11 @@ export function useEncryptedPreview() {
       : undefined
 
   const preparePreview = (file: DatasetPiece) => {
-    if (!synapse || active.current || getPreviewLink(file)) return
+    if (active.current || getPreviewLink(file)) return
+    if (!synapse) {
+      toast.error('Preview is not ready. Check your wallet connection and try again.')
+      return
+    }
     const controller = new AbortController()
     active.current = controller
     setPreviewingId(file.id)

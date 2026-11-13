@@ -4,7 +4,7 @@ import type { DatasetPiece } from './use-dataset-pieces.ts'
 
 const mocks = vi.hoisted(() => ({
   scope: '314:owner',
-  synapse: {},
+  synapse: {} as object | null,
   encryption: { ready: false },
   ownerSigner: vi.fn(),
   mint: vi.fn(),
@@ -29,6 +29,7 @@ const file = { id: 'html', cid: 'outer', fileName: 'page.html', encrypted: true,
 const viewerUrl = 'https://viewer.example/#v1/outer&d=grant&k=fak1_key'
 beforeEach(() => {
   mocks.scope = '314:owner'
+  mocks.synapse = {}
   mocks.mint.mockReset()
   mocks.toast.mockReset()
   mocks.neutral.mockReset()
@@ -146,6 +147,21 @@ it('treats wallet cancellation as neutral and permits another attempt', async ()
   )
   expect(mocks.toast).not.toHaveBeenCalled()
   expect(result.current.previewingId).toBeNull()
+  act(() => result.current.preparePreview(file))
+  await waitFor(() => expect(result.current.getPreviewLink(file)).toBe(viewerUrl))
+})
+
+it('explains an unavailable wallet client and permits an explicit retry once it is ready', async () => {
+  mocks.synapse = null
+  mocks.mint.mockResolvedValue(viewerUrl)
+  const { result, rerender } = renderHook(() => useEncryptedPreview())
+  act(() => result.current.preparePreview(file))
+  expect(mocks.toast).toHaveBeenCalledWith('Preview is not ready. Check your wallet connection and try again.')
+  expect(result.current.previewingId).toBeNull()
+  expect(mocks.mint).not.toHaveBeenCalled()
+  mocks.synapse = {}
+  rerender()
+  expect(mocks.mint).not.toHaveBeenCalled()
   act(() => result.current.preparePreview(file))
   await waitFor(() => expect(result.current.getPreviewLink(file)).toBe(viewerUrl))
 })
