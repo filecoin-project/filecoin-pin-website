@@ -1,17 +1,24 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { Synapse } from '@filoz/synapse-sdk'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { base64 } from 'multiformats/bases/base64'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 
 const mocks = vi.hoisted(() => ({
   encryption: { ready: false } as Record<string, unknown>,
   mint: vi.fn(),
+  synapse: null as Synapse | null,
   ownerSigner: vi.fn(async () => undefined),
   ipni: vi.fn(async () => true),
   storageScope: 'calibration:0xabc' as string | undefined,
 }))
 vi.mock('filecoin-pin/core/utils', () => ({ checkIpniIndexer: mocks.ipni }))
 vi.mock('../../hooks/use-filecoin-pin-context.ts', () => ({
-  useFilecoinPinContext: () => ({ encryption: mocks.encryption, synapse: null, storageScope: mocks.storageScope }),
+  useFilecoinPinContext: () => ({
+    encryption: mocks.encryption,
+    synapse: mocks.synapse,
+    storageScope: mocks.storageScope,
+  }),
 }))
 vi.mock('../../context/browser-wallet-provider.tsx', () => ({
   useBrowserWallet: () => ({ ownerSigner: mocks.ownerSigner }),
@@ -43,6 +50,8 @@ let restore: (() => void) | undefined
 afterEach(() => {
   restore?.()
   restore = undefined
+  mocks.synapse = null
+  mocks.storageScope = 'calibration:0xabc'
 })
 
 it('opens without copying and copies the displayed link only when requested', async () => {
@@ -253,5 +262,126 @@ it('shows cancellation without an error alert and retries only on request', asyn
   expect(mocks.mint).toHaveBeenCalledTimes(1)
   fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
   await waitFor(() => expect(screen.getByRole('textbox', { name: 'Share link' })).toBeTruthy())
+  expect(mocks.mint).toHaveBeenCalledTimes(2)
+})
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (cause: Error) => void
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done
+    reject = fail
+  })
+  return { promise, resolve, reject }
+}
+
+it('closing during retrieval prevents the real share helper from requesting the owner signer', async () => {
+  const actual = await vi.importActual<typeof import('../../lib/filecoin-pin/download.ts')>(
+    '../../lib/filecoin-pin/download.ts'
+  )
+  // A real FEE envelope packed as a single raw-block CAR (key is 32 bytes of 1).
+  const carBytes = base64.baseDecode(
+    'OqJlcm9vdHOB2CpYJQABVRIgSmOdeP8SMrNoLyJIGA28Rg6a10jVrRI80/tPMnHzcqBndmVyc2lvbgGHAQFVEiBKY514/xIys2gvIkgYDbxGDprXSNWtEjzT+08ycfNyoNCDWEelAToAAQEABUc9/FI+rw6rEHgoYXBwbGljYXRpb24vdm5kLmZpbGVjb2luLWVuY3J5cHRpb24rY29zZSAaAAQAADoAAQD8BqD2LV8WwcCNUUDPo5gp00tT2XSFL/7wEg=='
+  )
+  const retrieval = deferred<Uint8Array>()
+  const download = vi.fn(() => retrieval.promise)
+  mocks.synapse = { storage: { createContext: async () => ({ download }) } } as unknown as Synapse
+  mocks.encryption = { ready: false }
+  mocks.ownerSigner.mockClear()
+  mocks.mint.mockReset().mockImplementation(actual.encryptedPieceShareLink)
+  render(
+    <ShareFileButton
+      file={{
+        ...file,
+        cid: 'bafkreickmooxr7ysgkzwqlzcjama3pcgb2nnosgvvujdzu73j4zhd43sua',
+        encrypted: true,
+        ipfsIndexed: true,
+      }}
+    />
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+  await waitFor(() => expect(download).toHaveBeenCalledOnce())
+  fireEvent.click(screen.getByRole('button', { name: 'Close share' }))
+  const result = mocks.mint.mock.results[0].value as Promise<string>
+  await act(async () => {
+    retrieval.resolve(carBytes)
+    await expect(result).rejects.toMatchObject({ name: 'AbortError' })
+  })
+  expect(mocks.ownerSigner).not.toHaveBeenCalled()
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
+
+it.each(['link', 'error', 'public fallback'] as const)(
+  'ignores a stale %s after closing and reopening while minting',
+  async (completion) => {
+    const old = deferred<string>()
+    const fresh = deferred<string>()
+    mocks.encryption = { ready: false }
+    mocks.mint.mockReset().mockReturnValueOnce(old.promise).mockReturnValueOnce(fresh.promise)
+    render(<ShareFileButton file={{ ...file, encrypted: true, ipfsIndexed: true }} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+    const signal = mocks.mint.mock.calls[0][3] as AbortSignal
+    fireEvent.click(screen.getByRole('button', { name: 'Close share' }))
+    expect(signal.aborted).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+    expect((mocks.mint.mock.calls[1][3] as AbortSignal).aborted).toBe(false)
+    if (completion === 'link') await act(async () => fresh.resolve('https://viewer.example/#fresh'))
+    await act(async () => {
+      if (completion === 'link') old.resolve('https://viewer.example/#old')
+      else old.reject(new Error(completion === 'error' ? 'Old failure' : 'Not an encrypted upload'))
+    })
+    if (completion !== 'link') {
+      expect(screen.queryByRole('textbox')).toBeNull()
+      await act(async () => fresh.resolve('https://viewer.example/#fresh'))
+    }
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('textbox')).toHaveProperty('value', 'https://viewer.example/#fresh')
+  }
+)
+
+it.each(['unmount', 'scope', 'root'] as const)('invalidates pending sharing on %s', async (change) => {
+  const pending = deferred<string>()
+  mocks.mint.mockReset().mockReturnValueOnce(pending.promise).mockResolvedValue('https://viewer.example/#fresh')
+  const encrypted = { ...file, encrypted: true, ipfsIndexed: true }
+  const view = render(<ShareFileButton file={encrypted} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+  const signal = mocks.mint.mock.calls[0][3] as AbortSignal
+  if (change === 'unmount') view.unmount()
+  else {
+    if (change === 'scope') mocks.storageScope = 'mainnet:0xother'
+    view.rerender(
+      <ShareFileButton
+        file={
+          change === 'root'
+            ? { ...encrypted, cid: 'bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku' }
+            : encrypted
+        }
+      />
+    )
+  }
+  expect(signal.aborted).toBe(true)
+  await act(async () => pending.resolve('https://viewer.example/#old'))
+  expect(screen.queryByRole('dialog')).toBeNull()
+  if (change !== 'unmount') {
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+    await waitFor(() => expect(screen.getByRole('textbox')).toHaveProperty('value', 'https://viewer.example/#fresh'))
+  }
+})
+
+it('discards cached links when switching scope and switching back', async () => {
+  mocks.mint
+    .mockReset()
+    .mockResolvedValueOnce('https://viewer.example/#old')
+    .mockReturnValue(deferred<string>().promise)
+  const encrypted = { ...file, encrypted: true, ipfsIndexed: true }
+  const view = render(<ShareFileButton file={encrypted} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+  await screen.findByRole('textbox')
+  mocks.storageScope = 'mainnet:0xother'
+  view.rerender(<ShareFileButton file={encrypted} />)
+  mocks.storageScope = 'calibration:0xabc'
+  view.rerender(<ShareFileButton file={encrypted} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+  expect(screen.queryByRole('textbox')).toBeNull()
   expect(mocks.mint).toHaveBeenCalledTimes(2)
 })

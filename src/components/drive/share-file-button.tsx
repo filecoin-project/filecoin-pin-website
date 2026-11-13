@@ -3,7 +3,7 @@ import { checkIpniIndexer } from 'filecoin-pin/core/utils'
 import { Loader2, Share2, X } from 'lucide-react'
 import { CID } from 'multiformats/cid'
 import { QRCodeSVG } from 'qrcode.react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
@@ -28,7 +28,7 @@ export function ShareFileButton({
   const [open, setOpen] = useState(false)
   const { encryption, synapse, storageScope } = useFilecoinPinContext()
   const { ownerSigner } = useBrowserWallet()
-  const [minted, setMinted] = useState<{ id: string; link: string; gateway?: boolean } | null>(null)
+  const [minted, setMinted] = useState<{ key: string; link: string; gateway?: boolean } | null>(null)
   const [mintError, setMintError] = useState<ReturnType<typeof describeFileAccessError> | null>(null)
   // The local ipfsIndexed flag goes stale: the post-upload checker gives up
   // after a few minutes while IPNI often indexes later. The dialog asks the
@@ -37,8 +37,21 @@ export function ShareFileButton({
   // cid.contact lookup within the same window — an early lookup negative-
   // caches the CID for the public indexer, working against the very thing
   // we're waiting for.
-  const [indexed, setIndexed] = useState<{ id: string; onIpni: boolean } | null>(null)
+  const [indexed, setIndexed] = useState<{ key: string; onIpni: boolean } | null>(null)
+  const active = useRef<AbortController | null>(null)
   const shareRootCid = file.encrypted ? (file.directoryEntry?.rootCid ?? file.cid) : file.cid
+  const shareKey = JSON.stringify([storageScope, file.id, shareRootCid, file.encrypted])
+  useEffect(() => {
+    void shareKey
+    setOpen(false)
+    setMinted(null)
+    setMintError(null)
+    setIndexed(null)
+    return () => {
+      active.current?.abort()
+      active.current = null
+    }
+  }, [shareKey])
   const sharesWholeFolder = Boolean(file.encrypted && (file.isDirectory || file.directoryEntry))
   const gatewayLink = fileShareLink(file)
   // Deletion/upload-state gating is shared with plaintext links. An encrypted
@@ -48,45 +61,56 @@ export function ShareFileButton({
   const shareable = file.encrypted
     ? fileShareLink({ ...file, encrypted: false, ipfsIndexed: undefined }) !== undefined
     : gatewayLink !== undefined
-  const link = file.encrypted ? (minted?.id === file.id ? minted.link : undefined) : gatewayLink
+  const link = file.encrypted ? (minted?.key === shareKey ? minted.link : undefined) : gatewayLink
 
   const onOpenChange = (next: boolean) => {
+    active.current?.abort()
+    active.current = null
     setOpen(next)
     if (!next || !file.encrypted) return
-    if (indexed?.id !== file.id) {
-      if (file.ipfsIndexed) setIndexed({ id: file.id, onIpni: true })
+    const controller = new AbortController()
+    active.current = controller
+    if (indexed?.key !== shareKey) {
+      if (file.ipfsIndexed) setIndexed({ key: shareKey, onIpni: true })
       else if (storageScope)
         void reserveIndexingCheck(storageScope, shareRootCid, Date.now()).then((reservation) => {
+          if (controller.signal.aborted) return
           if (!reservation) {
             // Already reserved or confirmed elsewhere (the background
             // checker, or an earlier mount of this dialog): report that
             // outcome instead of querying the indexer again.
             const stored = readIndexingChecks(storageScope)[shareRootCid]
-            setIndexed({ id: file.id, onIpni: stored?.indexed === true })
+            setIndexed({ key: shareKey, onIpni: stored?.indexed === true })
             return
           }
           void checkIpniIndexer(CID.parse(shareRootCid), { maxAttempts: 1, ipniIndexerUrl: 'https://cid.contact' })
             .then((onIpni) => {
-              setIndexed({ id: file.id, onIpni })
+              if (controller.signal.aborted) return
+              setIndexed({ key: shareKey, onIpni })
               // Clear the exhausted check budget so the background watcher
               // re-confirms and the file row catches up.
               if (onIpni) void resetIndexingChecks(storageScope, shareRootCid)
             })
-            .catch(() => setIndexed(null))
+            .catch(() => {
+              if (!controller.signal.aborted) setIndexed(null)
+            })
         })
     }
-    if (minted?.id === file.id) return
+    if (minted?.key === shareKey) return
     setMintError(null)
-    encryptedPieceShareLink(synapse, file, decryptCredentials(encryption, ownerSigner))
-      .then((created) => setMinted({ id: file.id, link: created }))
+    encryptedPieceShareLink(synapse, file, decryptCredentials(encryption, ownerSigner), controller.signal)
+      .then((created) => {
+        if (!controller.signal.aborted) setMinted({ key: shareKey, link: created })
+      })
       .catch((cause) => {
+        if (controller.signal.aborted) return
         const message = cause instanceof Error ? cause.message : 'Unable to create a share link.'
         // A data set flagged foc/enc marks every piece encrypted, but a piece
         // stored before encryption shipped is plain: degrade to its public link.
         const publicLink = /not an encrypted upload/i.test(message)
           ? fileShareLink({ ...file, encrypted: false, ipfsIndexed: undefined })
           : undefined
-        if (publicLink) setMinted({ id: file.id, link: publicLink, gateway: true })
+        if (publicLink) setMinted({ key: shareKey, link: publicLink, gateway: true })
         else setMintError(describeFileAccessError(cause, 'share'))
       })
   }
@@ -150,7 +174,7 @@ export function ShareFileButton({
                   <QRCodeSVG level="M" marginSize={4} size={224} title="Share link QR code" value={link} />
                 </div>
                 <p className="mb-3 text-center text-sm text-muted">
-                  {file.encrypted && !(minted?.id === file.id && minted.gateway)
+                  {file.encrypted && !(minted?.key === shareKey && minted.gateway)
                     ? sharesWholeFolder
                       ? 'Scan to open the entire uploaded folder.'
                       : 'Anyone with this link can read the entire upload, including any files and subfolders it contains. The key travels in the link and never reaches a server. Share links cannot be revoked.'
@@ -160,7 +184,7 @@ export function ShareFileButton({
                         ? 'Scan to download the original CAR archive from its storage provider.'
                         : 'Scan to open this file. Your browser may display or download it.'}
                 </p>
-                {file.encrypted && indexed?.id === file.id && !indexed.onIpni && (
+                {file.encrypted && indexed?.key === shareKey && !indexed.onIpni && (
                   <p className="mb-3 rounded-lg border border-warning-border bg-warning-surface px-3 py-2 text-xs text-warning">
                     This file hasn’t appeared on the public IPFS index yet. The link is valid but opens with “not
                     available yet” until indexing finishes — usually within minutes.
