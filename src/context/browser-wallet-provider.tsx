@@ -669,9 +669,13 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
             const credential = await issueEncryptionCredential(signer, session.privateKey, recorded)
             // No transaction: the grant never leaves this browser. Persist it beside
             // the session key it is wrapped to; a rotated key keeps nothing stale.
-            const saved = await updateBrowserSession(scope, (current) =>
-              current && current.privateKey === session.privateKey ? { ...current, encryption: credential } : current
-            )
+            const saved = await updateBrowserSession(scope, (current) => {
+              if (!current || current.privateKey !== session.privateKey)
+                throw new Error(
+                  'Your browser session changed. The encryption key was not saved. Try again in Wallet setup.'
+                )
+              return { ...current, encryption: credential }
+            })
             if (identity.current === scope && saved) setSession(saved)
           }, 'session'),
         ownerSigner: async () => {
