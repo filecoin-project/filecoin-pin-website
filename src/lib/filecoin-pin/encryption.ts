@@ -12,6 +12,7 @@ import {
   COMMITMENT_KEY,
   decodeGrant,
   encodeGrant,
+  type GrantNode,
   grantDescriptor,
   KEYSPACE_ID_KEY,
   keyForEnvelope,
@@ -244,6 +245,11 @@ export class KeyAccessError extends Error {
   override name = 'KeyAccessError'
 }
 
+/** A saved sharing credential is unusable; the owner wallet may recover access. */
+export class ShareCredentialError extends KeyAccessError {
+  override name = 'ShareCredentialError'
+}
+
 /** The envelope's owner and group key (both public header labels) when the wallet in use cannot read it. */
 export class NotOwnerError extends KeyAccessError {
   override name = 'NotOwnerError'
@@ -375,12 +381,32 @@ export async function createShareLink(options: {
   const keyspace = labels['foc/ks']
   if (labels['foc/v'] !== 1 || typeof owner !== 'string' || typeof keyspace !== 'string')
     throw new KeyAccessError('This file is not a Keysmith envelope.')
+  const descriptor = grantDescriptor({ owner: owner as Address, keyspace: keyspace as Hex }, pieceNode(labels as never))
   let pieceEnvelopeKey: Uint8Array
   if ('credential' in options.sender) {
-    if (owner.toLowerCase() !== options.sender.credential.owner)
-      throw new KeyAccessError(`This file belongs to ${owner}, not ${options.sender.credential.owner}.`)
-    const grant = decodeGrant(base64.baseDecode(options.sender.credential.grant))
-    const node = await unwrapWith(options.sender.sessionPrivateKey, grant)
+    let grant: ReturnType<typeof decodeGrant>
+    try {
+      grant = decodeGrant(base64.baseDecode(options.sender.credential.grant))
+      grantDescriptor({ owner: grant.owner, keyspace: grant.keyspace }, grant.node as GrantNode)
+    } catch (cause) {
+      throw new ShareCredentialError('The saved sharing credential is invalid.', { cause })
+    }
+    if (
+      owner.toLowerCase() !== options.sender.credential.owner.toLowerCase() ||
+      owner.toLowerCase() !== grant.owner.toLowerCase() ||
+      keyspace.toLowerCase() !== grant.keyspace.toLowerCase()
+    )
+      throw new ShareCredentialError('The saved sharing credential belongs to another owner or encryption group.')
+    let node: Uint8Array
+    try {
+      node = await unwrapWith(options.sender.sessionPrivateKey, grant)
+    } catch (cause) {
+      // Keysmith wraps WebCrypto authentication failures; other runtime errors
+      // must not turn into an unexpected owner-wallet prompt.
+      if (cause instanceof Error && cause.cause instanceof Error && cause.cause.name === 'OperationError')
+        throw new ShareCredentialError('The saved sharing credential could not be opened.', { cause })
+      throw cause
+    }
     try {
       pieceEnvelopeKey = keyForEnvelope(node, labels as never, grant)
     } finally {
@@ -412,13 +438,7 @@ export async function createShareLink(options: {
   const throwaway = generatePrivateKey()
   let payload: Uint8Array
   try {
-    payload = encodeGrant(
-      await wrapTo(
-        publicKeyOf(throwaway),
-        pieceEnvelopeKey,
-        grantDescriptor({ owner: owner as Address, keyspace: keyspace as Hex }, pieceNode(labels as never))
-      )
-    )
+    payload = encodeGrant(await wrapTo(publicKeyOf(throwaway), pieceEnvelopeKey, descriptor))
   } finally {
     pieceEnvelopeKey.fill(0)
   }

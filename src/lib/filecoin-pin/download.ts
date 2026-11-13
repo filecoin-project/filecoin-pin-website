@@ -18,6 +18,7 @@ import {
   isEncryptionEnvelope,
   type OwnerSigner,
   ownerKeyResolver,
+  ShareCredentialError,
 } from './encryption.ts'
 import { contentReader } from './ipfs-content.ts'
 
@@ -356,9 +357,10 @@ export async function encryptedPieceShareLink(
         appMetadata,
         signal,
       })
-    } catch {
+    } catch (cause) {
       signal?.throwIfAborted()
-      // A stale or foreign grant leaves the owner wallet as the way in.
+      if (!(cause instanceof ShareCredentialError)) throw cause
+      // Only an unusable saved credential warrants an owner-wallet fallback.
     }
   }
   signal?.throwIfAborted()

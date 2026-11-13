@@ -438,6 +438,48 @@ describe('encrypted piece retrieval', () => {
     ).rejects.toThrow(/commitment/)
   })
 
+  it.each(['invalid grant', 'wrong session key'] as const)(
+    'recovers sharing with the owner wallet for an %s',
+    async (failure) => {
+      const inner = await directoryCar()
+      const { outer, credential, sessionPrivateKey } = await encrypted(inner.carBytes)
+      const wallet = owner()
+      const signer = vi.fn(() => wallet)
+      const link = await encryptedPieceShareLink(synapseFor(outer.carBytes), piece({ cid: outer.rootCid.toString() }), {
+        session: {
+          privateKey: failure === 'wrong session key' ? generatePrivateKey() : sessionPrivateKey,
+          credential: failure === 'invalid grant' ? { ...credential, grant: 'invalid' } : credential,
+        },
+        ownerSigner: signer,
+      })
+      expect(link).toContain(`#v1/${outer.rootCid}&d=`)
+      expect(signer).toHaveBeenCalledOnce()
+      expect(wallet.signatures()).toBe(1)
+    }
+  )
+
+  it.each(['encrypt', 'importKey'] as const)(
+    'preserves unexpected %s failures without requesting an owner signature',
+    async (operation) => {
+      const inner = await directoryCar()
+      const { outer, credential, sessionPrivateKey } = await encrypted(inner.carBytes)
+      const signer = vi.fn(() => owner())
+      const failure = new Error('Crypto runtime failed')
+      const cryptoFailure = vi.spyOn(crypto.subtle, operation).mockRejectedValue(failure)
+      try {
+        await expect(
+          encryptedPieceShareLink(synapseFor(outer.carBytes), piece({ cid: outer.rootCid.toString() }), {
+            session: { privateKey: sessionPrivateKey, credential },
+            ownerSigner: signer,
+          })
+        ).rejects.toBe(failure)
+        expect(signer).not.toHaveBeenCalled()
+      } finally {
+        cryptoFailure.mockRestore()
+      }
+    }
+  )
+
   it('mints a decryptable share for another group without reusing the session commitment', async () => {
     const inner = await directoryCar()
     const { envelope, outer } = await encrypted(inner.carBytes)
