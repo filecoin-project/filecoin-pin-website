@@ -37,7 +37,7 @@ export function ShareFileButton({
   // cid.contact lookup within the same window — an early lookup negative-
   // caches the CID for the public indexer, working against the very thing
   // we're waiting for.
-  const [indexed, setIndexed] = useState<{ key: string; onIpni: boolean } | null>(null)
+  const [indexed, setIndexed] = useState<{ key: string; onIpni: boolean | undefined } | null>(null)
   const active = useRef<AbortController | null>(null)
   const shareRootCid = file.encrypted ? (file.directoryEntry?.rootCid ?? file.cid) : file.cid
   const shareKey = JSON.stringify([storageScope, file.id, shareRootCid, file.encrypted])
@@ -70,31 +70,30 @@ export function ShareFileButton({
     if (!next || !file.encrypted) return
     const controller = new AbortController()
     active.current = controller
-    if (indexed?.key !== shareKey) {
+    if (indexed?.key !== shareKey || indexed.onIpni === undefined) {
       if (file.ipfsIndexed) setIndexed({ key: shareKey, onIpni: true })
       else if (storageScope)
-        void reserveIndexingCheck(storageScope, shareRootCid, Date.now()).then((reservation) => {
-          if (controller.signal.aborted) return
-          if (!reservation) {
-            // Already reserved or confirmed elsewhere (the background
-            // checker, or an earlier mount of this dialog): report that
-            // outcome instead of querying the indexer again.
-            const stored = readIndexingChecks(storageScope)[shareRootCid]
-            setIndexed({ key: shareKey, onIpni: stored?.indexed === true })
-            return
-          }
-          void checkIpniIndexer(CID.parse(shareRootCid), { maxAttempts: 1, ipniIndexerUrl: 'https://cid.contact' })
-            .then((onIpni) => {
-              if (controller.signal.aborted) return
-              setIndexed({ key: shareKey, onIpni })
-              // Clear the exhausted check budget so the background watcher
-              // re-confirms and the file row catches up.
-              if (onIpni) void resetIndexingChecks(storageScope, shareRootCid)
+        void reserveIndexingCheck(storageScope, shareRootCid, Date.now())
+          .then(async (reservation) => {
+            if (controller.signal.aborted) return
+            if (!reservation) {
+              // Respect the shared cooldown rather than issuing another lookup.
+              const stored = readIndexingChecks(storageScope)[shareRootCid]
+              setIndexed({ key: shareKey, onIpni: stored?.indexed === true })
+              return
+            }
+            const onIpni = await checkIpniIndexer(CID.parse(shareRootCid), {
+              maxAttempts: 1,
+              ipniIndexerUrl: 'https://cid.contact',
             })
-            .catch(() => {
-              if (!controller.signal.aborted) setIndexed(null)
-            })
-        })
+            if (controller.signal.aborted) return
+            setIndexed({ key: shareKey, onIpni })
+            // Let the background watcher re-confirm and update the file row.
+            if (onIpni) await resetIndexingChecks(storageScope, shareRootCid)
+          })
+          .catch(() => {
+            if (!controller.signal.aborted) setIndexed({ key: shareKey, onIpni: undefined })
+          })
     }
     if (minted?.key === shareKey) return
     setMintError(null)
@@ -186,8 +185,9 @@ export function ShareFileButton({
                 </p>
                 {file.encrypted && indexed?.key === shareKey && !indexed.onIpni && (
                   <p className="mb-3 rounded-lg border border-warning-border bg-warning-surface px-3 py-2 text-xs text-warning">
-                    This file hasn’t appeared on the public IPFS index yet. The link is valid but opens with “not
-                    available yet” until indexing finishes — usually within minutes.
+                    {indexed.onIpni === undefined
+                      ? 'Availability couldn’t be checked. You can still copy the link, but the viewer may not retrieve this upload yet. Close and reopen Share to check again.'
+                      : 'This file hasn’t appeared on the public IPFS index yet. The link is valid but opens with “not available yet” until indexing finishes — usually within minutes.'}
                   </p>
                 )}
                 <label className="text-xs text-muted" htmlFor={`share-link-${file.id}`}>

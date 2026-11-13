@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { base64 } from 'multiformats/bases/base64'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
+import * as indexing from '../../hooks/use-ipfs-indexing.ts'
 
 const mocks = vi.hoisted(() => ({
   encryption: { ready: false } as Record<string, unknown>,
@@ -385,3 +386,24 @@ it('discards cached links when switching scope and switching back', async () => 
   expect(screen.queryByRole('textbox')).toBeNull()
   expect(mocks.mint).toHaveBeenCalledTimes(2)
 })
+
+it.each(['reservation', 'lookup', 'reset'] as const)(
+  'keeps sharing usable and reports an indexing %s failure',
+  async (failure) => {
+    mocks.mint.mockReset().mockResolvedValue('https://viewer.example/#test')
+    mocks.ipni.mockReset().mockResolvedValue(true)
+    const reserve = vi.spyOn(indexing, 'reserveIndexingCheck').mockResolvedValue({ attempts: 1, nextAt: 0 })
+    const reset = vi.spyOn(indexing, 'resetIndexingChecks').mockResolvedValue(undefined)
+    if (failure === 'reservation') reserve.mockRejectedValueOnce(new Error('Storage unavailable'))
+    if (failure === 'lookup') mocks.ipni.mockRejectedValueOnce(new Error('Network unavailable'))
+    if (failure === 'reset') reset.mockRejectedValueOnce(new Error('Storage unavailable'))
+    render(<ShareFileButton file={{ ...file, encrypted: true, ipfsIndexed: false }} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+    await screen.findByText(/Availability couldn’t be checked/)
+    expect(screen.getByRole('textbox')).toHaveProperty('value', 'https://viewer.example/#test')
+    fireEvent.click(screen.getByRole('button', { name: 'Close share' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+    await waitFor(() => expect(screen.queryByText(/Availability couldn’t be checked/)).toBeNull())
+    expect(mocks.mint).toHaveBeenCalledOnce()
+  }
+)
