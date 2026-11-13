@@ -152,13 +152,13 @@ refactor: simplify wallet initialization flow
 
 ### Folder uploads
 
+Directory uploads use `label: "<name>/"`, alongside `path` and the SDK-added `ipfsRootCID`, to stay within three piece metadata keys. Strip only a valid directory marker on discovery; never add it to payload names or displayed paths. Uploaded directory names have a 95-byte UTF-8 limit to leave room for `/`; file names and upload paths retain 96 bytes. Historical encrypted records without a marker remain unclassified; do not read whole uploads just to guess their type.
+
 The browser folder picker uses `filecoin-pin/core/unixfs`'s `createCarFromFileList` to pack relative paths into one UnixFS directory and one CAR. The browser cannot select empty folders. The 200 MB browser limit applies to both selected bytes and the packed CAR.
 
-Organizing folders group independent uploads using path metadata. Uploaded folders are immutable storage units: browse their nested directories, download individual files or ZIP a directory, and delete the whole uploaded folder. Children inherit the upload time of that unit. Known name collisions are rejected before upload; historical records remain separate by record ID.
+Organizing folders group independent uploads using path metadata and remain navigable in Drive. Uploaded folders are immutable storage units shown as single items. Drive opens their details; Preview and Share open the external viewer, and Download retrieves the complete folder as a ZIP. There is no internal uploaded-folder browser, child selection, or directory listing cache. Known name collisions are rejected before upload; historical records remain separate by record ID.
 
-[`ipfs-content.ts`](src/lib/filecoin-pin/ipfs-content.ts) verifies bounded provider block reads, [`directory.ts`](src/lib/filecoin-pin/directory.ts) traverses UnixFS through `ipfs-unixfs-exporter` and creates ZIPs with `fflate`. These are Drive integration helpers, not a second implementation of UnixFS packing. Directory browsing does not create independent child storage records or child deletion permissions.
-
-Folder listing pages use [directory-content-cache.ts](src/lib/local-storage/directory-content-cache.ts) and idb-keyval. Atomic updates retain immutable CID-addressed pages across reloads, bounded to 256 pages, 10,000 items and approximately 4 MiB of serialized metadata. IndexedDB failures fall back to provider reads; upload-time in-memory listings remain available in the current tab. Existing file records and operation checkpoints continue to use the localStorage directory store.
+[`ipfs-content.ts`](src/lib/filecoin-pin/ipfs-content.ts) verifies bounded provider block reads for metadata and legacy retrieval. [`directory.ts`](src/lib/filecoin-pin/directory.ts) traverses UnixFS only to create downloaded ZIPs with `fflate`. These are integration helpers, not a second implementation of UnixFS packing.
 
 ### Wallet setup guidance
 

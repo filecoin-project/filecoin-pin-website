@@ -5,13 +5,14 @@ import {
   ChevronDown,
   Clock3,
   KeyRound,
+  Lock,
   Moon,
   QrCode,
   ShieldCheck,
   Sun,
   Wallet,
 } from 'lucide-react'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { parseUnits } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
@@ -19,11 +20,13 @@ import { useTheme } from '../../context/theme-provider.tsx'
 import { useUploadHistory } from '../../context/upload-history-context.tsx'
 import { useUploadTasks } from '../../context/upload-tasks-context.tsx'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
+import { useUploadReadiness } from '../../hooks/use-upload-readiness.ts'
 import { chains } from '../../lib/filecoin-pin/browser-wallet.ts'
 import { DEFAULT_SESSION_DAYS } from '../../lib/filecoin-pin/config.ts'
 import { approveStoragePayments, depositStorageFunds } from '../../lib/filecoin-pin/payments.ts'
 import { formatFundingAmount } from '../../lib/filecoin-pin/upload-funding.ts'
 import { shortenAddress } from '../../lib/filecoin-pin/wallet.ts'
+import { getUploadRetryBlocker } from '../../utils/upload/upload-readiness.ts'
 import { ButtonBase } from '../ui/button/button-base.tsx'
 import { Select } from '../ui/select.tsx'
 import { ConnectWalletButton } from './connect-wallet-button.tsx'
@@ -160,15 +163,18 @@ export function WalletControls() {
 export function WalletSetup({
   inDrawer = false,
   onContinueUpload,
+  setupRequest,
 }: {
+  setupRequest?: { target: SetupTarget }
   inDrawer?: boolean
   onContinueUpload?: () => void
 }) {
   const connection = useBrowserWallet()
   const { history } = useUploadHistory()
   const tasks = useUploadTasks()
+  const readiness = useUploadReadiness()
   const fundingRequests = history.filter((file) => file.upload?.phase === 'funding')
-  const { wallet, refreshWallet, storageSetup } = useFilecoinPinContext()
+  const { wallet, refreshWallet, storageSetup, encryption } = useFilecoinPinContext()
   const [days, setDays] = useState(DEFAULT_SESSION_DAYS)
   const [amount, setAmount] = useState('')
   const lastSuggestedAmount = useRef<string | null>(null)
@@ -185,13 +191,15 @@ export function WalletSetup({
   const depositTarget = useRef<HTMLDivElement>(null)
   const pendingFundingTarget = useRef<HTMLElement>(null)
   const approvalTarget = useRef<HTMLDivElement>(null)
-  const reviewStep = (target: SetupTarget) => {
+  const encryptionTarget = useRef<HTMLElement>(null)
+  const reviewStep = useCallback((target: SetupTarget) => {
     const node = {
       session: sessionTarget,
+      encryption: encryptionTarget,
       gas: gasTarget,
       deposit: pendingFundingTarget.current ? pendingFundingTarget : depositTarget,
       approval: approvalTarget,
-    }[target].current
+    }[target]?.current
     if (!node) return
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     node.scrollIntoView({ behavior: reducedMotion ? 'instant' : 'smooth', block: 'center' })
@@ -207,7 +215,12 @@ export function WalletSetup({
         { duration: 1400, easing: 'ease-out' }
       )
     }
-  }
+  }, [])
+  useEffect(() => {
+    if (!setupRequest) return
+    const frame = requestAnimationFrame(() => reviewStep(setupRequest.target))
+    return () => cancelAnimationFrame(frame)
+  }, [setupRequest, reviewStep])
   const applyDepositAmount = (value: string) => {
     setAmount(value)
     depositTarget.current?.scrollIntoView({ behavior: 'instant', block: 'center' })
@@ -216,6 +229,12 @@ export function WalletSetup({
   const active = connection.sessionStatus === 'active'
   const disabled =
     connection.busy || connection.uploading || connection.deleting || Boolean(connection.pendingTransaction)
+  // Keysmith refuses signers that cannot root a keyspace (smart accounts, some
+  // embedded wallets); detection is empirical, from the surfaced error message.
+  const unsupportedWallet = Boolean(
+    connection.error && /not deterministic|ECDSA signature|cannot root a keyspace/i.test(connection.error)
+  )
+  const staleGrant = Boolean(connection.session?.encryption) && !encryption.ready
   const pay = async (kind: 'deposit' | 'approve') => {
     setMessage('')
     await connection.paymentAction(async (synapse, confirm) => {
@@ -236,6 +255,7 @@ export function WalletSetup({
     <>
       {inDrawer && onContinueUpload && (
         <WalletNextStep
+          encryptionReady={encryption.ready}
           onContinue={onContinueUpload}
           onReview={reviewStep}
           pendingFunding={fundingRequests.length > 0}
@@ -286,6 +306,7 @@ export function WalletSetup({
             >
               {[
                 { title: 'Session authorized', ready: active },
+                { title: 'Encryption key added', ready: encryption.ready },
                 { title: 'Gas balance sufficient', ready: storageSetup?.gasReady },
                 { title: 'Storage funds available', ready: storageSetup?.depositReady },
                 { title: 'Storage payments approved', ready: storageSetup?.approvalReady },
@@ -386,6 +407,46 @@ export function WalletSetup({
             )}
           </section>
           <section
+            className={`scroll-mt-24 space-y-4 ${inDrawer ? 'border-t border-solid border-border pt-6' : ''}`}
+            data-setup-target="encryption"
+            ref={encryptionTarget}
+          >
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <Lock aria-hidden="true" className="text-accent" size={16} />
+              Encryption key
+            </h2>
+            <p className="text-sm leading-6 text-muted">
+              Sign with your wallet to enable encryption. No transaction or fee. Only sign here: the same signature on
+              another site could expose all your encrypted files.
+            </p>
+            {encryption.ready && connection.session?.encryption && (
+              <p className="rounded-lg border border-border bg-canvas/40 p-3 text-xs leading-5 text-muted break-all">
+                Group key {connection.session.encryption.groupKeyId}
+              </p>
+            )}
+            {unsupportedWallet && (
+              <p className="text-xs leading-5 text-warning" role="alert">
+                This wallet type can't derive encryption keys. Uploads stay blocked until a supported wallet is
+                connected.
+              </p>
+            )}
+            {!encryption.ready && (
+              <div className="flex flex-wrap gap-3">
+                <ButtonBase
+                  className="w-auto"
+                  disabled={disabled || !active}
+                  onClick={() => void connection.addEncryptionKey()}
+                  size="sm"
+                >
+                  {staleGrant ? 'Restore encryption access' : 'Add encryption key'}
+                </ButtonBase>
+              </div>
+            )}
+            {!active && !encryption.ready && (
+              <p className="text-xs leading-5 text-muted">Authorize an upload session first.</p>
+            )}
+          </section>
+          <section
             className={`space-y-4 ${inDrawer ? 'border-t border-border pt-6' : 'lg:border-l lg:border-border lg:pl-10'}`}
           >
             <h2 className="flex items-center gap-2 text-sm font-semibold">
@@ -432,45 +493,54 @@ export function WalletSetup({
               </section>
             )}
             {wallet.data && <StorageRunway />}
-            {fundingRequests.map((file, index) => (
-              <section
-                aria-label="Pending upload funding"
-                className="space-y-3 rounded-xl border border-border bg-surface p-4"
-                key={file.id}
-                ref={index === 0 ? pendingFundingTarget : undefined}
-              >
-                <h3 className="text-sm font-medium">Paused · {file.fileName}</h3>
-                <p className="text-xs leading-5 text-muted">{file.upload?.error}</p>
-                <div className="flex flex-wrap gap-2">
-                  {file.upload?.funding && BigInt(file.upload.funding.depositNeeded) > 0n && (
-                    <ButtonBase
-                      className="w-auto"
-                      disabled={disabled}
-                      onClick={() =>
-                        applyDepositAmount(formatFundingAmount(BigInt(file.upload?.funding?.depositNeeded ?? '0')))
-                      }
-                      size="sm"
-                      variant="secondary"
-                    >
-                      Use upload minimum
-                    </ButtonBase>
+            {fundingRequests.map((file, index) => {
+              const retryBlocker = file.upload ? getUploadRetryBlocker(file.upload, readiness) : undefined
+              return (
+                <section
+                  aria-label="Pending upload funding"
+                  className="space-y-3 rounded-xl border border-border bg-surface p-4"
+                  key={file.id}
+                  ref={index === 0 ? pendingFundingTarget : undefined}
+                >
+                  <h3 className="text-sm font-medium">Paused · {file.fileName}</h3>
+                  <p className="text-xs leading-5 text-muted">{file.upload?.error}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {file.upload?.funding && BigInt(file.upload.funding.depositNeeded) > 0n && (
+                      <ButtonBase
+                        className="w-auto"
+                        disabled={disabled}
+                        onClick={() =>
+                          applyDepositAmount(formatFundingAmount(BigInt(file.upload?.funding?.depositNeeded ?? '0')))
+                        }
+                        size="sm"
+                        variant="secondary"
+                      >
+                        Use upload minimum
+                      </ButtonBase>
+                    )}
+                    {tasks?.retainedIds.has(file.id) && (
+                      <ButtonBase
+                        className="w-auto"
+                        disabled={disabled || Boolean(retryBlocker)}
+                        onClick={() => {
+                          if (!disabled && !retryBlocker) void tasks.resume(file.id)
+                        }}
+                        size="sm"
+                      >
+                        Check funding and continue
+                      </ButtonBase>
+                    )}
+                  </div>
+                  {tasks?.retainedIds.has(file.id) && retryBlocker && (
+                    <p className="text-xs text-muted">Retry unavailable: {retryBlocker.message}</p>
                   )}
-                  {tasks?.retainedIds.has(file.id) && (
-                    <ButtonBase
-                      className="w-auto"
-                      disabled={disabled}
-                      onClick={() => void tasks.resume(file.id)}
-                      size="sm"
-                    >
-                      Check funding and continue
-                    </ButtonBase>
-                  )}
-                </div>
-                <p className="text-xs text-muted">
-                  Last checked upload minimum. Rechecked before continuing; the budget below includes additional usage.
-                </p>
-              </section>
-            ))}
+                  <p className="text-xs text-muted">
+                    Last checked upload minimum. Rechecked before continuing; the budget below includes additional
+                    usage.
+                  </p>
+                </section>
+              )
+            })}
             <StorageBudget disabled={disabled} onSuggestedAmount={updateSuggestedAmount}>
               <div
                 className="scroll-mt-24 space-y-3 border-t border-border p-4 sm:p-5"

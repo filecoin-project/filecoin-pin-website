@@ -1,16 +1,36 @@
 import type { Synapse } from '@filoz/synapse-sdk'
 import { useEffect, useRef, useState } from 'react'
-import { downloadFile } from '../lib/filecoin-pin/download.ts'
+import { useBrowserWallet } from '../context/browser-wallet-provider.tsx'
+import {
+  type DecryptCredentials,
+  type DownloadStage,
+  decryptCredentials,
+  downloadFile,
+} from '../lib/filecoin-pin/download.ts'
 import { displayFileName } from '../lib/filecoin-pin/drive-api.ts'
+import { mutateCachedPieces } from '../lib/local-storage/piece-cache.ts'
+import { describeFileAccessError } from '../utils/file-access-error.ts'
 import { isDeletionScheduled } from '../utils/file-deletion.ts'
+import { toast } from '../utils/toast.tsx'
 import type { DatasetPiece } from './use-dataset-pieces.ts'
+import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 
 type QueuedDownload = { id: string; name: string }
 type ActiveDownload = QueuedDownload & { stage: string }
-type Job = { file: DatasetPiece; synapse: Synapse }
+type Job = { file: DatasetPiece; synapse: Synapse; credentials: DecryptCredentials }
 type Worker = { scope: string | undefined; stopped: boolean; active: Job | null; pending: Job[] }
 
+const STAGE_LABELS: Record<DownloadStage, string> = {
+  downloading: 'Downloading from storage provider',
+  preparing: 'Preparing original file',
+  unlocking: 'Sign to unlock your files',
+}
+
 export function useDownloadQueue(synapse: Synapse | null, scope: string | undefined) {
+  const { encryption } = useFilecoinPinContext()
+  // Owner-wallet decrypt fallback: prompts a signature only when no session
+  // grant opens the envelope (expired grant, cleared vault, another browser).
+  const { ownerSigner } = useBrowserWallet()
   const workerRef = useRef<Worker | null>(null)
   const [download, setDownload] = useState<ActiveDownload | null>(null)
   const [queuedDownloads, setQueuedDownloads] = useState<QueuedDownload[]>([])
@@ -41,19 +61,38 @@ export function useDownloadQueue(synapse: Synapse | null, scope: string | undefi
     syncQueue(worker)
     setDownload({ id: job.file.id, name: displayFileName(job.file), stage: 'Downloading from storage provider' })
     try {
-      await downloadFile(job.synapse, job.file, (stage) => {
+      const contentRootCid = await downloadFile(job.synapse, job.file, job.credentials, (stage) => {
         if (!worker.stopped && worker.active === job)
           setDownload({
             id: job.file.id,
             name: displayFileName(job.file),
-            stage: stage === 'downloading' ? 'Downloading from storage provider' : 'Preparing original file',
+            stage: STAGE_LABELS[stage],
           })
       })
+      if (contentRootCid && worker.scope && !worker.stopped) {
+        try {
+          await mutateCachedPieces(worker.scope, (current) =>
+            worker.stopped
+              ? current
+              : current.map((record) =>
+                  record.cid === (job.file.directoryEntry?.rootCid ?? job.file.cid) &&
+                  record.pieceCid === job.file.pieceCid
+                    ? { ...record, contentRootCid }
+                    : record
+                )
+          )
+        } catch (cause) {
+          throw new Error('File downloaded, but its content identity could not be saved. Retry saving in Drive.', {
+            cause,
+          })
+        }
+      }
     } catch (cause) {
-      if (!worker.stopped)
-        setDownloadError(
-          `${displayFileName(job.file)}: ${cause instanceof Error ? cause.message : 'Unable to download the file'}`
-        )
+      if (!worker.stopped) {
+        const failure = describeFileAccessError(cause, 'download')
+        if (failure.cancelled) toast.neutral(failure.message)
+        else setDownloadError(`${displayFileName(job.file)}: ${failure.message}`)
+      }
     } finally {
       worker.active = null
       if (!worker.stopped) {
@@ -76,7 +115,8 @@ export function useDownloadQueue(synapse: Synapse | null, scope: string | undefi
     )
       return
     if (worker.active?.file.id === file.id || worker.pending.some((job) => job.file.id === file.id)) return
-    worker.pending.push({ file, synapse })
+    const credentials = decryptCredentials(encryption, ownerSigner)
+    worker.pending.push({ file, synapse, credentials })
     setDownloadError(null)
     syncQueue(worker)
     void runNext(worker)

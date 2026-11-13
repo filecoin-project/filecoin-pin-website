@@ -81,6 +81,35 @@ it('paginates wallet datasets and pieces, filters source/owner, and checks queue
   expect(scheduled).toHaveBeenCalledOnce()
   expect(fetcher.mock.calls.some(([url]) => url.includes('/data-sets/2/'))).toBe(false)
 })
+it('marks pieces from foc/enc data sets as encrypted and everything else as public', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) =>
+      Response.json(
+        url.includes('/providers/')
+          ? { data: { name: 'SP', serviceUrl: 'https://sp.example' } }
+          : url.includes('/pieces?')
+            ? { data: [piece(url.includes('/data-sets/1/') ? '1' : '2')], nextCursor: null }
+            : {
+                data: [
+                  {
+                    ...dataset('1'),
+                    metadata: { source: 'filecoin-drive', 'foc/enc': '1', 'foc/ks': '0xaa', 'foc/kc': 'v1.bb' },
+                  },
+                  { ...dataset('2'), metadata: { source: 'filecoin-drive' } },
+                ],
+                nextCursor: null,
+              }
+      )
+    )
+  )
+  const files = await loadDriveFiles(synapse, '0xabc', 'mainnet', signal())
+  expect(files).toHaveLength(2)
+  expect(files.find((file) => file.datasetId === '1')?.encrypted).toBe(true)
+  // Not encrypted = public: no flag, so the UI shows the Public marker.
+  expect(files.find((file) => file.datasetId === '2')?.encrypted).toBeUndefined()
+})
+
 it('recovers unnamed legacy files at the root without storing fallback CIDs as names', async () => {
   vi.stubGlobal(
     'fetch',
@@ -311,4 +340,51 @@ it('recovers a late secondary copy from the API when its submission receipt was 
   expect(merged[0].upload?.phase).toBe('complete')
   expect(merged[0].upload?.error).toBeUndefined()
   expect(merged[0].upload?.providers[1]).toMatchObject({ confirmed: true, dataSetId: '1881', pieceId: '0' })
+})
+
+it('restores a marked encrypted folder from chain without downloading its content', async () => {
+  const fetcher = vi.fn(async (url: string) =>
+    Response.json(
+      url.includes('/providers/')
+        ? { data: { name: 'SP', serviceUrl: 'https://sp.example' } }
+        : url.includes('/pieces?')
+          ? {
+              data: [piece('1', { label: '研究/', name: 'encrypted.fee', path: 'backups', ipfsRootCID: root })],
+              nextCursor: null,
+            }
+          : { data: [{ ...dataset('1'), metadata: { 'foc/enc': '1' } }], nextCursor: null }
+    )
+  )
+  vi.stubGlobal('fetch', fetcher)
+  const files = await loadDriveFiles(synapse, '0xabc', 'mainnet', signal())
+  expect(files[0]).toMatchObject({ fileName: '研究', folderPath: 'backups', isDirectory: true, encrypted: true })
+  expect(fetcher.mock.calls.every(([url]) => url.startsWith('https://api.filecoin.io/'))).toBe(true)
+  // A previously cached record must learn the newly discovered folder marker.
+  const local = { ...files[0], id: 'cached', isDirectory: undefined, fileName: '研究' }
+  expect(mergeIndexedFiles([local], files)[0].isDirectory).toBe(true)
+})
+it('does not guess types for legacy labels or treat CAR imports as directories', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) =>
+      Response.json(
+        url.includes('/providers/')
+          ? { data: { name: 'SP', serviceUrl: null } }
+          : url.includes('/pieces?')
+            ? {
+                data: [
+                  piece('1', { label: 'old-folder', ipfsRootCID: root }),
+                  { ...piece('1', { label: 'archive/', carPath: '', ipfsRootCID: root }), pieceId: '1' },
+                ],
+                nextCursor: null,
+              }
+            : { data: [dataset('1')], nextCursor: null }
+      )
+    )
+  )
+  const files = await loadDriveFiles(synapse, '0xabc', 'mainnet', signal())
+  expect(files[0].isDirectory).toBeUndefined()
+  expect(files[0].fileName).toBe('old-folder')
+  expect(files[1].importedCar).toBe(true)
+  expect(files[1].isDirectory).toBeUndefined()
 })

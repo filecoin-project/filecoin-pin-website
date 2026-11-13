@@ -2,8 +2,10 @@ import type { FilecoinChain } from '@filoz/synapse-core/chains'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { checkAllowances, validateGasRequirement } from 'filecoin-pin/core/payments'
 import { createContext, type ReactNode, useCallback, useEffect, useMemo } from 'react'
+import type { Hex } from 'viem'
 import { type DataSetState, useDataSetManager } from '../hooks/use-data-set-manager.ts'
 import { browserSynapse, chains, scopeFor } from '../lib/filecoin-pin/browser-wallet.ts'
+import type { EncryptionCredential } from '../lib/filecoin-pin/encryption.ts'
 import { resolveStorageChain } from '../lib/filecoin-pin/storage-chain.ts'
 import type { Synapse } from '../lib/filecoin-pin/synapse.ts'
 import { fetchWalletSnapshot, type WalletSnapshot } from '../lib/filecoin-pin/wallet.ts'
@@ -33,6 +35,14 @@ export interface FilecoinPinContextValue {
   addDataSetId: (id: bigint) => void
   debugParams: DebugParams
   storageScope?: string
+  /**
+   * Encryption credentials for the active session. `ready` false blocks
+   * uploads (encryption is never silently skipped); downloads fall back to
+   * the owner wallet when no grant is usable.
+   */
+  encryption:
+    | { ready: true; sessionPrivateKey: Hex; credential: EncryptionCredential }
+    | { ready: false; sessionPrivateKey?: undefined; credential?: undefined }
   ensurePermissions?: () => Promise<void>
 }
 
@@ -166,6 +176,18 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [wallet.status, runtime, checkIfDatasetExists, dataSet.status])
 
+  const encryption = useMemo<FilecoinPinContextValue['encryption']>(
+    () =>
+      runtime?.encryptionReady() && connection.session?.encryption
+        ? {
+            ready: true,
+            sessionPrivateKey: connection.session.privateKey,
+            credential: connection.session.encryption,
+          }
+        : { ready: false },
+    [runtime, connection.session]
+  )
+
   const value = useMemo<FilecoinPinContextValue>(
     () => ({
       wallet,
@@ -177,6 +199,7 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
       addDataSetId,
       debugParams,
       storageScope,
+      encryption,
       ensurePermissions: runtime?.validate,
     }),
     [
@@ -188,6 +211,7 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
       addDataSetId,
       debugParams,
       storageScope,
+      encryption,
       runtime,
     ]
   )

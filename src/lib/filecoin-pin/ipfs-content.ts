@@ -89,7 +89,6 @@ export function contentReader(file: DatasetPiece, signal: AbortSignal, rootOnly 
   return { rootCid: file.cid, entry: (path = '') => exporter(`${file.cid}${path ? `/${path}` : ''}`, blockstore) }
 }
 
-export type ContentReader = ReturnType<typeof contentReader>
 export function safeDirectoryName(name: string) {
   if (
     !name ||

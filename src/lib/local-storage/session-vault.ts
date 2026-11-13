@@ -1,11 +1,14 @@
 import { createStore, del, get, set } from 'idb-keyval'
 import type { Hex } from 'viem'
+import type { EncryptionCredential } from '../filecoin-pin/encryption.ts'
 
 export interface BrowserSession {
   privateKey: Hex
   expiresAt: number
   transactionHash?: Hex
   revision?: string
+  /** Keysmith group-key grant wrapped to this session key; absent on pre-encryption sessions. */
+  encryption?: EncryptionCredential
 }
 
 // Keep the existing database, store and record format so authorized sessions survive upgrades.

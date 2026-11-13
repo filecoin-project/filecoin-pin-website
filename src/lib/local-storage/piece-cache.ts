@@ -113,6 +113,7 @@ export function mergeStorageCopies(recorded: DatasetPiece, incoming: DatasetPiec
   return {
     ...incoming,
     ...recorded,
+    ...(recorded.isDirectory || incoming.isDirectory ? { isDirectory: true } : {}),
     datasetId: recorded.datasetId || incoming.datasetId,
     pieceId: recorded.pieceId ?? incoming.pieceId,
     datasetIds,

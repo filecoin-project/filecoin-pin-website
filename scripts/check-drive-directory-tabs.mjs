@@ -2,12 +2,12 @@ import assert from 'node:assert/strict'
 import { prepareBrowserPage } from './drive-browser-fixtures.mjs'
 
 // Two real pages sharing browser storage and native Web Locks, with wallet/RPC boundaries mocked.
-export async function checkDirectoryTabs(page, errors) {
+export async function checkDirectoryTabs(page, errors, walletAddress = '0x1111111111111111111111111111111111111111') {
   const sibling = await page.context().newPage()
   sibling.on('pageerror', (error) => errors.push(error.message))
-  const scope = '314:0x1111111111111111111111111111111111111111'
+  const scope = `314:${walletAddress.toLowerCase()}`
   try {
-    await prepareBrowserPage(sibling, { seedDirectory: false })
+    await prepareBrowserPage(sibling, { seedDirectory: false, walletAddress })
     await sibling.goto(page.url())
     await sibling.getByRole('button', { name: 'report.pdf', exact: true }).waitFor()
 

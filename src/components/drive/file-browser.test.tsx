@@ -41,6 +41,7 @@ vi.mock('../../hooks/use-filecoin-pin-context.ts', () => ({
     dataSet: { status: 'ready', dataSetIds: [1n, 2n] },
     ensurePermissions: mocks.permissions,
     addDataSetId: vi.fn(),
+    encryption: { ready: false },
   }),
 }))
 vi.mock('../../context/browser-wallet-provider.tsx', () => ({
@@ -305,7 +306,7 @@ it('keeps removed files hidden after restore and reload, but shows a new identic
   await screen.findByText('No files here yet. Upload to this folder.')
   expect(screen.queryByRole('button', { name: 'first.txt' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'old' })).toBeNull()
-  expect(screen.getByRole('heading', { name: 'Files' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'My Drive' })).toBeTruthy()
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search file list' }), { target: { value: 'first' } })
   expect(screen.getByText('No matching files.')).toBeTruthy()
   expect(getCachedPieces(scope)?.[0].deletion).toEqual(archived.deletion)
@@ -314,7 +315,7 @@ it('keeps removed files hidden after restore and reload, but shows a new identic
   mount()
   expect(await screen.findByRole('button', { name: 'new.txt' })).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'first.txt' })).toBeNull()
-  expect(screen.getByRole('heading', { name: 'Files' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'My Drive' })).toBeTruthy()
   expect(getCachedPieces(scope)).toHaveLength(2)
   expect(getCachedPieces(scope)?.find((record) => record.id === 'new-upload')?.deletion).toBeUndefined()
 })
@@ -664,6 +665,48 @@ it.each([false, true])('keeps original downloads without a gateway download link
   if (importedCar) expect(screen.getByRole('button', { name: 'Preview' })).toHaveProperty('disabled', true)
   else expect(screen.getByRole('link', { name: 'Preview' })).toBeTruthy()
   expect(screen.queryByText(/The gateway exports a new CAR/)).toBeNull()
+})
+it.each(['archive.zip', 'page.html', 'icon.svg'])(
+  'offers the external viewer for encrypted %s without a local format restriction',
+  async (fileName) => {
+    setCachedPieces(scope, [{ ...file, fileName, encrypted: true }])
+    render(
+      <UploadHistoryProvider>
+        <FileBrowser folder="" onFolderChange={vi.fn()} />
+      </UploadHistoryProvider>
+    )
+    fireEvent.click(await screen.findByRole('button', { name: fileName }))
+    const preview = screen.getByRole('button', { name: 'Preview' })
+    expect(preview).toHaveProperty('disabled', false)
+    expect(screen.getByText(/permanent external viewer links containing access keys/).textContent).toContain(
+      'Access cannot be revoked.'
+    )
+    expect(preview.getAttribute('title')).toMatch(/external.*viewer/i)
+    expect(preview.getAttribute('title')).not.toMatch(/IPFS indexer|imported CAR/i)
+  }
+)
+
+it('explains missing folder roots and imported CAR restrictions for the external viewer', async () => {
+  setCachedPieces(scope, [
+    { ...file, id: 'enc-dir', fileName: 'Photos', isDirectory: true, encrypted: true, cid: '' },
+    { ...file, id: 'enc-car', fileName: 'backup.car', importedCar: true, encrypted: true },
+  ])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  await screen.findByRole('checkbox', { name: 'Select Photos' })
+  const photosRow = screen.getByRole('checkbox', { name: 'Select Photos' }).closest('tr') as HTMLElement
+  fireEvent.click(within(photosRow).getByRole('button', { name: 'Details' }))
+  expect(screen.getByRole('button', { name: 'Preview' }).getAttribute('title')).toMatch(
+    /stored copy and an IPFS root CID/i
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Close details' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'backup.car' }))
+  expect(screen.getByRole('button', { name: 'Preview' }).getAttribute('title')).toMatch(
+    /imported car archives have no/i
+  )
 })
 
 it.each([
@@ -1030,7 +1073,7 @@ it('shows folder activity on every ancestor without marking similarly named fold
       <FileBrowser folder="" onFolderChange={vi.fn()} />
     </UploadHistoryProvider>
   )
-  const root = await screen.findByRole('button', { name: 'Files (root)' })
+  const root = await screen.findByRole('button', { name: 'My Drive (root)' })
   const parent = within(screen.getByRole('navigation', { name: 'File folders' })).getByRole('button', {
     name: 'parent',
   })
@@ -1493,4 +1536,35 @@ it('permits deleting stored content despite a failed rejected alias with no copi
     expect(getCachedPieces(scope)?.find((record) => record.id === file.id)?.deletion?.['1'].confirmed).toBe(true)
   )
   expect(getCachedPieces(scope)?.find((record) => record.id === 'old-failed')?.deletion).toBeUndefined()
+})
+
+it('treats uploaded folders as stored items with details and external preview/share, not sidebar navigation', async () => {
+  const folder = { ...file, fileName: 'Uploaded reports', encrypted: true, isDirectory: true, ipfsIndexed: true }
+  setCachedPieces(scope, [folder])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  const nav = screen.getByRole('navigation', { name: 'File folders' })
+  expect(within(nav).queryByRole('button', { name: 'Uploaded reports' })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Share' })).toBeTruthy()
+  fireEvent.click(await screen.findByRole('button', { name: 'Uploaded reports' }))
+  const details = screen.getByRole('dialog', { name: 'Uploaded reports' })
+  expect(within(details).getByRole('button', { name: 'Preview' })).toHaveProperty('disabled', false)
+  expect(within(details).queryByRole('button', { name: 'Share' })).toBeNull()
+  expect(within(details).getByText(/permanent external viewer links to the entire uploaded folder/)).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Unlock and identify' })).toBeNull()
+  expect(screen.queryByRole('searchbox', { name: 'Search this folder' })).toBeNull()
+})
+it('does not fetch and decrypt legacy uploads merely to identify their type', async () => {
+  setCachedPieces(scope, [{ ...file, fileName: 'Legacy unknown', encrypted: true, isDirectory: undefined }])
+  render(
+    <UploadHistoryProvider>
+      <FileBrowser folder="" onFolderChange={vi.fn()} />
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'Legacy unknown' }))
+  expect(screen.queryByRole('button', { name: 'Unlock and identify' })).toBeNull()
+  expect(mocks.context).not.toHaveBeenCalled()
 })

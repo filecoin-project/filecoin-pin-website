@@ -9,7 +9,6 @@ vi.mock(
 )
 
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
-import { cacheDirectoryUpload, listDirectory, searchDirectory } from './directory.ts'
 import { downloadFile, unpackFile } from './download.ts'
 import { fileShareLink } from './file-links.ts'
 import { recoverContentInfo } from './file-size.ts'
@@ -62,23 +61,15 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-it('packs one directory root and navigates verified child blocks without downloading the whole CAR', async () => {
+it('packs one directory root and verifies public root metadata without browsing children', async () => {
   const { source, packed, file, fetcher } = await fixture()
   expect(source.name).toBe('reports')
   expect(packed.isDirectory).toBe(true)
-  const reader = contentReader(file, new AbortController().signal)
-  const first = await listDirectory(reader, '', 0, new AbortController().signal)
-  expect(first.items.map((item) => [item.name, item.isDirectory])).toEqual([
-    ['docs', true],
-    ['研究.txt', false],
-  ])
-  const nested = await listDirectory(reader, 'docs', 0, new AbortController().signal)
-  expect(nested.items[0]).toMatchObject({ name: 'notes.txt', path: 'docs/notes.txt', size: 12, isDirectory: false })
-  expect(fetcher.mock.calls.every(([url]) => String(url).includes('?format=raw'))).toBe(true)
   expect(await recoverContentInfo({ ...file, isDirectory: undefined }, new AbortController().signal)).toEqual({
     isDirectory: true,
     fileSize: '—',
   })
+  expect(fetcher.mock.calls).toHaveLength(1)
 })
 it('downloads a directory as a ZIP and extracts a nested file from the original CAR', async () => {
   const { packed } = await fixture()
@@ -94,8 +85,8 @@ it('downloads a directory as a ZIP and extracts a nested file from the original 
 it('downloads only a selected child through verified IPFS reads and shares directory roots as browse links', async () => {
   const { file, fetcher } = await fixture()
   const reader = contentReader(file, new AbortController().signal)
-  const listing = await listDirectory(reader, 'docs', 0, new AbortController().signal)
-  const item = listing.items[0]
+  const entry = await reader.entry('docs/notes.txt')
+  const item = { name: 'notes.txt', path: 'docs/notes.txt', cid: entry.cid.toString() }
   const child = {
     ...file,
     id: 'child',
@@ -128,42 +119,4 @@ it('rejects unrelated or unsafe folder paths and enforces a total upload-size li
   const large = selectedFile('one/large.bin', 'x')
   Object.defineProperty(large, 'size', { value: 200_000_001 })
   expect(() => directoryUpload([large])).toThrow('200 MB')
-})
-
-it('browses freshly packed directories without provider access, retaining only listing metadata', async () => {
-  const { packed, file, fetcher } = await fixture()
-  await cacheDirectoryUpload(packed.carBytes, file.cid)
-  fetcher.mockRejectedValue(new Error('Provider unavailable'))
-  const signal = new AbortController().signal
-  const reader = contentReader({ ...file, serviceURL: '' }, signal)
-  const root = await listDirectory(reader, '', 0, signal)
-  expect(root.items.map((item) => item.name)).toEqual(['docs', '研究.txt'])
-  const nested = await listDirectory(reader, 'docs', 0, signal)
-  expect(nested.items[0]).toMatchObject({ name: 'notes.txt', path: 'docs/notes.txt', size: 12 })
-  expect(fetcher).not.toHaveBeenCalled()
-  const controller = new AbortController()
-  controller.abort()
-  await expect(listDirectory(reader, '', 0, controller.signal)).rejects.toThrow()
-})
-
-it('searches names across directory pages and paginates the matching results', async () => {
-  const source = directoryUpload(
-    Array.from({ length: 105 }, (_, i) => selectedFile(`search/entry-${String(i).padStart(3, '0')}.txt`, 'text'))
-  )
-  const packed = await prepareUploadInput(source)
-  const rootCid = packed.rootCid.toString()
-  await cacheDirectoryUpload(packed.carBytes, rootCid)
-  const signal = new AbortController().signal
-  const reader = contentReader({ cid: rootCid, serviceURL: '' } as DatasetPiece, signal)
-  const matched = await searchDirectory(reader, '', 'ENTRY-10', 0, signal)
-  expect(matched.items.map((item) => item.name)).toEqual([
-    'entry-100.txt',
-    'entry-101.txt',
-    'entry-102.txt',
-    'entry-103.txt',
-    'entry-104.txt',
-  ])
-  expect(matched.hasMore).toBe(false)
-  expect((await searchDirectory(reader, '', 'entry-', 100, signal)).items).toHaveLength(5)
-  expect((await searchDirectory(reader, '', 'missing', 0, signal)).items).toEqual([])
 })

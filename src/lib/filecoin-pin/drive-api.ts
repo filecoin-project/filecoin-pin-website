@@ -9,10 +9,19 @@ import { isCopyRemovalScheduled, isDeletionScheduled } from '../../utils/file-de
 import { formatFileSize } from '../../utils/format-file-size.ts'
 import { normalizeFolder } from '../local-storage/drive-directory.ts'
 import { mergeStorageCopies, storageInstances } from '../local-storage/piece-cache.ts'
+import { parseDriveLabel } from './drive-metadata.ts'
+import { ENCRYPTION_VERSION, ENCRYPTION_VERSION_KEY } from './encryption.ts'
 import { APPLICATION_SOURCE } from './synapse.ts'
 
 const API = 'https://api.filecoin.io'
-type DataSet = { dataSetId: string; providerId: string; owner: string; source: string | null; deleted: boolean }
+type DataSet = {
+  dataSetId: string
+  providerId: string
+  owner: string
+  source: string | null
+  deleted: boolean
+  metadata?: Record<string, unknown> | null
+}
 type Piece = {
   dataSetId: string
   pieceId: string
@@ -82,6 +91,10 @@ export async function loadDriveFiles(synapse: Synapse, owner: string, network: s
         throw new Error('Invalid indexed provider.')
       providers.set(dataset.providerId, provider)
     }
+    // Drive's convention (shared with the filecoin-pin CLI): encrypted uploads
+    // only land in data sets created with `foc/enc` = "1". Anything else is
+    // public content and the UI marks it so.
+    const encrypted = dataset.metadata?.[ENCRYPTION_VERSION_KEY] === ENCRYPTION_VERSION
     for (const piece of pieces) {
       if (piece.dataSetId !== dataset.dataSetId || !decimal(piece.pieceId) || typeof piece.removed !== 'boolean')
         throw new Error('Invalid indexed piece.')
@@ -93,8 +106,12 @@ export async function loadDriveFiles(synapse: Synapse, owner: string, network: s
       } catch {
         /* Missing metadata does not hide stored content. */
       }
-      const fileName =
-        typeof metadata.name === 'string' && metadata.name.trim()
+      const importedCar = typeof metadata.carPath === 'string'
+      const label = parseDriveLabel(typeof metadata.label === 'string' ? metadata.label : '')
+      const isDirectory = !importedCar && label.isDirectory === true
+      const fileName = isDirectory
+        ? label.fileName
+        : typeof metadata.name === 'string' && metadata.name.trim()
           ? metadata.name
           : typeof metadata.label === 'string' && metadata.label.trim()
             ? metadata.label
@@ -110,9 +127,12 @@ export async function loadDriveFiles(synapse: Synapse, owner: string, network: s
         id: `indexed-${dataset.dataSetId}-${piece.pieceId}`,
         fileName,
         folderPath,
-        importedCar: typeof metadata.carPath === 'string' || undefined,
-        fileSize:
-          typeof metadata.carPath === 'string' && decimal(piece.rawSize)
+        importedCar: importedCar || undefined,
+        ...(isDirectory ? { isDirectory: true } : {}),
+        ...(encrypted ? { encrypted: true } : {}),
+        fileSize: isDirectory
+          ? '—'
+          : typeof metadata.carPath === 'string' && decimal(piece.rawSize)
             ? formatFileSize(Number(piece.rawSize))
             : 'Unknown',
         cid,
