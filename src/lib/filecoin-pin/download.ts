@@ -264,12 +264,8 @@ async function decryptedTarget(inner: Uint8Array): Promise<{ root: string; prefi
   const reader = await CarReader.fromBytes(inner)
   const root = (await reader.getRoots())[0]
   if (!root) throw new Error('The decrypted content is missing its root CID.')
-  try {
-    const entry = await payloadEntry(reader)
-    return { root: root.toString(), prefix: entry.name }
-  } catch {
-    return { root: root.toString(), prefix: '' }
-  }
+  const entry = await payloadEntry(reader)
+  return { root: root.toString(), prefix: entry?.name ?? '' }
 }
 
 export async function downloadFile(

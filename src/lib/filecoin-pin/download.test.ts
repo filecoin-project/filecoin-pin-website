@@ -24,6 +24,7 @@ import {
   encryptedPieceShareLink,
   unpackFile,
 } from './download.ts'
+import { wrapCarPayload } from './encrypted-payload.ts'
 import {
   clearRememberedOwnerKeys,
   decryptEnvelope,
@@ -330,6 +331,63 @@ describe('encrypted piece retrieval', () => {
       expect(stages).not.toContain('unlocking')
       expect(save.anchor.download).toBe('secret.bin')
       expect(new Uint8Array(await save.blobs[0].arrayBuffer())).toEqual(original)
+    } finally {
+      save.restore()
+    }
+  })
+
+  it.each(['missing root', 'malformed root', 'missing entry'] as const)(
+    'rejects decrypted payloads with a %s instead of saving them as legacy archives',
+    async (damage) => {
+      const archive = await createCarFromFile(new File(['original archive'], 'inside.txt'))
+      const payload = await wrapCarPayload(archive, 'backup.car')
+      const reader = await CarReader.fromBytes(payload.carBytes)
+      const roots = await reader.getRoots()
+      const rootBlock = await reader.get(roots[0])
+      if (!rootBlock) throw new Error('Fixture root missing')
+      const invalid = new Uint8Array([255])
+      const invalidRoot = CID.createV1(0x70, await sha256.digest(invalid))
+      const inner =
+        damage === 'missing root'
+          ? await packCar(roots, [])
+          : damage === 'malformed root'
+            ? await packCar([invalidRoot], [{ cid: invalidRoot, bytes: invalid }])
+            : await packCar(roots, [rootBlock])
+      const { outer, credential, sessionPrivateKey } = await encrypted(inner)
+      const save = captureSaves()
+      try {
+        await expect(
+          downloadFile(
+            synapseFor(outer.carBytes),
+            piece({
+              cid: outer.rootCid.toString(),
+              importedCar: true,
+            }),
+            { session: { privateKey: sessionPrivateKey, credential } }
+          )
+        ).rejects.toThrow()
+        expect(save.blobs).toHaveLength(0)
+      } finally {
+        save.restore()
+      }
+    }
+  )
+
+  it('keeps decrypted legacy multi-root archives byte-exact', async () => {
+    const first = await createCarFromFile(new File(['first'], 'first.txt'))
+    const second = await createCarFromFile(new File(['second'], 'second.txt'))
+    const readers = await Promise.all([CarReader.fromBytes(first.carBytes), CarReader.fromBytes(second.carBytes)])
+    const roots = (await Promise.all(readers.map((reader) => reader.getRoots()))).flat()
+    const blocks = []
+    for (const reader of readers) for await (const block of reader.blocks()) blocks.push(block)
+    const archive = await packCar(roots, blocks)
+    const { outer, credential, sessionPrivateKey } = await encrypted(archive)
+    const save = captureSaves()
+    try {
+      await downloadFile(synapseFor(outer.carBytes), piece({ cid: outer.rootCid.toString(), importedCar: true }), {
+        session: { privateKey: sessionPrivateKey, credential },
+      })
+      expect(new Uint8Array(await save.blobs[0].arrayBuffer())).toEqual(archive)
     } finally {
       save.restore()
     }

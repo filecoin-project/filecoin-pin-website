@@ -64,9 +64,9 @@ describe('buildEncryptedPayload (filecoin-pin wire layout)', () => {
     const payload = await buildEncryptedPayload({ kind: 'file', file: new File(['x'], 'tiny.txt') })
     const reader = await CarReader.fromBytes(payload.carBytes)
     const entry = await payloadEntry(reader)
-    expect(entry.name).toBe('tiny.txt')
+    expect(entry?.name).toBe('tiny.txt')
     expect(payload.rootCid).toBe((await reader.getRoots())[0].toString())
-    expect(entry.cid.toString()).not.toBe(payload.rootCid)
+    expect(entry?.cid.toString()).not.toBe(payload.rootCid)
   })
 
   it('refuses entry names that cannot be restored from the wire', async () => {

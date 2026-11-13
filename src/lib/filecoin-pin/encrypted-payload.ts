@@ -23,16 +23,24 @@ export interface EncryptedPayload {
   rootCid: string
 }
 
-/** The wrapper's single named entry; how readers descend without guessing. */
-export async function payloadEntry(reader: CarReader): Promise<{ name: string; cid: CID }> {
+/** A named wrapper entry, or undefined for a legacy root layout. Malformed blocks still throw. */
+export async function payloadEntry(reader: CarReader): Promise<{ name: string; cid: CID } | undefined> {
   const roots = await reader.getRoots()
   const root = roots[0]
-  if (!root || root.code !== DAG_PB_CODEC) throw new Error('The decrypted content has no wrapper directory.')
+  if (!root) throw new Error('The decrypted content is missing its root CID.')
+  for (const cid of roots)
+    if (!(await reader.has(cid))) throw new Error('The decrypted content is missing its root block.')
+  // Legacy CARs can contain multiple roots or a raw file at the root.
+  if (roots.length !== 1 || root.code !== DAG_PB_CODEC) return undefined
   const block = await reader.get(root)
   if (!block) throw new Error('The decrypted content is missing its root block.')
   const node = dagPb.decode(block.bytes)
+  if (!node.Data || UnixFS.unmarshal(node.Data).type !== 'directory') return undefined
   const link = node.Links[0]
-  if (node.Links.length !== 1 || !link?.Name) throw new Error('The decrypted content is missing its named entry.')
+  // Ordinary legacy directories need not have the profile's single named entry.
+  if (node.Links.length !== 1 || !link?.Name) return undefined
+  if (isUnsafeName(link.Name)) throw new Error('The decrypted content has an unsafe entry name.')
+  if (!(await reader.has(link.Hash))) throw new Error('The decrypted content is missing its named entry block.')
   return { name: link.Name, cid: link.Hash }
 }
 
