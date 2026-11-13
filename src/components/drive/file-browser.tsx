@@ -814,10 +814,12 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                     </span>
                     <BadgePrivacy detailed file={selected} />
                   </p>
-                  {selected.encrypted && selected.isDirectory && (
+                  {selected.encrypted && (
                     <p className="rounded-lg border border-warning-border bg-warning-surface p-3 text-sm text-warning">
-                      Preview and Share grant access to the entire uploaded folder, including all files and subfolders.
-                      Anyone with the link can read them. Access cannot be revoked.
+                      {selected.isDirectory
+                        ? 'Preview and Share create permanent external viewer links to the entire uploaded folder, including all files and subfolders.'
+                        : 'Preview and Share create permanent external viewer links containing access keys for this entire upload.'}{' '}
+                      Anyone with the link can read the content. Access cannot be revoked.
                     </p>
                   )}
                   {selected.ipfsIndexed === false &&

@@ -678,6 +678,9 @@ it.each(['archive.zip', 'page.html', 'icon.svg'])(
     fireEvent.click(await screen.findByRole('button', { name: fileName }))
     const preview = screen.getByRole('button', { name: 'Preview' })
     expect(preview).toHaveProperty('disabled', false)
+    expect(screen.getByText(/permanent external viewer links containing access keys/).textContent).toContain(
+      'Access cannot be revoked.'
+    )
     expect(preview.getAttribute('title')).toMatch(/external.*viewer/i)
     expect(preview.getAttribute('title')).not.toMatch(/IPFS indexer|imported CAR/i)
   }
@@ -1550,6 +1553,7 @@ it('treats uploaded folders as stored items with details and external preview/sh
   const details = screen.getByRole('dialog', { name: 'Uploaded reports' })
   expect(within(details).getByRole('button', { name: 'Preview' })).toHaveProperty('disabled', false)
   expect(within(details).queryByRole('button', { name: 'Share' })).toBeNull()
+  expect(within(details).getByText(/permanent external viewer links to the entire uploaded folder/)).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'Unlock and identify' })).toBeNull()
   expect(screen.queryByRole('searchbox', { name: 'Search this folder' })).toBeNull()
 })
