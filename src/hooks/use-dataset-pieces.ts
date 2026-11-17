@@ -18,6 +18,8 @@ import { useIpfsIndexing } from './use-ipfs-indexing.ts'
 export interface DatasetPiece {
   id: string
   fileName: string
+  /** Indexed encrypted sizes include encryption overhead rather than original bytes. */
+  fileSizeIsStored?: boolean
   fileSize: string
   cid: string
   pieceCid: string
@@ -40,8 +42,6 @@ export interface DatasetPiece {
   removalQueuedCopies?: string[]
   /** Original CAR bytes are downloaded directly instead of unpacking a UnixFS file. */
   isDirectory?: boolean
-  /** Transient child selection; never an independent storage/deletion record. */
-  directoryEntry?: { rootCid: string; path: string }
   importedCar?: boolean
   /** True when the stored piece is an FEE envelope (content encrypted at rest). */
   encrypted?: boolean
@@ -177,7 +177,12 @@ export const useDatasetPieces = () => {
         await mutatePieces((current) =>
           current.map((record) =>
             record.cid === file.cid && !record.importedCar && record.fileSize === 'Unknown'
-              ? { ...record, fileSize, isDirectory: isDirectory || record.isDirectory }
+              ? {
+                  ...record,
+                  fileSize,
+                  fileSizeIsStored: record.encrypted === true,
+                  isDirectory: isDirectory || record.isDirectory,
+                }
               : record
           )
         )

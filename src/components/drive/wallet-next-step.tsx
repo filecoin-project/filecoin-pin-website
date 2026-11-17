@@ -9,19 +9,19 @@ import { useUploadReadiness } from '../../hooks/use-upload-readiness.ts'
 import type { SetupTarget } from '../../utils/upload/upload-readiness.ts'
 
 export function WalletNextStep({
-  encryptionReady,
   onReview,
   onContinue,
   pendingFunding = false,
 }: {
-  encryptionReady: boolean
   onReview: (target: SetupTarget) => void
   onContinue: () => void
   pendingFunding?: boolean
 }) {
   const readiness = useUploadReadiness()
+  const blocker = readiness.blockers[0]
   const connection = useBrowserWallet()
-  const { wallet, storageSetup, refreshWallet } = useFilecoinPinContext()
+  const { storageSetup, refreshWallet, encryption } = useFilecoinPinContext()
+  const encryptionReady = encryption.ready
   const disabled =
     connection.busy || connection.uploading || connection.deleting || Boolean(connection.pendingTransaction)
   let title: string
@@ -39,56 +39,56 @@ export function WalletNextStep({
     title = 'Complete the request in your wallet'
     description = 'Confirm or cancel the open wallet request to continue.'
     checking = true
-  } else if (wallet.status === 'error' || storageSetup?.status === 'error') {
+  } else if (readiness.checkFailed) {
     title = 'Unable to check storage setup'
     description = 'Your balances or payment approval could not be verified. Retry the checks before continuing.'
     action = 'Retry checks'
     retry = true
-  } else if (
-    connection.sessionStatus === 'checking' ||
-    wallet.status === 'idle' ||
-    wallet.status === 'loading' ||
-    storageSetup?.status === 'checking'
-  ) {
+  } else if (readiness.checking) {
     title = 'Checking storage setup…'
     description = 'Checking your session, balances and payment approval.'
     checking = true
-  } else if (
-    connection.sessionStatus === 'active' &&
-    readiness.blockers.some((blocker) => blocker.code === 'encryption')
-  ) {
-    // The signature is free and needs only the live session key, so it outranks
-    // gas, which the remaining on-chain steps need — but never the session step.
-    if (connection.session?.encryption) {
-      title = 'Restore encryption access'
-      description = 'Restore encryption access to continue uploading.'
-      action = 'Restore encryption access'
-    } else {
-      title = 'Add your encryption key'
-      description = 'Set up your encryption key to upload files securely.'
-      action = 'Review encryption key'
-    }
-    target = 'encryption'
-  } else if (readiness.blockers.some((blocker) => blocker.code === 'gas')) {
-    title = 'Add FIL for transaction fees'
-    description = 'Send FIL to your connected wallet, then refresh balances. FIL pays gas; USDFC pays for storage.'
-    action = 'Review gas balance'
-    target = 'gas'
-  } else if (readiness.blockers.some((blocker) => blocker.code === 'session')) {
-    title = 'Authorize this browser'
-    description = 'Review the session permissions and choose how long this browser can upload and delete files.'
-    action = 'Review session authorization'
-    target = 'session'
-  } else if (readiness.blockers.some((blocker) => blocker.code === 'deposit')) {
-    title = 'Add funds for storage'
-    description = 'Deposit USDFC from your wallet into your storage account.'
-    action = 'Go to deposit'
-    target = 'deposit'
-  } else if (readiness.blockers.some((blocker) => blocker.code === 'approval')) {
-    title = 'Approve storage payments'
-    description = 'Your storage account has funds. Review the approval so storage services can charge this balance.'
-    action = 'Review payment approval'
-    target = 'approval'
+  } else if (blocker) {
+    const guidance = {
+      session: {
+        title: 'Authorize this browser',
+        description: 'Review the session permissions and choose how long this browser can upload and delete files.',
+        action: 'Review session authorization',
+      },
+      encryption: connection.session?.encryption
+        ? {
+            title: 'Restore encryption access',
+            description: 'Restore encryption access to continue uploading.',
+            action: 'Restore encryption access',
+          }
+        : {
+            title: 'Add your encryption key',
+            description: 'Set up your encryption key to upload files securely.',
+            action: 'Review encryption key',
+          },
+      unsupported_wallet: { title: 'Use a supported wallet', description: blocker.message, action: 'Review wallet' },
+      gas: {
+        title: 'Add FIL for transaction fees',
+        description: 'Send FIL to your connected wallet, then refresh balances. FIL pays gas; USDFC pays for storage.',
+        action: 'Review gas balance',
+      },
+      deposit: {
+        title: 'Add funds for storage',
+        description: 'Deposit USDFC from your wallet into your storage account.',
+        action: 'Go to deposit',
+      },
+      approval: {
+        title: 'Approve storage payments',
+        description: 'Your storage account has funds. Review the approval so storage services can charge this balance.',
+        action: 'Review payment approval',
+      },
+      unknown: { title: 'Confirm storage setup', description: blocker.message, action: 'Refresh balances' },
+    }[blocker.code]
+    title = guidance.title
+    description = guidance.description
+    action = guidance.action
+    target = blocker.target
+    retry = blocker.code === 'unknown'
   } else if (pendingFunding) {
     title = 'An upload is waiting for funding'
     description =

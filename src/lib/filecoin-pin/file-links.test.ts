@@ -65,12 +65,11 @@ it('shares a remaining CAR copy rather than a removed or queued provider', () =>
   expect(fileShareLink({ ...car, removalQueuedCopies: ['1'] })).toBe('https://active.example/piece/bafk-piece')
 })
 
-it('offers Markdown preview and shares its preview link, including directory entries', () => {
+it('offers Markdown preview and shares its preview link, for whole uploads', () => {
   for (const fileName of ['README.md', 'notes.markdown', 'README.MD']) {
     const markdown = {
       ...file,
       fileName,
-      directoryEntry: { rootCid: cid, path: `docs/${fileName}` },
     }
     expect(canPreviewFile(markdown)).toBe(true)
     const url = new URL(fileShareLink(markdown) as string)

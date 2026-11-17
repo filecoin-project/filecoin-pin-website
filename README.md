@@ -6,7 +6,7 @@ Filecoin Drive is an open-source reference app built on Filecoin with Synapse SD
 
 - File manager with folders, search, storage status and copy counts.
 - File and folder uploads, original-file downloads and folder ZIP downloads.
-- Public sharing links, QR codes and previews for supported file types.
+- Share links, QR codes and external-viewer previews.
 - Browser wallet and WalletConnect support, with scoped browser sessions.
 - Scheduled storage deletion and local cleanup of failed upload records.
 
@@ -25,8 +25,9 @@ Drive defaults to **Filecoin Mainnet**; the current interface does not offer a n
 
 1. Connect a Filecoin Mainnet-compatible wallet.
 2. In **Wallet and Storage**, review and authorize a browser session.
-3. Deposit USDFC and approve storage payments when needed. These actions require owner-wallet confirmation.
-4. Upload files or folders, then monitor their storage status and confirmed copies.
+3. Choose **Add encryption key** in **Wallet and Storage** and confirm the wallet signature.
+4. Deposit USDFC and approve storage payments when needed. These actions require owner-wallet confirmation.
+5. Upload files or folders, then monitor their storage status and confirmed copies.
 
 For wallet setup, downloads, deletion and recovery, see the [user guide](docs/user-guide.md).
 

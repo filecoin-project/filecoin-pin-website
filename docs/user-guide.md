@@ -37,9 +37,9 @@ Keep the tab open while uploads are running. **Stored** means at least one copy 
 Drive checks two values separately before starting an upload:
 
 - **Upload name**: the name of the selected file, including its extension, or the name of the selected folder. Maximum: **96 UTF-8 bytes** for files, **95 UTF-8 bytes** for uploaded folders.
-- **Upload location**: the destination path entered in the upload panel, including `/` separators. Maximum: **96 UTF-8 bytes** after path normalization. Leave it empty to upload directly under **Files**.
+- **Upload location**: the destination path entered in the upload panel, including `/` separators. Maximum: **96 UTF-8 bytes** after path normalization. Leave it empty to upload directly under **My Drive**.
 
-For example, upload the folder `photos` into **Upload location** `trips/2026`. Drive checks `photos` and `trips/2026` separately. The resulting location is `Files → trips → 2026 → photos`, but that combined path is not the value checked against either limit. A file such as `photos/day-1/beach.jpg` inside the selected folder is part of its contents; its child path is not subject to these two metadata limits.
+For example, upload the folder `photos` into **Upload location** `trips/2026`. Drive checks `photos` and `trips/2026` separately. The resulting location is `My Drive → trips → 2026 → photos`, but that combined path is not the value checked against either limit. A file such as `photos/day-1/beach.jpg` inside the selected folder is part of its contents; its child path is not subject to these two metadata limits.
 
 `trips/2026` organizes separate uploads in Drive. The uploaded `photos` folder is stored as one unit, with its internal files and folders preserved. See [Folders and search](#folders-and-search) for how these behave.
 
@@ -47,7 +47,7 @@ UTF-8 bytes are not the same as characters: English letters and digits normally 
 
 ## Folders and search
 
-The folder sidebar shows **Files** as the root, with nested paths derived from visible files. Choose a folder path in the upload panel; deleting all files under a path removes that path from the tree.
+The folder sidebar shows **My Drive** as the root, with nested paths derived from visible files. Choose a folder path in the upload panel; deleting all files under a path removes that path from the tree.
 
 Choose **Folder** in the upload panel to store an entire folder as one encrypted upload. Nested paths are preserved. Drive treats the upload as a single item: open its details, download it as a ZIP, or use Preview and Share to open the external viewer. Its contents are not browsed within Drive. The browser picker omits empty folders; selected content and the packed CAR must each fit the 200 MB browser limit. ZIP downloads are limited to 200 MB of extracted content and 10,000 entries, counting files and directories, including the root.
 
@@ -109,7 +109,9 @@ Queued uploads and **Paused** uploads can be selected together with failed local
 
 The file list has selection, Name, Size, Uploaded and Actions columns. Status appears beside the name: a static muted clock for queued uploads that have not started (hover or an accessible label identifies **Waiting to upload**), a spinner for uploads or deletions in progress, a static **Paused** badge when funding or payment approval needs attention, and **Upload failed** when an unfinished upload requires recovery or retry. Open file details for the cause and available actions. Paused uploads remain selectable for **Remove local records**, including alongside queued and failed local records; removing the batch cancels those tasks before the queue advances.
 
-Stored files have no badge. At least one confirmed storage copy is enough to show **Stored** in details; remaining replication and IPFS indexing do not change that status. A provider receiving bytes or an indexed CID alone does not establish confirmed storage. Preview and share availability still follow their own checks. Copy counts, provider receipts and saved progress remain in file details under **Upload details** and **Storage copies**. The list loads automatically; reload the page to discover later remote changes, or use **Retry** if loading fails.
+Stored files have no status badge. Privacy markers show a lock for encrypted files and **Public** for unencrypted files; details spell out **Encrypted**. At least one confirmed storage copy is enough to show **Stored** in details; remaining replication and IPFS indexing do not change that status. A provider receiving bytes or an indexed CID alone does not establish confirmed storage. Preview and share availability still follow their own checks. Copy counts, provider receipts and saved progress remain in file details under **Upload details** and **Storage copies**. The list loads automatically; reload the page to discover later remote changes, or use **Retry** if loading fails.
+
+Encrypted file sizes recovered from storage include encryption overhead. A question mark beside the size explains this on hover or keyboard focus; locally uploaded records retain the original file size.
 
 [Back to README](../README.md)
 

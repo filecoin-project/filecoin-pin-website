@@ -9,10 +9,8 @@ vi.mock(
 )
 
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
-import { downloadFile, unpackFile } from './download.ts'
-import { fileShareLink } from './file-links.ts'
+import { unpackFile } from './download.ts'
 import { recoverContentInfo } from './file-size.ts'
-import { contentReader } from './ipfs-content.ts'
 import { prepareUploadInput } from './upload-input.ts'
 import { directoryUpload } from './upload-source.ts'
 
@@ -81,36 +79,6 @@ it('downloads a directory as a ZIP and extracts a nested file from the original 
   expect(await (await unpackFile(packed.carBytes, packed.rootCid.toString(), 'docs/notes.txt')).text()).toBe(
     'nested notes'
   )
-})
-it('downloads only a selected child through verified IPFS reads and shares directory roots as browse links', async () => {
-  const { file, fetcher } = await fixture()
-  const reader = contentReader(file, new AbortController().signal)
-  const entry = await reader.entry('docs/notes.txt')
-  const item = { name: 'notes.txt', path: 'docs/notes.txt', cid: entry.cid.toString() }
-  const child = {
-    ...file,
-    id: 'child',
-    fileName: item.name,
-    cid: item.cid,
-    isDirectory: false,
-    directoryEntry: { rootCid: file.cid, path: item.path },
-  }
-  const anchor = { href: '', download: '', click: vi.fn(), remove: vi.fn() }
-  vi.stubGlobal('document', { createElement: () => anchor, body: { append: vi.fn() } })
-  const blobs: Blob[] = []
-  vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
-    blobs.push(blob as Blob)
-    return 'blob:child'
-  })
-  vi.useFakeTimers()
-  const createContext = vi.fn()
-  await downloadFile({ storage: { createContext } } as unknown as import('@filoz/synapse-sdk').Synapse, child)
-  expect(createContext).not.toHaveBeenCalled()
-  expect(anchor.download).toBe('notes.txt')
-  expect(await blobs[0].text()).toBe('nested notes')
-  expect(fileShareLink(file)).toBe(`https://${file.cid}.ipfs.inbrowser.link/`)
-  expect(fileShareLink(child)).toBe(`https://${item.cid}.ipfs.inbrowser.link/?filename=notes.txt`)
-  expect(fetcher.mock.calls.every(([url]) => !String(url).includes('/piece/'))).toBe(true)
 })
 it('rejects unrelated or unsafe folder paths and enforces a total upload-size limit', () => {
   expect(() => directoryUpload([])).toThrow('at least one file')

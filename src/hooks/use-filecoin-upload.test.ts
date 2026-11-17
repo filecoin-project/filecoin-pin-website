@@ -156,8 +156,24 @@ const baseCar = await createCarFromFile(new File(['hello'], 'a.txt'))
 const payloadRoot = (await wrapCarPayload(baseCar, 'a.txt')).rootCid
 
 const fakeContexts = [
-  { provider: { id: 4n, name: 'provider-a' }, dataSetMetadata: { source: 'filecoin-drive' } },
-  { provider: { id: 2n, name: 'provider-b' }, dataSetMetadata: { source: 'filecoin-drive' } },
+  {
+    provider: { id: 4n, name: 'provider-a' },
+    dataSetMetadata: {
+      source: 'filecoin-drive',
+      'foc/enc': '1',
+      'foc/ks': credential.groupKeyId,
+      'foc/kc': credential.commitment,
+    },
+  },
+  {
+    provider: { id: 2n, name: 'provider-b' },
+    dataSetMetadata: {
+      source: 'filecoin-drive',
+      'foc/enc': '1',
+      'foc/ks': credential.groupKeyId,
+      'foc/kc': credential.commitment,
+    },
+  },
 ]
 
 beforeEach(() => {

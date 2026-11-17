@@ -30,9 +30,7 @@ export function useEncryptedPreview() {
   }, [storageScope])
 
   const getPreviewLink = (file: DatasetPiece) =>
-    prepared?.scope === storageScope &&
-    prepared?.id === file.id &&
-    prepared?.rootCid === (file.directoryEntry?.rootCid ?? file.cid)
+    prepared?.scope === storageScope && prepared?.id === file.id && prepared?.rootCid === file.cid
       ? prepared.url
       : undefined
 
@@ -48,8 +46,7 @@ export function useEncryptedPreview() {
     const credentials = decryptCredentials(encryption, ownerSigner)
     void encryptedPieceShareLink(synapse, file, credentials, controller.signal)
       .then((url) => {
-        if (!controller.signal.aborted)
-          setPrepared({ id: file.id, rootCid: file.directoryEntry?.rootCid ?? file.cid, url, scope: storageScope })
+        if (!controller.signal.aborted) setPrepared({ id: file.id, rootCid: file.cid, url, scope: storageScope })
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {

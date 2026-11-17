@@ -42,12 +42,7 @@ export const ENCRYPTION_VERSION_KEY = 'foc/enc'
 export const ENCRYPTION_VERSION = '1'
 export const GROUP_KEY_ID_KEY = KEYSPACE_ID_KEY
 export const GROUP_KEY_COMMITMENT_KEY = COMMITMENT_KEY
-/** Keys that mark a data set as encrypted; a plain upload never reuses a data set carrying any of them. */
-export const ENCRYPTED_DATA_SET_KEYS: readonly string[] = [
-  GROUP_KEY_ID_KEY,
-  GROUP_KEY_COMMITMENT_KEY,
-  ENCRYPTION_VERSION_KEY,
-]
+export const ENCRYPTED_DATA_SET_KEYS = [ENCRYPTION_VERSION_KEY, GROUP_KEY_ID_KEY, GROUP_KEY_COMMITMENT_KEY] as const
 
 /**
  * The id of an owner's first group key, identical across every client that sets
@@ -196,13 +191,14 @@ export async function encryptCar(
   }
 }
 
-/** True when the bytes parse as an FEE envelope; plain CARs and junk return false. */
+/** Malformed syntax returns false; unsupported schemes and unexpected failures propagate. */
 export async function isEncryptionEnvelope(bytes: Uint8Array): Promise<boolean> {
   try {
     await fee.parse(bytes)
     return true
-  } catch {
-    return false
+  } catch (cause) {
+    if (cause instanceof fee.errors.MalformedEnvelopeError) return false
+    throw cause
   }
 }
 
@@ -213,8 +209,29 @@ export async function isEncryptionEnvelope(bytes: Uint8Array): Promise<boolean> 
  */
 export function grantKeyResolver(sessionPrivateKey: Hex, credential: EncryptionCredential): fee.KeyResolver {
   return async ({ appMetadata }) => {
-    const grant = decodeGrant(base64.baseDecode(credential.grant))
-    const node = await unwrapWith(sessionPrivateKey, grant)
+    let grant: ReturnType<typeof decodeGrant>
+    try {
+      grant = decodeGrant(base64.baseDecode(credential.grant))
+      grantDescriptor({ owner: grant.owner, keyspace: grant.keyspace }, grant.node as GrantNode)
+    } catch (cause) {
+      throw new CredentialAccessError('The saved encryption credential is invalid.', { cause })
+    }
+    const labels = (appMetadata ?? {}) as Record<string, unknown>
+    if (typeof labels['foc/own'] !== 'string' || typeof labels['foc/ks'] !== 'string')
+      throw new KeyAccessError('The encryption envelope has invalid owner or keyspace labels.')
+    if (
+      labels['foc/own'].toLowerCase() !== grant.owner.toLowerCase() ||
+      labels['foc/ks'].toLowerCase() !== grant.keyspace.toLowerCase()
+    )
+      throw new CredentialAccessError('The saved encryption credential belongs to another owner or encryption group.')
+    let node: Uint8Array
+    try {
+      node = await unwrapWith(sessionPrivateKey, grant)
+    } catch (cause) {
+      if (cause instanceof Error && cause.cause instanceof Error && cause.cause.name === 'OperationError')
+        throw new CredentialAccessError('The saved encryption credential could not be opened.', { cause })
+      throw cause
+    }
     try {
       return keyForEnvelope(node, appMetadata, grant)
     } finally {
@@ -245,8 +262,12 @@ export class KeyAccessError extends Error {
   override name = 'KeyAccessError'
 }
 
+export class CredentialAccessError extends KeyAccessError {
+  override name = 'CredentialAccessError'
+}
+
 /** A saved sharing credential is unusable; the owner wallet may recover access. */
-export class ShareCredentialError extends KeyAccessError {
+export class ShareCredentialError extends CredentialAccessError {
   override name = 'ShareCredentialError'
 }
 

@@ -26,7 +26,7 @@ import { DEFAULT_SESSION_DAYS } from '../../lib/filecoin-pin/config.ts'
 import { approveStoragePayments, depositStorageFunds } from '../../lib/filecoin-pin/payments.ts'
 import { formatFundingAmount } from '../../lib/filecoin-pin/upload-funding.ts'
 import { shortenAddress } from '../../lib/filecoin-pin/wallet.ts'
-import { getUploadRetryBlocker } from '../../utils/upload/upload-readiness.ts'
+import { classifyUploadFailure, getUploadRetryBlocker } from '../../utils/upload/upload-readiness.ts'
 import { ButtonBase } from '../ui/button/button-base.tsx'
 import { Select } from '../ui/select.tsx'
 import { ConnectWalletButton } from './connect-wallet-button.tsx'
@@ -232,7 +232,7 @@ export function WalletSetup({
   // Keysmith refuses signers that cannot root a keyspace (smart accounts, some
   // embedded wallets); detection is empirical, from the surfaced error message.
   const unsupportedWallet = Boolean(
-    connection.error && /not deterministic|ECDSA signature|cannot root a keyspace/i.test(connection.error)
+    connection.error && classifyUploadFailure(connection.error) === 'unsupported_wallet'
   )
   const staleGrant = Boolean(connection.session?.encryption) && !encryption.ready
   const pay = async (kind: 'deposit' | 'approve') => {
@@ -255,7 +255,6 @@ export function WalletSetup({
     <>
       {inDrawer && onContinueUpload && (
         <WalletNextStep
-          encryptionReady={encryption.ready}
           onContinue={onContinueUpload}
           onReview={reviewStep}
           pendingFunding={fundingRequests.length > 0}

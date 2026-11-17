@@ -129,7 +129,7 @@ export async function loadDriveFiles(synapse: Synapse, owner: string, network: s
         folderPath,
         importedCar: importedCar || undefined,
         ...(isDirectory ? { isDirectory: true } : {}),
-        ...(encrypted ? { encrypted: true } : {}),
+        ...(encrypted ? { encrypted: true, fileSizeIsStored: true } : {}),
         fileSize: isDirectory
           ? '—'
           : typeof metadata.carPath === 'string' && decimal(piece.rawSize)
@@ -249,6 +249,10 @@ function mergeFiles(local: DatasetPiece[], indexed: DatasetPiece[]): DatasetPiec
         fileName: previous.fileName && previous.fileName !== 'unknown' ? previous.fileName : incoming.fileName,
         cid: previous.cid || incoming.cid,
         fileSize: previous.fileSize === 'Unknown' ? incoming.fileSize : previous.fileSize,
+        fileSizeIsStored:
+          previous.fileSize === 'Unknown' || previous.id.startsWith('indexed-')
+            ? incoming.fileSizeIsStored
+            : previous.fileSizeIsStored,
         uploadedAt: previous.uploadedAt || incoming.uploadedAt,
         removedCopies: [...new Set([...(previous.removedCopies ?? []), ...(incoming.removedCopies ?? [])])],
         removalQueuedCopies: [

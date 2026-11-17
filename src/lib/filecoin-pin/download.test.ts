@@ -331,6 +331,32 @@ describe('encrypted piece retrieval', () => {
     }
   })
 
+  it('reports unexpected WebCrypto failures without requesting an owner signature', async () => {
+    const inner = await createCarFromFile(new File(['secret'], 'secret.bin'))
+    const { sessionPrivateKey, credential, envelope } = await encrypted(inner.carBytes)
+    const signer = vi.fn(() => owner())
+    const failure = new TypeError('WebCrypto runtime unavailable')
+    const decrypt = vi.spyOn(crypto.subtle, 'decrypt').mockRejectedValue(failure)
+    try {
+      await expect(
+        decryptWithCredentials(envelope, {
+          session: { privateKey: sessionPrivateKey, credential },
+          ownerSigner: signer,
+        })
+      ).rejects.toMatchObject({ cause: failure })
+      expect(signer).not.toHaveBeenCalled()
+    } finally {
+      decrypt.mockRestore()
+    }
+  })
+
+  it('rejects malformed encrypted shares instead of offering a public ciphertext link', async () => {
+    const outer = await createCarFromFile(new File(['invalid FEE'], 'encrypted.fee'))
+    await expect(
+      encryptedPieceShareLink(synapseFor(outer.carBytes), piece({ cid: outer.rootCid.toString() }), {})
+    ).rejects.toThrow(/invalid or unsupported encryption envelope/)
+  })
+
   it('decrypts through the session grant silently and saves the original bytes', async () => {
     const original = Uint8Array.from({ length: 3000 }, (_, index) => index % 199)
     const inner = await createCarFromFile(new File([original], 'secret.bin'))
@@ -424,27 +450,6 @@ describe('encrypted piece retrieval', () => {
       expect(save.anchor.download).toBe('original.car')
       expect(new Uint8Array(await save.blobs[0].arrayBuffer())).toEqual(archive.carBytes)
       expect(save.blobs[0].type).toBe('application/vnd.ipld.car')
-    } finally {
-      save.restore()
-    }
-  })
-
-  it('extracts one file from an encrypted directory by decrypting the whole envelope', async () => {
-    const inner = await directoryCar()
-    const { sessionPrivateKey, credential, outer } = await encrypted(inner.carBytes)
-    const save = captureSaves()
-    try {
-      await downloadFile(
-        synapseFor(outer.carBytes),
-        piece({
-          cid: 'bafy-child-selection',
-          fileName: 'notes.txt',
-          directoryEntry: { rootCid: outer.rootCid.toString(), path: 'docs/notes.txt' },
-        }),
-        { session: { privateKey: sessionPrivateKey, credential } }
-      )
-      expect(save.anchor.download).toBe('notes.txt')
-      expect(await save.blobs[0].text()).toBe('nested notes')
     } finally {
       save.restore()
     }
@@ -672,26 +677,6 @@ describe('encrypted piece retrieval', () => {
     const info = await fee.parse(envelope)
     const plaintext = await decryptEnvelope(envelope, () => keyForEnvelope(key, info.appMetadata as never, grant))
     expect(plaintext).toEqual(inner.carBytes)
-  })
-
-  it('shares the outer encrypted upload when a nested directory entry is selected', async () => {
-    const inner = await directoryCar()
-    const { sessionPrivateKey, credential, outer } = await encrypted(inner.carBytes)
-    const selected = piece({
-      cid: 'bafy-inner-child',
-      fileName: 'notes.txt',
-      directoryEntry: { rootCid: outer.rootCid.toString(), path: 'docs/notes.txt' },
-    })
-    const sessionLink = await encryptedPieceShareLink(synapseFor(outer.carBytes), selected, {
-      session: { privateKey: sessionPrivateKey, credential },
-    })
-    const ownerLink = await encryptedPieceShareLink(synapseFor(outer.carBytes), selected, {
-      ownerSigner: () => owner(),
-    })
-    for (const link of [sessionLink, ownerLink]) {
-      expect(link).toContain(`#v1/${outer.rootCid.toString()}&d=`)
-      expect(link).not.toContain('bafy-inner-child')
-    }
   })
 
   it('refuses to mint a share link for a plaintext piece', async () => {

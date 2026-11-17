@@ -3,6 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { WalletNextStep } from './wallet-next-step.tsx'
 
 const state = vi.hoisted(() => ({
+  error: null as string | null,
   sessionStatus: 'active',
   walletStatus: 'ready',
   storageStatus: 'ready',
@@ -18,6 +19,7 @@ const state = vi.hoisted(() => ({
 vi.mock('../../context/browser-wallet-provider.tsx', () => ({
   useBrowserWallet: () => ({
     sessionStatus: state.sessionStatus,
+    error: state.error,
     session: state.session,
     busy: state.busy,
     pendingTransaction: state.pending,
@@ -39,6 +41,7 @@ vi.mock('../../hooks/use-filecoin-pin-context.ts', () => ({
 }))
 beforeEach(() => {
   Object.assign(state, {
+    error: null,
     sessionStatus: 'active',
     walletStatus: 'ready',
     storageStatus: 'ready',
@@ -54,7 +57,7 @@ beforeEach(() => {
 })
 
 const renderStep = (review = vi.fn(), proceed = vi.fn()) => {
-  render(<WalletNextStep encryptionReady={state.encryptionReady} onContinue={proceed} onReview={review} />)
+  render(<WalletNextStep onContinue={proceed} onReview={review} />)
   return { review, proceed }
 }
 
@@ -159,10 +162,20 @@ it('shows exactly five prerequisites and distinguishes funded storage from payme
 it('keeps a waiting upload visible after wallet setup is complete', () => {
   const review = vi.fn()
   const proceed = vi.fn()
-  render(<WalletNextStep encryptionReady onContinue={proceed} onReview={review} pendingFunding />)
+  render(<WalletNextStep onContinue={proceed} onReview={review} pendingFunding />)
   expect(screen.getByText('An upload is waiting for funding')).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'Continue to upload' })).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Review waiting upload' }))
   expect(review).toHaveBeenCalledWith('deposit')
   expect(proceed).not.toHaveBeenCalled()
+})
+
+it('shows unsupported-wallet guidance ahead of encryption setup', () => {
+  state.encryptionReady = false
+  state.error = 'ECDSA signature is not deterministic'
+  const { review } = renderStep()
+  expect(screen.getByText('Use a supported wallet')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Review wallet' }))
+  expect(review).toHaveBeenCalledWith('encryption')
+  expect(screen.queryByText('Add your encryption key')).toBeNull()
 })

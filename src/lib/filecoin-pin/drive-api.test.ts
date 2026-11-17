@@ -388,3 +388,14 @@ it('does not guess types for legacy labels or treat CAR imports as directories',
   expect(files[1].importedCar).toBe(true)
   expect(files[1].isDirectory).toBeUndefined()
 })
+
+it('preserves original local sizes while explaining recovered encrypted sizes', () => {
+  const remote = { ...record(), encrypted: true, fileSize: '2 KB', fileSizeIsStored: true }
+  expect(mergeIndexedFiles([], [remote])[0].fileSizeIsStored).toBe(true)
+  const local = { ...record(), id: 'local-upload', fileSize: '1 KB' }
+  const merged = mergeIndexedFiles([local], [remote])[0]
+  expect(merged.fileSize).toBe('1 KB')
+  expect(merged.fileSizeIsStored).toBeUndefined()
+  const oldRecovered = { ...remote, id: 'indexed-1-1', fileSizeIsStored: undefined }
+  expect(mergeIndexedFiles([oldRecovered], [remote])[0].fileSizeIsStored).toBe(true)
+})

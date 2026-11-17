@@ -28,7 +28,7 @@ export function ShareFileButton({
   const [open, setOpen] = useState(false)
   const { encryption, synapse, storageScope } = useFilecoinPinContext()
   const { ownerSigner } = useBrowserWallet()
-  const [minted, setMinted] = useState<{ key: string; link: string; gateway?: boolean } | null>(null)
+  const [minted, setMinted] = useState<{ key: string; link: string } | null>(null)
   const [mintError, setMintError] = useState<ReturnType<typeof describeFileAccessError> | null>(null)
   // The local ipfsIndexed flag goes stale: the post-upload checker gives up
   // after a few minutes while IPNI often indexes later. The dialog asks the
@@ -39,7 +39,7 @@ export function ShareFileButton({
   // we're waiting for.
   const [indexed, setIndexed] = useState<{ key: string; onIpni: boolean | undefined } | null>(null)
   const active = useRef<AbortController | null>(null)
-  const shareRootCid = file.encrypted ? (file.directoryEntry?.rootCid ?? file.cid) : file.cid
+  const shareRootCid = file.cid
   const shareKey = JSON.stringify([storageScope, file.id, shareRootCid, file.encrypted])
   useEffect(() => {
     void shareKey
@@ -52,7 +52,7 @@ export function ShareFileButton({
       active.current = null
     }
   }, [shareKey])
-  const sharesWholeFolder = Boolean(file.encrypted && (file.isDirectory || file.directoryEntry))
+  const sharesWholeFolder = Boolean(file.encrypted && file.isDirectory)
   const gatewayLink = fileShareLink(file)
   // Deletion/upload-state gating is shared with plaintext links. An encrypted
   // piece needs no grant (the owner wallet signs once at mint) and no IPNI
@@ -109,14 +109,7 @@ export function ShareFileButton({
       })
       .catch((cause) => {
         if (controller.signal.aborted) return
-        const message = cause instanceof Error ? cause.message : 'Unable to create a share link.'
-        // A data set flagged foc/enc marks every piece encrypted, but a piece
-        // stored before encryption shipped is plain: degrade to its public link.
-        const publicLink = /not an encrypted upload/i.test(message)
-          ? fileShareLink({ ...file, encrypted: false, ipfsIndexed: undefined })
-          : undefined
-        if (publicLink) setMinted({ key: shareKey, link: publicLink, gateway: true })
-        else setMintError(describeFileAccessError(cause, 'share'))
+        setMintError(describeFileAccessError(cause, 'share'))
       })
   }
   return (
@@ -179,7 +172,7 @@ export function ShareFileButton({
                   <QRCodeSVG level="M" marginSize={4} size={224} title="Share link QR code" value={link} />
                 </div>
                 <p className="mb-3 text-center text-sm text-muted">
-                  {file.encrypted && !(minted?.key === shareKey && minted.gateway)
+                  {file.encrypted
                     ? sharesWholeFolder
                       ? 'Scan to open the entire uploaded folder.'
                       : 'Anyone with this link can read the entire upload, including any files and subfolders it contains. The key travels in the link and never reaches a server. Share links cannot be revoked.'

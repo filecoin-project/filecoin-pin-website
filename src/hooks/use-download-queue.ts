@@ -75,8 +75,7 @@ export function useDownloadQueue(synapse: Synapse | null, scope: string | undefi
             worker.stopped
               ? current
               : current.map((record) =>
-                  record.cid === (job.file.directoryEntry?.rootCid ?? job.file.cid) &&
-                  record.pieceCid === job.file.pieceCid
+                  record.cid === job.file.cid && record.pieceCid === job.file.pieceCid
                     ? { ...record, contentRootCid }
                     : record
                 )

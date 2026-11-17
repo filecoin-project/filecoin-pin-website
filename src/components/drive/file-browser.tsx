@@ -46,6 +46,7 @@ import { BadgePrivacy } from '../ui/badge-privacy.tsx'
 import { ButtonBase as Button, buttonVariants } from '../ui/button/button-base.tsx'
 import { CopyButton } from '../ui/copy-button.tsx'
 import { BatchDeleteDialog } from './batch-delete-dialog.tsx'
+import { FileSize } from './file-size.tsx'
 import { FileTypeIcon } from './file-type-icon.tsx'
 import { FileUploadDetails } from './file-upload-details.tsx'
 import { FolderInfo } from './folder-info.tsx'
@@ -620,7 +621,9 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                         <BadgePrivacy file={file} />
                       </span>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">{file.fileSize}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <FileSize file={file} />
+                    </td>
 
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-muted">
                       {file.uploadedAt
@@ -809,7 +812,7 @@ export function FileBrowser({ folder, onFolderChange: setFolderPath, onUpload, u
                 <div className="text-sm space-y-2">
                   <p className="flex flex-wrap items-center gap-1.5">
                     <span>
-                      {selected.fileSize}
+                      <FileSize file={selected} />
                       {!selected.upload && ` · ${displayStatus(selected)}`}
                     </span>
                     <BadgePrivacy detailed file={selected} />

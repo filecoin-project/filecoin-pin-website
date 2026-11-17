@@ -193,26 +193,7 @@ it('skips the live IPNI check entirely without a storage scope to budget against
   mocks.storageScope = 'calibration:0xabc'
 })
 
-it('falls back to the public gateway link when the stored piece is not an encrypted envelope', async () => {
-  mocks.encryption = { ready: false }
-  // A data set flagged foc/enc marks every piece encrypted, but early uploads
-  // in it are plain: minting refuses, and the dialog degrades to the public link.
-  mocks.mint.mockRejectedValue(new Error('This record is not an encrypted upload; share its public link instead.'))
-  render(<ShareFileButton file={{ ...file, id: 'mis-flagged', encrypted: true } as DatasetPiece} />)
-  fireEvent.click(screen.getByRole('button', { name: 'Share' }))
-  await waitFor(() =>
-    expect(screen.getByRole('textbox', { name: 'Share link' })).toHaveProperty(
-      'value',
-      expect.stringContaining('.ipfs.inbrowser.link/')
-    )
-  )
-  // Public copy, not the encrypted-share warning, and no error message.
-  expect(screen.getByText('Scan to open this file. Your browser may display or download it.')).toBeTruthy()
-  expect(screen.queryByText(/not an encrypted upload/)).toBeNull()
-  expect(screen.queryByText(/cannot be revoked/)).toBeNull()
-})
-
-it('still reports mint failures that are not the plain-piece case', async () => {
+it('reports encrypted share failures without offering a public link', async () => {
   mocks.encryption = { ready: false }
   mocks.mint.mockRejectedValue(new Error('Unable to download the file from its storage providers. Try again later.'))
   render(<ShareFileButton file={{ ...file, id: 'real-error', encrypted: true } as DatasetPiece} />)
@@ -221,7 +202,7 @@ it('still reports mint failures that are not the plain-piece case', async () => 
   expect(screen.queryByRole('textbox', { name: 'Share link' })).toBeNull()
 })
 
-it('warns about whole-upload access before a nested file share link is ready', async () => {
+it('warns about whole-upload access before a folder share link is ready', async () => {
   mocks.encryption = { ready: false }
   mocks.mint.mockImplementation(
     () =>
@@ -236,7 +217,7 @@ it('warns about whole-upload access before a nested file share link is ready', a
           ...file,
           id: 'nested-share',
           encrypted: true,
-          directoryEntry: { rootCid: file.cid, path: 'docs/hello.txt' },
+          isDirectory: true,
         } as DatasetPiece
       }
     />
@@ -429,4 +410,12 @@ it('preserves a successful availability check when background checkpoint reset f
   } finally {
     warning.mockRestore()
   }
+})
+
+it('does not turn an untyped error mentioning plaintext into a public link', async () => {
+  mocks.mint.mockRejectedValue(new Error('This record is not an encrypted upload; parsing failed.'))
+  render(<ShareFileButton file={{ ...file, encrypted: true }} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+  await screen.findByText(/parsing failed/)
+  expect(screen.queryByRole('textbox', { name: 'Share link' })).toBeNull()
 })

@@ -11,6 +11,7 @@ import { displayFileName } from './drive-api.ts'
 import { payloadEntry } from './encrypted-payload.ts'
 import {
   CAR_CONTENT_TYPE,
+  CredentialAccessError,
   createShareLink,
   decryptEnvelope,
   type EncryptionCredential,
@@ -20,7 +21,6 @@ import {
   ownerKeyResolver,
   ShareCredentialError,
 } from './encryption.ts'
-import { contentReader } from './ipfs-content.ts'
 
 /** Stages surfaced to the download queue; 'unlocking' marks the owner-wallet signature fallback. */
 export type DownloadStage = 'downloading' | 'preparing' | 'unlocking'
@@ -176,7 +176,7 @@ export async function fetchPieceCar(synapse: Synapse | null, file: DatasetPiece)
       })
     )
   }
-  const expectedRoot = file.directoryEntry?.rootCid ?? file.cid
+  const expectedRoot = file.cid
   let failure: unknown
   for (const retrieve of attempts) {
     try {
@@ -196,15 +196,6 @@ export async function fetchPieceCar(synapse: Synapse | null, file: DatasetPiece)
     {
       cause: failure,
     }
-  )
-}
-
-/** Integrity failures no other key can fix: tampered or truncated ciphertext. */
-function isIntegrityError(cause: unknown): boolean {
-  return (
-    cause instanceof Error &&
-    (cause.cause instanceof fee.errors.AuthenticationError ||
-      cause.cause instanceof fee.errors.InvalidCiphertextLengthError)
   )
 }
 
@@ -235,10 +226,9 @@ export async function decryptWithCredentials(
         grantKeyResolver(credentials.session.privateKey, credentials.session.credential)
       )
     } catch (cause) {
-      // A stale or foreign grant leaves the owner wallet as the way in;
-      // tampered or truncated ciphertext does not.
+      // Only unusable saved credentials warrant an owner-wallet prompt.
       signal?.throwIfAborted()
-      if (isIntegrityError(cause)) throw cause
+      if (!(cause instanceof CredentialAccessError)) throw cause
     }
   }
   signal?.throwIfAborted()
@@ -277,23 +267,6 @@ export async function downloadFile(
 ) {
   if (!file.cid)
     throw new Error('The IPFS root CID is missing from this record. Use Load from Filecoin after the index catches up.')
-  // Plaintext directory children stream straight from provider gateways. The
-  // inner blocks of an encrypted piece are never stored as blocks, so those
-  // take the whole-envelope path below.
-  if (file.directoryEntry && !file.isDirectory && !file.encrypted) {
-    try {
-      onStage?.('downloading')
-      const entry = await contentReader(file, new AbortController().signal).entry()
-      if (entry.type !== 'file' && entry.type !== 'raw' && entry.type !== 'identity')
-        throw new Error('Not a single file.')
-      const chunks: ArrayBuffer[] = []
-      for await (const chunk of entry.content()) chunks.push(new Uint8Array(chunk).buffer)
-      saveBlob(new Blob(chunks, { type: 'application/octet-stream' }), displayFileName(file))
-      return
-    } catch {
-      // The whole-CAR path below retries from dataset contexts and providers.
-    }
-  }
   onStage?.('downloading')
   const bytes = await fetchPieceCar(synapse, file)
   onStage?.('preparing')
@@ -314,7 +287,7 @@ export async function downloadFile(
       saveBlob(new Blob([await archive.arrayBuffer()], { type: CAR_CONTENT_TYPE }), displayFileName(file))
       return target.root
     }
-    const path = [target.prefix, file.directoryEntry?.path ?? ''].filter(Boolean).join('/')
+    const path = target.prefix
     const blob = await unpackFile(inner, target.root, path, displayFileName(file))
     saveBlob(blob, `${displayFileName(file)}${blob.type === 'application/zip' ? '.zip' : ''}`)
     return target.root
@@ -325,12 +298,7 @@ export async function downloadFile(
     saveBlob(new Blob([new Uint8Array(bytes).buffer], { type: CAR_CONTENT_TYPE }), displayFileName(file))
     return
   }
-  const blob = await unpackFile(
-    bytes,
-    file.directoryEntry?.rootCid ?? file.cid,
-    file.directoryEntry?.path ?? '',
-    displayFileName(file)
-  )
+  const blob = await unpackFile(bytes, file.cid, '', displayFileName(file))
   saveBlob(blob, `${displayFileName(file)}${blob.type === 'application/zip' ? '.zip' : ''}`)
 }
 
@@ -350,8 +318,10 @@ export async function encryptedPieceShareLink(
   signal?.throwIfAborted()
   const bytes = await fetchPieceCar(synapse, file)
   const envelope = await carRootFileBytes(bytes)
-  if (!envelope || !(await isEncryptionEnvelope(envelope)))
-    throw new Error('This record is not an encrypted upload; share its public link instead.')
+  if (!envelope || !(await isEncryptionEnvelope(envelope))) {
+    if (file.encrypted) throw new Error('The encrypted upload has an invalid or unsupported encryption envelope.')
+    throw new Error('This record is not an encrypted upload.')
+  }
   signal?.throwIfAborted()
   const info = await fee.parse(envelope)
   signal?.throwIfAborted()
@@ -360,7 +330,7 @@ export async function encryptedPieceShareLink(
     try {
       return await createShareLink({
         sender: { sessionPrivateKey: credentials.session.privateKey, credential: credentials.session.credential },
-        rootCid: file.directoryEntry?.rootCid ?? file.cid,
+        rootCid: file.cid,
         appMetadata,
         signal,
       })
@@ -376,7 +346,7 @@ export async function encryptedPieceShareLink(
   if (!signer) throw new Error('Connect the wallet that owns this file to share it.')
   return createShareLink({
     sender: { signer, commitment: commitmentForEnvelope(credentials, appMetadata) },
-    rootCid: file.directoryEntry?.rootCid ?? file.cid,
+    rootCid: file.cid,
     appMetadata,
     signal,
   })

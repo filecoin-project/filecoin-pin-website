@@ -174,3 +174,25 @@ it('rounds displayed funding up without losing small shortfalls', () => {
   expect(formatFundingAmount(1n)).toBe('0.0001')
   expect(formatFundingAmount(0n)).toBe('0')
 })
+
+it('resumes only datasets matching the upload encryption group and commitment', async () => {
+  const metadata = { 'foc/enc': '1', 'foc/ks': 'group', 'foc/kc': 'commitment' }
+  const incompatible = [
+    { source: 'filecoin-drive' },
+    { source: 'filecoin-drive', ...metadata, 'foc/ks': 'other' },
+    { source: 'filecoin-drive', ...metadata, 'foc/kc': 'other' },
+  ]
+  const matching = { provider: { id: 4n }, dataSetMetadata: { source: 'filecoin-drive', ...metadata } }
+  const createContexts = vi.fn()
+  for (const dataSetMetadata of incompatible)
+    createContexts.mockResolvedValueOnce([{ provider: { id: 4n }, dataSetMetadata }])
+  createContexts.mockResolvedValueOnce([matching])
+  const additional = { provider: { id: 2n } }
+  freshContexts.mockResolvedValue([additional])
+  const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
+  await prepareUploadContexts({ storage: { createContexts, prepare } } as unknown as Synapse, 10n, {
+    dataSetIds: [1n, 2n, 3n, 4n],
+    metadata,
+  })
+  expect(prepare).toHaveBeenCalledWith({ context: [matching, additional], pieceSizes: [10n] })
+})

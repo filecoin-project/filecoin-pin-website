@@ -80,8 +80,8 @@ Pending records also retain the original Filecoin message CID when the node can 
 
 Unsupported Lotus methods, missing original-message data, rate limits and unknown responses leave the outcome unresolved rather than inferring it from a nonce or balance change. Recovery does not search historical account nonces or enumerate blocks. Older pending hashes remain restorable without the obsolete nonce-recovery metadata.
 
-## Folder content cache
+## Uploaded folders
 
-Folder listings are cached in IndexedDB by root CID, path and page. The bounded cache contains names, CIDs and sizes, not file bytes, and survives reloads. New uploads seed it from the packed CAR; uncached pages are read and verified from storage providers before caching. Provider failures do not erase cached pages. The cache can be evicted under its capacity limits or cleared with site data; file downloads still need retrievable content.
+Uploaded folders are immutable storage units. Drive opens their details and uses the external viewer for Preview and Share. Download retrieves the complete folder as a ZIP. There is no internal child browser or folder listing cache.
 
 [Back to README](../README.md)
