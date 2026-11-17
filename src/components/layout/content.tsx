@@ -154,7 +154,7 @@ export default function Content() {
               aria-describedby="upload-privacy-help"
               aria-label="Encrypt upload (private)"
               className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-border transition-colors focus:brand-outline ${encrypt ? 'bg-accent' : 'bg-surface'}`}
-              disabled={connection.busy || Boolean(connection.pendingTransaction)}
+              disabled={uploadBusy || Boolean(connection.pendingTransaction)}
               id="encrypt-upload"
               onClick={() => setEncrypt((value) => !value)}
               role="switch"

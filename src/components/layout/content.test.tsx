@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   storageStatus: 'checking',
   encryptionReady: true,
   fundsStatus: 'available',
+  preparing: false,
   busy: false,
   pending: null as { kind: 'deposit' } | null,
   refreshWallet: vi.fn(),
@@ -21,6 +22,7 @@ beforeEach(() => {
     storageStatus: 'checking',
     encryptionReady: true,
     fundsStatus: 'available',
+    preparing: false,
     busy: false,
     pending: null,
   })
@@ -51,7 +53,12 @@ vi.mock('../../hooks/use-filecoin-pin-context.ts', () => ({
   }),
 }))
 vi.mock('../../context/upload-tasks-context.tsx', () => ({
-  useUploadTasks: () => ({ transferring: false, startMany: state.startMany, start: state.start }),
+  useUploadTasks: () => ({
+    preparing: state.preparing,
+    transferring: false,
+    startMany: state.startMany,
+    start: state.start,
+  }),
 }))
 vi.mock('../drive/file-browser.tsx', () => ({
   FileBrowser: ({ uploadDisabled, onUpload }: { uploadDisabled: boolean; onUpload: (folder: string) => void }) => (
@@ -279,3 +286,22 @@ it.each(['file', 'folder'])(
     expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true')
   }
 )
+
+it('locks the privacy mode during preflight and restores the switch after checking', () => {
+  Object.assign(state, { sessionStatus: 'active', walletStatus: 'ready', storageStatus: 'ready' })
+  const view = render(<Content />)
+  fireEvent.click(screen.getByRole('button', { name: 'Upload files' }))
+  const toggle = screen.getByRole('switch', { name: 'Encrypt upload (private)' }) as HTMLButtonElement
+  fireEvent.click(toggle)
+  expect(toggle.getAttribute('aria-checked')).toBe('false')
+  state.preparing = true
+  view.rerender(<Content />)
+  expect(toggle.disabled).toBe(true)
+  fireEvent.click(toggle)
+  expect(toggle.getAttribute('aria-checked')).toBe('false')
+  state.preparing = false
+  view.rerender(<Content />)
+  expect(toggle.disabled).toBe(false)
+  fireEvent.click(toggle)
+  expect(toggle.getAttribute('aria-checked')).toBe('true')
+})
