@@ -280,5 +280,8 @@ export function mergeIndexedFiles(local: DatasetPiece[], indexed: DatasetPiece[]
   return mergeFiles(local, mergeFiles([], acknowledged))
 }
 
-export const displayFileName = (file: DatasetPiece) =>
-  file.fileName && file.fileName !== 'unknown' ? file.fileName : file.cid || file.pieceCid
+export const displayFileName = (file: DatasetPiece) => {
+  const name = file.fileName && file.fileName !== 'unknown' ? file.fileName : file.cid || file.pieceCid
+  // Cached records can retain a directory marker even after an index refresh.
+  return file.isDirectory && !file.importedCar ? parseDriveLabel(name).fileName : name
+}

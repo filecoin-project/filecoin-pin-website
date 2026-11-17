@@ -128,6 +128,26 @@ it('recovers unnamed legacy files at the root without storing fallback CIDs as n
   expect(displayFileName(files[0])).toBe(pieceCid)
   expect(displayFileName({ ...files[0], cid: root })).toBe(root)
 })
+
+it.each([false, true])('hides cached folder markers after index reconciliation (encrypted: %s)', (encrypted) => {
+  const local = { ...record(), id: 'local-folder', fileName: '1/', isDirectory: true, encrypted }
+  const indexed = { ...record(), fileName: '1', isDirectory: true, encrypted }
+  const merged = mergeIndexedFiles([local], [indexed])
+  expect(merged).toHaveLength(1)
+  expect(merged[0].id).toBe(local.id)
+  expect(displayFileName(local)).toBe('1')
+  expect(displayFileName(merged[0])).toBe('1')
+  expect(local.fileName).toBe('1/')
+})
+
+it('preserves file names, CAR archive names and invalid directory markers', () => {
+  expect(displayFileName({ ...record(), fileName: '1/' })).toBe('1/')
+  expect(displayFileName({ ...record(), fileName: 'archive/', importedCar: true, isDirectory: true })).toBe('archive/')
+  for (const fileName of ['../', '/', 'a/b/', 'a//']) {
+    expect(displayFileName({ ...record(), fileName, isDirectory: true })).toBe(fileName)
+  }
+})
+
 it('fails instead of treating an index or chain read failure as an empty snapshot', async () => {
   vi.stubGlobal(
     'fetch',
