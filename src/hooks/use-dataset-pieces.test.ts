@@ -12,6 +12,7 @@ vi.mock('../lib/filecoin-pin/drive-api.ts', async (original) => ({
 vi.mock('./use-filecoin-pin-context.ts', () => ({ useFilecoinPinContext: context }))
 vi.mock('./use-ipfs-indexing.ts', () => ({ useIpfsIndexing: vi.fn() }))
 
+import { getStoredDataSetIds } from '../lib/local-storage/data-set.ts'
 import { getCachedPieces, setCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import { type DatasetPiece, useDatasetPieces } from './use-dataset-pieces.ts'
 
@@ -116,4 +117,15 @@ it('discovers files while balances are unavailable, without marking an unfinishe
   await act(async () => finish([]))
   expect(result.current.hasLoaded).toBe(true)
   expect(result.current.isLoading).toBe(false)
+})
+
+it('recovers public and encrypted dataset candidates in a browser without upload history', async () => {
+  load.mockResolvedValue([
+    { ...file, id: 'indexed-public', datasetId: '11', encrypted: undefined },
+    { ...file, id: 'indexed-private', datasetId: '22', pieceCid: 'encrypted-piece', encrypted: true },
+  ])
+  const { result } = renderHook(useDatasetPieces)
+  await waitFor(() => expect(result.current.hasLoaded).toBe(true))
+  expect(getStoredDataSetIds(scope)).toEqual([11, 22])
+  expect(getStoredDataSetIds('314:0xother')).toEqual([])
 })

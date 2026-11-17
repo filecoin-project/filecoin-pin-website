@@ -40,7 +40,7 @@ export interface UploadState {
   currentCid?: string
   /** Plaintext root CID inside the encrypted envelope; the stable content identity. `currentCid` stays the public envelope root. */
   contentRootCid?: string
-  /** True once the upload's bytes are an FEE envelope (always, uploads are encrypted by default). */
+  /** True when the upload's bytes are an FEE envelope. */
   encrypted?: boolean
   pieceCid?: string
   transactionHash?: string
@@ -132,7 +132,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
   }, [])
 
   const uploadFile = useCallback(
-    async (file: UploadSource, metadata?: Record<string, string>): Promise<string> => {
+    async (file: UploadSource, metadata?: Record<string, string>, encrypt = true): Promise<string> => {
       // Freeze the network before any asynchronous upload or balance refresh.
       const network = wallet.status === 'ready' ? wallet.data.network : undefined
       setUploadState({
@@ -168,33 +168,30 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
         if (carResult.isDirectory && carResult.carBytes.length > MAX_FILE_SIZE)
           throw new Error('The packed folder exceeds the 200 MB browser upload limit.')
 
-        // Encryption is never silently skipped: without a usable credential the
-        // upload is blocked, exactly like an unauthorized session.
         if (!encryption.ready)
           throw new UploadSetupError('encryption', 'Add your encryption key in Wallet setup before uploading.')
-        const dataSetMetadata = encryptedDataSetMetadata(encryption.credential)
-        // Plaintext payload (filecoin-pin wire profile: metadata-first CAR under
-        // an anonymous wrapper directory, so the CLI and the share viewer unpack
-        // it) -> FEE envelope -> outer CAR holding the envelope as one UnixFS
-        // file. The outer root is the public identity (on-chain, IPNI,
-        // providers); the payload root never leaves the ciphertext.
-        const payload = carResult.importedCar
-          ? await buildEncryptedPayload({ kind: 'car', carBytes: carResult.carBytes, name: file.name })
-          : await wrapCarPayload(carResult, file.name)
-        const envelope = await encryptCar(encryption.sessionPrivateKey, encryption.credential, payload.carBytes)
-        const outerCar = await createCarFromFile(new File([envelope as BlobPart], 'encrypted.fee'))
-        // Packing + the envelope + the outer wrapper add real overhead on top of
-        // the plaintext the earlier checks measured; verify what's actually
-        // about to upload, not just the input that produced it.
+
+        let dataSetMetadata: Record<string, string> = {}
+        let outerCar = carResult
+        let innerRoot = carResult.rootCid.toString()
+        if (encrypt) {
+          dataSetMetadata = encryptedDataSetMetadata(encryption.credential)
+          // Keep the CLI/viewer-compatible payload inside the encrypted envelope.
+          const payload = carResult.importedCar
+            ? await buildEncryptedPayload({ kind: 'car', carBytes: carResult.carBytes, name: file.name })
+            : await wrapCarPayload(carResult, file.name)
+          const envelope = await encryptCar(encryption.sessionPrivateKey, encryption.credential, payload.carBytes)
+          outerCar = { ...carResult, ...(await createCarFromFile(new File([envelope as BlobPart], 'encrypted.fee'))) }
+          innerRoot = payload.rootCid
+        }
         if (outerCar.carBytes.length > MAX_FILE_SIZE)
-          throw new Error('The encrypted upload exceeds the 200 MB browser upload limit.')
-        const innerRoot = payload.rootCid
+          throw new Error(`The ${encrypt ? 'encrypted' : 'packed'} upload exceeds the 200 MB browser upload limit.`)
         const rootCid = outerCar.rootCid.toString()
         setUploadState((prev) => ({
           ...prev,
           currentCid: rootCid,
-          contentRootCid: innerRoot,
-          encrypted: true,
+          contentRootCid: encrypt ? innerRoot : undefined,
+          encrypted: encrypt,
           importedCar: carResult.importedCar,
           isDirectory: carResult.isDirectory,
         }))
@@ -526,9 +523,8 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
             result = await executeFundedUpload({
               ...baseOptions,
               dataSetIds: storedDataSetIds.map((id) => BigInt(id)),
-              // Resumed data sets already carry their metadata (immutable); a
-              // partial resume can still create fresh ones, which must be
-              // marked encrypted like every other creation path.
+              // Filter cached candidates by this upload's encryption metadata;
+              // any missing copies use the same metadata when created.
               metadata: dataSetMetadata,
             })
           } catch (error) {

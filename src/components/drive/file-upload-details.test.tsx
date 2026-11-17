@@ -68,7 +68,7 @@ it('shows the failure outside diagnostics, routes repair, and re-enables retry w
   expect((screen.getByRole('button', { name: 'Retry upload' }) as HTMLButtonElement).disabled).toBe(false)
   expect(screen.queryByText(/Retry unavailable/)).toBeNull()
 })
-it('allows retry for a provider failure even if encryption is currently unavailable', () => {
+it('blocks retry for a provider failure while encryption setup is unavailable', () => {
   render(
     <FileUploadDetails
       file={{
@@ -78,8 +78,8 @@ it('allows retry for a provider failure even if encryption is currently unavaila
       onOpenWallet={vi.fn()}
     />
   )
-  expect((screen.getByRole('button', { name: 'Retry upload' }) as HTMLButtonElement).disabled).toBe(false)
-  expect(screen.queryByRole('button', { name: 'Review Wallet setup' })).toBeNull()
+  expect((screen.getByRole('button', { name: 'Retry upload' }) as HTMLButtonElement).disabled).toBe(true)
+  expect(screen.getByRole('button', { name: 'Review Wallet setup' })).toBeTruthy()
 })
 
 it('blocks a funded upload after session expiry and routes repair to the current missing step', () => {
@@ -105,4 +105,45 @@ it('blocks a funded upload after session expiry and routes repair to the current
   fireEvent.click(screen.getByRole('button', { name: 'Review Wallet setup' }))
   expect(open).toHaveBeenCalledWith('session')
   expect(state.start).not.toHaveBeenCalled()
+})
+
+it('retains public mode when reselecting a failed upload after reload after encryption setup', () => {
+  state.encryptionReady = true
+  const view = render(
+    <FileUploadDetails
+      file={{
+        ...file,
+        upload: {
+          ...(file.upload as NonNullable<DatasetPiece['upload']>),
+          encrypt: false,
+          error: 'Provider request timed out',
+        },
+      }}
+      onOpenWallet={vi.fn()}
+    />
+  )
+  expect(screen.getByRole('button', { name: 'Retry upload' })).toHaveProperty('disabled', false)
+  const source = new File(['public'], 'test.txt')
+  const input = view.container.querySelector('input[type=file]')
+  if (!input) throw new Error('Missing retry file picker')
+  fireEvent.change(input, { target: { files: [source] } })
+  expect(state.start).toHaveBeenCalledWith(source, '', file.id, false)
+})
+
+it('requires encryption setup before retrying a public upload', () => {
+  render(
+    <FileUploadDetails
+      file={{
+        ...file,
+        upload: {
+          ...(file.upload as NonNullable<DatasetPiece['upload']>),
+          encrypt: false,
+          error: 'Provider request timed out',
+        },
+      }}
+      onOpenWallet={vi.fn()}
+    />
+  )
+  expect(screen.getByRole('button', { name: 'Retry upload' })).toHaveProperty('disabled', true)
+  expect(screen.getByText('Retry unavailable: Add your encryption key to upload.')).toBeTruthy()
 })

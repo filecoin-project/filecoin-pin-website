@@ -127,13 +127,26 @@ export async function checkUploadTasks(browser) {
       .check()
     await page.getByRole('button', { name: 'Authorize session', exact: true }).click()
     await page.getByLabel('Session authorized', { exact: true }).waitFor()
+    assert.equal(await page.getByRole('button', { name: 'Continue to upload', exact: true }).count(), 0)
+    await page.getByRole('button', { name: 'Close Wallet and Storage', exact: true }).click()
+    assert.equal(await page.getByRole('button', { name: 'Upload files', exact: true }).isDisabled(), true)
+    assert.equal(await page.getByRole('switch', { name: 'Encrypt upload (private)' }).count(), 0)
+    await page.getByRole('button', { name: 'Wallet and Storage', exact: true }).click()
     await page.getByRole('button', { name: 'Add encryption key', exact: true }).click()
     await page.getByLabel('Encryption key added', { exact: true }).waitFor()
     assert.equal(mockBrowser.signatures(), 2, 'A new group key must pass deterministic-signature verification')
     await page.getByRole('button', { name: 'Close Wallet and Storage', exact: true }).click()
-    const start = async (name) => {
+    const start = async (name, encrypt = true) => {
       await page.getByRole('button', { name: 'Upload files', exact: true }).click()
       const panel = page.getByRole('dialog', { name: 'Upload files', exact: true })
+      await panel.getByRole('button', { name: 'File', exact: true }).click()
+      const toggle = panel.getByRole('switch', { name: 'Encrypt upload (private)' })
+      assert.equal(await toggle.getAttribute('aria-checked'), 'true')
+      if (!encrypt) {
+        await toggle.click()
+        await panel.getByText(/Once public, files cannot be made private/).waitFor()
+        await page.screenshot({ path: '/tmp/filecoin-drive-public-toggle.png', fullPage: true, animations: 'disabled' })
+      }
       await panel
         .locator('input[type=file]')
         .setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(`${name} original bytes`) })
@@ -332,9 +345,31 @@ export async function checkUploadTasks(browser) {
           (file) => file.fileName === 'reports' && !file.removedCopies?.length
         ).upload.phase === 'complete'
     )
+    await start('public.txt', false)
+    const publicUpload = await page.evaluate(() => window.__taskUploads['public.txt'])
+    const publicCar = await CarReader.fromBytes(new Uint8Array(publicUpload.bytes))
+    const publicEntry = await exporter(publicUpload.rootCid, {
+      get: async function* (cid) {
+        yield (await publicCar.get(CID.parse(cid.toString()))).bytes
+      },
+    })
+    const publicChunks = []
+    for await (const chunk of publicEntry.content()) publicChunks.push(chunk)
+    assert.equal(Buffer.concat(publicChunks).toString(), 'public.txt original bytes')
+    await page.evaluate(() => window.__taskUploads['public.txt'].finish())
+    await page.waitForFunction(() =>
+      JSON.parse(localStorage.getItem(`filecoin-pin-piece-cache-v1-${window.__driveTestScope}`)).some(
+        (file) =>
+          file.fileName === 'public.txt' &&
+          file.upload.phase === 'complete' &&
+          file.upload.encrypt === false &&
+          !file.encrypted
+      )
+    )
+    await page.screenshot({ path: '/tmp/filecoin-drive-public-upload.png', fullPage: true })
     assert.deepEqual(errors, [])
     console.log(
-      'Upload task browser checks passed: encryption setup and signatures, encrypted envelopes, decrypted file and folder ZIP downloads, directory labels, consecutive uploads and reload recovery.'
+      'Upload task browser checks passed: encryption setup and signatures, encrypted envelopes, public plaintext uploads and default privacy reset, decrypted file and folder ZIP downloads, directory labels, consecutive uploads and reload recovery.'
     )
   } finally {
     await context.close()
