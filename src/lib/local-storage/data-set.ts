@@ -18,14 +18,11 @@
  *
  * Storage format: `filecoin-pin-data-set-id-{version}-{walletAddress}` → `{dataSetId}`
  *
- * Why a dedicated encrypted generation (v3)?
- * ------------------------------------------
- * These ids feed the upload resume path. Since encryption-by-default, every
- * upload must land in a data set created with `foc/enc` metadata — and
- * data-set metadata is immutable, so ids recorded by pre-encryption builds
- * (plain data sets) must never be resumed into. The key bump makes them
- * invisible: the first encrypted upload creates fresh `foc/enc` data sets and
- * the store only ever learns encrypted-generation ids from then on.
+ * The keys retain the encryption rollout's generation names for compatibility.
+ * This candidate cache now includes public and encrypted datasets. Upload
+ * context resolution verifies their immutable encryption metadata against the
+ * requested privacy mode, group key and commitment before reuse. Older cache
+ * generations remain ignored; indexed discovery can recover usable candidates.
  */
 
 const DATA_SET_ID_KEY = 'filecoin-pin-data-set-id-v3-encrypted'

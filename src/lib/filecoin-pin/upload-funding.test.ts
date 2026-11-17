@@ -196,3 +196,22 @@ it('resumes only datasets matching the upload encryption group and commitment', 
   })
   expect(prepare).toHaveBeenCalledWith({ context: [matching, additional], pieceSizes: [10n] })
 })
+
+it('reuses public datasets while excluding encrypted datasets from public uploads', async () => {
+  const encrypted = {
+    provider: { id: 4n },
+    dataSetMetadata: { source: 'filecoin-drive', 'foc/enc': '1', 'foc/ks': 'group', 'foc/kc': 'commitment' },
+  }
+  const publicContext = { provider: { id: 4n }, dataSetMetadata: { source: 'filecoin-drive' } }
+  const additional = { provider: { id: 2n } }
+  const createContexts = vi.fn().mockResolvedValueOnce([encrypted]).mockResolvedValueOnce([publicContext])
+  freshContexts.mockResolvedValueOnce([additional])
+  const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
+  const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
+  expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [1n, 2n], metadata: {} })).toEqual([
+    publicContext,
+    additional,
+  ])
+  expect(freshContexts).toHaveBeenCalledWith(synapse, expect.any(String), 1, [4n], {})
+  expect(prepare).toHaveBeenCalledWith({ context: [publicContext, additional], pieceSizes: [10n] })
+})

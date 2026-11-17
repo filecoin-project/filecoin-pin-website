@@ -28,7 +28,7 @@ You can revoke this browser’s storage key in Wallet setup or manage authorizat
 
 Selecting several files creates independent uploads. Transfers run one at a time; after a provider receipt is saved, the next file can transfer while earlier files await confirmation. You can add files during a transfer and cancel waiting uploads. Reloading loses the in-memory source files for uploads that have not started.
 
-Choose **Upload**, select files and an upload location, then start the upload. Each ordinary upload targets two copies on different providers, but may finish with fewer copies if a provider fails. Check the confirmed copy count in the file list.
+Choose **Upload**, select files and an upload location, then start the upload. **Encrypt upload (private)** is on by default each time you open the panel. Set up your encryption key before entering the upload panel. Then turn the switch off to upload public files or folders. Anyone with the CID can read public content, and public files cannot be made private later. This choice applies to the selected batch and is preserved when retrying or continuing an upload. Each ordinary upload targets two copies on different providers, but may finish with fewer copies if a provider fails. Check the confirmed copy count in the file list.
 
 Keep the tab open while uploads are running. **Stored** means at least one copy is confirmed; other copies may still be processing. Preview waits for indexing availability. Encrypted Share can prepare a link from a stored copy before indexing finishes and warns when the viewer may not yet retrieve it.
 
@@ -43,13 +43,13 @@ For example, upload the folder `photos` into **Upload location** `trips/2026`. D
 
 `trips/2026` organizes separate uploads in Drive. The uploaded `photos` folder is stored as one unit, with its internal files and folders preserved. See [Folders and search](#folders-and-search) for how these behave.
 
-UTF-8 bytes are not the same as characters: English letters and digits normally take one byte each, while a Chinese character commonly takes three. Rename the selected file or folder, or shorten **Upload location**, if its value is too long. New upload contents are encrypted in the browser before storage. Names, upload paths, sizes, content identifiers and storage metadata remain public. Existing unencrypted uploads are marked **Public**.
+UTF-8 bytes are not the same as characters: English letters and digits normally take one byte each, while a Chinese character commonly takes three. Rename the selected file or folder, or shorten **Upload location**, if its value is too long. Private upload contents are encrypted in the browser before storage. Names, upload paths, sizes, content identifiers and storage metadata remain public. Unencrypted uploads are marked **Public**.
 
 ## Folders and search
 
 The folder sidebar shows **My Drive** as the root, with nested paths derived from visible files. Choose a folder path in the upload panel; deleting all files under a path removes that path from the tree.
 
-Choose **Folder** in the upload panel to store an entire folder as one encrypted upload. Nested paths are preserved. Drive treats the upload as a single item: open its details, download it as a ZIP, or use Preview and Share to open the external viewer. Its contents are not browsed within Drive. The browser picker omits empty folders; selected content and the packed CAR must each fit the 200 MB browser limit. ZIP downloads are limited to 200 MB of extracted content and 10,000 entries, counting files and directories, including the root.
+Choose **Folder** in the upload panel to store an entire folder as one upload, using the selected privacy setting. Nested paths are preserved. Drive treats the upload as a single item: open its details, download it as a ZIP, or use Preview and Share to open the external viewer. Its contents are not browsed within Drive. The browser picker omits empty folders; selected content and the packed CAR must each fit the 200 MB browser limit. ZIP downloads are limited to 200 MB of extracted content and 10,000 entries, counting files and directories, including the root.
 
 An organizing folder groups independent uploads through their Upload location. It remains navigable in Drive. An uploaded folder is an immutable storage unit; its files cannot be added, renamed or deleted individually. Delete the whole uploaded folder from its details to remove its storage copies. Known name collisions are rejected before upload.
 
@@ -65,7 +65,7 @@ Legacy plaintext previews use the external `inbrowser.link` browser gateway. One
 
 Original-file downloads can run alongside an upload. Additional downloads are queued and run one at a time; repeated requests for the same file record are deduplicated. Queued files show **Queued · Cancel** in the list and details. Expand the queue above the file list to manage pending downloads across folders. Pending downloads can be cancelled; an active download cannot be cancelled. A failed download reports its file name and the queue continues. The queue is kept only in the current page and is cleared on reload or a wallet/network change; an already running download may still finish. Closing file details keeps downloads running.
 
-**Share** prepares an encrypted viewer link and its QR code, using the same owner-wallet fallback when needed. It can create the link before public indexing finishes, but the viewer may not retrieve the upload until indexing completes. **Copy link** copies the link and shows confirmation only after copying succeeds. Legacy plaintext files share public gateway links; legacy plaintext CARs share the provider’s Piece URL to preserve the original archive. CAR records do not offer an IPFS gateway export.
+**Share** prepares an encrypted viewer link and its QR code, using the same owner-wallet fallback when needed. It can create the link before public indexing finishes, but the viewer may not retrieve the upload until indexing completes. **Copy link** copies the link and shows confirmation only after copying succeeds. Public files and folders share inbrowser gateway links; public CARs share the provider’s Piece URL to preserve the original archive. CAR records do not offer an IPFS gateway export.
 
 Imported CAR archives appear as one record and download as the original archive. Drive does not expand their internal directories or offer a gateway preview.
 
@@ -109,7 +109,7 @@ Queued uploads and **Paused** uploads can be selected together with failed local
 
 The file list has selection, Name, Size, Uploaded and Actions columns. Status appears beside the name: a static muted clock for queued uploads that have not started (hover or an accessible label identifies **Waiting to upload**), a spinner for uploads or deletions in progress, a static **Paused** badge when funding or payment approval needs attention, and **Upload failed** when an unfinished upload requires recovery or retry. Open file details for the cause and available actions. Paused uploads remain selectable for **Remove local records**, including alongside queued and failed local records; removing the batch cancels those tasks before the queue advances.
 
-Stored files have no status badge. Privacy markers show a lock for encrypted files and **Public** for unencrypted files; details spell out **Encrypted**. At least one confirmed storage copy is enough to show **Stored** in details; remaining replication and IPFS indexing do not change that status. A provider receiving bytes or an indexed CID alone does not establish confirmed storage. Preview and share availability still follow their own checks. Copy counts, provider receipts and saved progress remain in file details under **Upload details** and **Storage copies**. The list loads automatically; reload the page to discover later remote changes, or use **Retry** if loading fails.
+Stored files have no status badge. Privacy markers show a lock for encrypted files and a globe for public files; details spell out **Encrypted** or **Public**. At least one confirmed storage copy is enough to show **Stored** in details; remaining replication and IPFS indexing do not change that status. A provider receiving bytes or an indexed CID alone does not establish confirmed storage. Preview and share availability still follow their own checks. Copy counts, provider receipts and saved progress remain in file details under **Upload details** and **Storage copies**. The list loads automatically; reload the page to discover later remote changes, or use **Retry** if loading fails.
 
 Encrypted file sizes recovered from storage include encryption overhead. A question mark beside the size explains this on hover or keyboard focus; locally uploaded records retain the original file size.
 
@@ -117,6 +117,6 @@ Encrypted file sizes recovered from storage include encryption overhead. A quest
 
 ### Uploaded folder markers
 
-New folder uploads carry a trailing `/` in their public metadata label. Drive uses it to display the folder type without downloading or decrypting the content; displayed names omit the marker. Preview and Share open the external viewer and grant access to the whole upload.
+New folder uploads carry a trailing `/` in their public metadata label. Drive uses it to display the folder type without downloading or decrypting the content; displayed names omit the marker. For encrypted folders, Preview and Share open the external viewer and grant access to the whole upload. Public folders use the inbrowser gateway.
 
 Older encrypted uploads may have no marker and appear as ordinary items. Drive does not download them to guess their type. Use Preview or Share to open their contents in the external viewer.
