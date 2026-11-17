@@ -112,6 +112,9 @@ function Harness() {
   const { history, mutateHistory } = useUploadHistory()
   return (
     <>
+      <button onClick={() => void tasks.start(new File(['public'], 'public.txt'), '', undefined, false)} type="button">
+        Public
+      </button>
       <button onClick={() => void tasks.start(new File(['first'], 'first.txt'), 'one')} type="button">
         First
       </button>
@@ -529,4 +532,23 @@ it('does not resume a paused record while another tab holds its task lock', asyn
   }
   fireEvent.click(screen.getByRole('button', { name: 'Continue funded upload' }))
   await waitFor(() => expect(operations).toHaveLength(1))
+})
+
+it('preserves public mode through funding pauses and resumes', async () => {
+  mocks.prepare.mockResolvedValueOnce({ costs: { ready: false, depositNeeded: 1n, needsFwssMaxApproval: false } })
+  render(
+    <UploadHistoryProvider>
+      <UploadTasksProvider>
+        <Harness />
+      </UploadTasksProvider>
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Public' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Continue funded upload' })).toBeTruthy())
+  expect(getCachedPieces(scope)?.[0].upload?.encrypt).toBe(false)
+  expect(mocks.preflight).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ metadata: {} }))
+  fireEvent.click(screen.getByRole('button', { name: 'Continue funded upload' }))
+  await waitFor(() => expect(operations).toHaveLength(1))
+  expect(getCachedPieces(scope)?.[0].upload?.encrypt).toBe(false)
+  expect(getCachedPieces(scope)?.[0].encrypted).toBeUndefined()
 })

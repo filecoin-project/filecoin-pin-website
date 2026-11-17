@@ -167,9 +167,9 @@ export const useDatasetPieces = () => {
       if (!mounted.current || currentScope.current !== walletAddress) return
       await mutatePieces((current) => mergeIndexedFiles(current, indexed))
       for (const id of new Set(indexed.map((file) => file.datasetId))) addDataSetId?.(BigInt(id))
-      // Resume cache: only encrypted-generation data sets. Uploads must never
-      // resume into plain data sets — their metadata can never carry foc/enc.
-      for (const id of new Set(indexed.filter((file) => file.encrypted).map((file) => file.datasetId))) {
+      // Recover candidates for both privacy modes. Upload context resolution
+      // checks immutable encryption metadata before reusing any dataset.
+      for (const id of new Set(indexed.map((file) => file.datasetId))) {
         addStoredDataSetId(walletAddress, Number(id))
       }
       void recoverMissingFileSizes(getLatestPieces(), controller.signal, async (file, fileSize, isDirectory) => {

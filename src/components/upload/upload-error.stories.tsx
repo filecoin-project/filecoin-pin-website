@@ -26,6 +26,7 @@ const createMockOrchestration = (
   return {
     uploadedFile: {
       file: mockFile,
+      encrypt: true,
       cid: '',
     },
     activeUpload: {

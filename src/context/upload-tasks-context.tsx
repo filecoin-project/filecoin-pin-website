@@ -21,6 +21,7 @@ type Job = {
   id: string
   file: UploadSource
   folder: string
+  encrypt: boolean
   phase: 'funding' | 'waiting' | 'transferring' | 'confirming' | 'canceling'
 }
 
@@ -35,10 +36,10 @@ type Tasks = {
   transferring: boolean
   activeIds: ReadonlySet<string>
   queuedIds: ReadonlySet<string>
-  startMany: (files: UploadSource[], folder: string) => Promise<boolean>
+  startMany: (files: UploadSource[], folder: string, encrypt?: boolean) => Promise<boolean>
   cancelQueued: (id: string) => Promise<boolean>
   removeMany: (ids: readonly string[]) => Promise<void>
-  start: (file: UploadSource, folder: string, replaceId?: string) => Promise<boolean>
+  start: (file: UploadSource, folder: string, replaceId?: string, encrypt?: boolean) => Promise<boolean>
   check: (id: string) => Promise<void>
   resume: (id: string) => Promise<boolean>
   retainedIds: ReadonlySet<string>
@@ -64,7 +65,7 @@ function Worker({
     queueMicrotask(() => {
       if (cancelled || started.current) return
       started.current = true
-      void orchestration.startUpload(job.file, job.folder)
+      void orchestration.startUpload(job.file, job.folder, job.encrypt)
     })
     return () => {
       cancelled = true
@@ -175,7 +176,7 @@ export function UploadTasksProvider({ children }: { children: ReactNode }) {
     }
   }, [])
   const enqueue = useCallback(
-    async (files: UploadSource[], folder: string, replaceId?: string) => {
+    async (files: UploadSource[], folder: string, replaceId?: string, encrypt = true) => {
       if (!files.length || starting.current) return false
       if (!storageScope || connection.busy || connection.pendingTransaction) {
         toast.warning('Wallet setup is busy or unavailable. Wait for it to finish before uploading.')
@@ -184,7 +185,7 @@ export function UploadTasksProvider({ children }: { children: ReactNode }) {
       starting.current = true
       setPreparing(true)
       setUploading(true)
-      const added: Job[] = files.map((file) => ({ id: crypto.randomUUID(), file, folder, phase: 'waiting' }))
+      const added: Job[] = files.map((file) => ({ id: crypto.randomUUID(), file, folder, encrypt, phase: 'waiting' }))
       for (const job of added) reserved.current.add(job.id)
       let releasePrevious: (() => Promise<void>) | undefined
       try {
@@ -195,7 +196,7 @@ export function UploadTasksProvider({ children }: { children: ReactNode }) {
         await preflightUpload(synapse, {
           storageScope,
           providerId: debugParams.providerId,
-          metadata: encryptedDataSetMetadata(encryption.credential),
+          metadata: encrypt ? encryptedDataSetMetadata(encryption.credential) : {},
           sourceSizes: files.map((file) => file.size),
           ensurePermissions,
         })
@@ -266,6 +267,7 @@ export function UploadTasksProvider({ children }: { children: ReactNode }) {
               datasetIds: [],
               copyCount: 0,
               upload: {
+                encrypt,
                 phase: 'waiting' as const,
                 expectedCopies: DEFAULT_STORAGE_COPIES,
                 providers: [],
@@ -318,10 +320,14 @@ export function UploadTasksProvider({ children }: { children: ReactNode }) {
     ]
   )
   const start = useCallback(
-    (file: UploadSource, folder: string, replaceId?: string) => enqueue([file], folder, replaceId),
+    (file: UploadSource, folder: string, replaceId?: string, encrypt = true) =>
+      enqueue([file], folder, replaceId, encrypt),
     [enqueue]
   )
-  const startMany = useCallback((files: UploadSource[], folder: string) => enqueue(files, folder), [enqueue])
+  const startMany = useCallback(
+    (files: UploadSource[], folder: string, encrypt = true) => enqueue(files, folder, undefined, encrypt),
+    [enqueue]
+  )
   const removeMany = useCallback(
     async (selectedIds: readonly string[]) => {
       if (starting.current || !storageScope) throw new Error('Wait for the current queue update to finish.')
@@ -387,7 +393,7 @@ export function UploadTasksProvider({ children }: { children: ReactNode }) {
         start,
         resume: async (id) => {
           const job = retained.current.get(id)
-          return job ? start(job.file, job.folder, id) : false
+          return job ? start(job.file, job.folder, id, job.encrypt) : false
         },
         retainedIds: new Set(retained.current.keys()),
         startMany,

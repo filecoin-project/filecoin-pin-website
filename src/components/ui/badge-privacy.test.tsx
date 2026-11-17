@@ -11,10 +11,11 @@ it('marks an encrypted file with a quiet lock, not a pill', () => {
   expect(screen.queryByText('Public')).toBeNull()
 })
 
-it('flags a public file with the loud Public pill', () => {
+it('marks a public file with a compact globe and accessible description', () => {
   render(<BadgePrivacy file={{}} />)
-  const pill = screen.getByText('Public')
-  expect(pill.closest('[title]')?.getAttribute('title')).toMatch(/anyone with its CID/i)
+  const globe = screen.getByRole('img', { name: 'Public' })
+  expect(globe.getAttribute('title')).toMatch(/anyone with its CID/i)
+  expect(screen.queryByText('Public')).toBeNull()
   expect(screen.queryByLabelText('Encrypted')).toBeNull()
 })
 
@@ -26,7 +27,7 @@ it('spells out encryption in the detailed variant used by the details panel', ()
   expect(screen.queryByLabelText('Encrypted')).toBeNull()
 })
 
-it('keeps the same Public pill in both variants', () => {
+it('spells out public status in file details', () => {
   render(<BadgePrivacy detailed file={{}} />)
   expect(screen.getByText('Public')).toBeTruthy()
 })

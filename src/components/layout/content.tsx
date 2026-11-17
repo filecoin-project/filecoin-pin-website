@@ -21,6 +21,7 @@ export default function Content() {
   const tasks = useUploadTasks()
   const preparingUpload = tasks?.preparing ?? false
   const uploadBusy = connection.busy || preparingUpload
+  const [encrypt, setEncrypt] = useState(true)
   const [folder, setFolder] = useState('')
   const [uploadFolder, setUploadFolder] = useState('')
   const [uploadKind, setUploadKind] = useState<'file' | 'folder'>('file')
@@ -51,6 +52,7 @@ export default function Content() {
   }
   const openUpload = (location: string) => {
     setUploadFolder(location)
+    setEncrypt(true)
     if (canUpload) setPanel('upload')
     else handleSetupAction()
   }
@@ -126,6 +128,7 @@ export default function Content() {
         <WalletSetup
           inDrawer
           onContinueUpload={() => {
+            setEncrypt(true)
             if (canUpload) setPanel('upload')
           }}
           setupRequest={setupRequest}
@@ -143,6 +146,31 @@ export default function Content() {
         open={panel === 'upload'}
         title="Upload files"
       >
+        <div className="mb-5 rounded-xl border border-border bg-surface-raised/40 p-4">
+          <label className="flex items-center justify-between gap-3 text-sm font-medium" htmlFor="encrypt-upload">
+            Encrypt upload (private)
+            <button
+              aria-checked={encrypt}
+              aria-describedby="upload-privacy-help"
+              aria-label="Encrypt upload (private)"
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-border transition-colors focus:brand-outline ${encrypt ? 'bg-accent' : 'bg-surface'}`}
+              disabled={connection.busy || Boolean(connection.pendingTransaction)}
+              id="encrypt-upload"
+              onClick={() => setEncrypt((value) => !value)}
+              role="switch"
+              type="button"
+            >
+              <span
+                className={`h-4 w-4 rounded-full shadow-sm transition-transform ${encrypt ? 'translate-x-6 bg-surface' : 'translate-x-1 bg-muted'}`}
+              />
+            </button>
+          </label>
+          <p className="mt-2 text-xs text-muted" id="upload-privacy-help">
+            {encrypt
+              ? 'File contents are encrypted. Names, paths, sizes and storage metadata remain public.'
+              : 'Files will be uploaded publicly without encryption. Anyone with the CID can read them. Once public, files cannot be made private.'}
+          </p>
+        </div>
         {canUpload ? (
           <>
             <div className="mb-5 rounded-xl border border-border bg-surface-raised/40 p-4">
@@ -200,7 +228,7 @@ export default function Content() {
                 isChecking={preparingUpload}
                 onSelectionChange={setSelectedDirectory}
                 onUpload={(source) => {
-                  void tasks?.start(source, uploadFolder).then((started) => {
+                  void tasks?.start(source, uploadFolder, undefined, encrypt).then((started) => {
                     if (started) {
                       setSelectedFiles([])
                       setSelectedDirectory(null)
@@ -218,7 +246,7 @@ export default function Content() {
                 key={panel === 'upload' ? 'picker' : 'closed'}
                 onFilesChange={setSelectedFiles}
                 onUpload={(files) => {
-                  void tasks?.startMany(files, uploadFolder).then((started) => {
+                  void tasks?.startMany(files, uploadFolder, encrypt).then((started) => {
                     if (started) {
                       setSelectedFiles([])
                       setSelectedDirectory(null)

@@ -14,6 +14,8 @@ export interface UploadProviderCheckpoint {
 
 /** JSON-only recovery data. File bytes and SDK objects are never persisted. */
 export interface UploadCheckpoint {
+  /** Missing on older checkpoints means encrypted upload. */
+  encrypt?: boolean
   phase: 'funding' | 'waiting' | 'uploading' | 'confirming' | 'pending' | 'interrupted' | 'failed' | 'complete'
   expectedCopies: number
   providers: UploadProviderCheckpoint[]

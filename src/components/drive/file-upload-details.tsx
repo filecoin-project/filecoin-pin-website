@@ -152,7 +152,8 @@ export function FileUploadDetails({
                   <FolderPicker
                     disabled={!tasks || Boolean(retryBlocker)}
                     onUpload={(source) => {
-                      if (!retryBlocker) void tasks?.start(source, file.folderPath ?? '', file.id)
+                      if (!retryBlocker)
+                        void tasks?.start(source, file.folderPath ?? '', file.id, upload.encrypt !== false)
                     }}
                   />
                 </div>
@@ -172,7 +173,8 @@ export function FileUploadDetails({
                   className="hidden"
                   onChange={(event) => {
                     const selected = event.target.files?.[0]
-                    if (selected && !retryBlocker) void tasks?.start(selected, file.folderPath ?? '', file.id)
+                    if (selected && !retryBlocker)
+                      void tasks?.start(selected, file.folderPath ?? '', file.id, upload.encrypt !== false)
                     event.target.value = ''
                   }}
                   ref={picker}

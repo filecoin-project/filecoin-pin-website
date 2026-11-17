@@ -128,5 +128,9 @@ export function getUploadFailureCode(
   return upload.errorCode ?? classifyUploadFailure(upload.error)
 }
 export function getUploadRetryBlocker(upload: UploadCheckpoint, readiness: ReturnType<typeof getUploadReadiness>) {
-  return getRetryBlocker(getUploadFailureCode(upload), readiness)
+  // Every upload requires encryption setup, including explicitly public retries.
+  return (
+    getRetryBlocker(getUploadFailureCode(upload), readiness) ??
+    readiness.blockers.find((blocker) => blocker.code === 'encryption' || blocker.code === 'unsupported_wallet')
+  )
 }

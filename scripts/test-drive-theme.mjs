@@ -255,12 +255,16 @@ try {
     )
   })
   await consolePage.getByRole('button', { name: 'report.tar.gz', exact: true }).click()
-  assert.equal(await consolePage.getByRole('button', { name: 'Preview', exact: true }).isDisabled(), true)
+  const archivePreview = consolePage.getByRole('link', { name: 'Preview', exact: true })
+  const archiveUrl = new URL(await archivePreview.getAttribute('href'))
+  assert(archiveUrl.hostname.endsWith('.ipfs.inbrowser.link'))
+  assert.equal(archiveUrl.searchParams.get('filename'), 'report.tar.gz')
+  assert.equal(archiveUrl.searchParams.has('download'), false)
   assert.equal(
     await consolePage.getByRole('button', { name: 'Download original file', exact: true }).isDisabled(),
     false
   )
-  console.log('PDF preview URL and unsupported-format download fallback passed')
+  console.log('PDF and archive gateway preview URLs and original download availability passed')
 } finally {
   await browser.close()
 }

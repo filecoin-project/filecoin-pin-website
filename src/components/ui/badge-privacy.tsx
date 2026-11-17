@@ -5,14 +5,7 @@ import { hasStoredCopy } from '../../utils/upload/has-stored-copy.ts'
 
 const ENCRYPTED_TITLE = 'Encrypted at rest. Only your wallet and people you share with can read this file.'
 
-/**
- * Per-file privacy marker. Encrypted is Drive's default, so file rows get
- * quiet reassurance: a bare muted lock, no color, no text. The details panel
- * passes `detailed` and spells it out instead - words beat tooltips on an
- * inspection surface. Anything stored unencrypted is the exception and gets
- * flagged loudly with the Public pill in both variants, styled like the file
- * status pills so the two stack consistently.
- */
+/** Compact icons in file rows; explicit privacy labels in file details. */
 function BadgePrivacy({
   file,
   detailed = false,
@@ -48,6 +41,17 @@ function BadgePrivacy({
         title={ENCRYPTED_TITLE}
       >
         <Lock aria-hidden="true" size={12} />
+      </span>
+    )
+  if (!detailed)
+    return (
+      <span
+        aria-label="Public"
+        className={cn('inline-flex items-center text-muted', className)}
+        role="img"
+        title="Stored unencrypted. Anyone with its CID can read this file."
+      >
+        <Globe aria-hidden="true" size={12} />
       </span>
     )
   return (

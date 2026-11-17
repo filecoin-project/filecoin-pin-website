@@ -11,6 +11,8 @@ const state = vi.hoisted(() => ({
   busy: false,
   pending: null as { kind: 'deposit' } | null,
   refreshWallet: vi.fn(),
+  startMany: vi.fn().mockResolvedValue(true),
+  start: vi.fn().mockResolvedValue(true),
 }))
 beforeEach(() => {
   Object.assign(state, {
@@ -48,7 +50,9 @@ vi.mock('../../hooks/use-filecoin-pin-context.ts', () => ({
     refreshWallet: state.refreshWallet,
   }),
 }))
-vi.mock('../../context/upload-tasks-context.tsx', () => ({ useUploadTasks: () => ({ transferring: false }) }))
+vi.mock('../../context/upload-tasks-context.tsx', () => ({
+  useUploadTasks: () => ({ transferring: false, startMany: state.startMany, start: state.start }),
+}))
 vi.mock('../drive/file-browser.tsx', () => ({
   FileBrowser: ({ uploadDisabled, onUpload }: { uploadDisabled: boolean; onUpload: (folder: string) => void }) => (
     <button disabled={uploadDisabled} onClick={() => onUpload('')} type="button">
@@ -115,7 +119,7 @@ it('waits for restored session and storage reads before prompting for setup', ()
   expect(screen.getByText('Set up wallet')).toBeTruthy()
 })
 
-it('blocks upload until the encryption key is ready and updates without reloading', () => {
+it('blocks privacy selection until the encryption key is ready and updates without reloading', () => {
   Object.assign(state, {
     sessionStatus: 'active',
     walletStatus: 'ready',
@@ -238,3 +242,40 @@ it('shows one funding notice for empty funds and hides it throughout deposit sig
   expect(screen.queryByText(notice)).toBeNull()
   expect((screen.getByRole('button', { name: 'Upload files' }) as HTMLButtonElement).disabled).toBe(false)
 })
+it.each(['file', 'folder'])(
+  'uploads a public %s after encryption setup and resets the next upload to private',
+  async (kind) => {
+    Object.assign(state, {
+      sessionStatus: 'active',
+      walletStatus: 'ready',
+      storageStatus: 'ready',
+      encryptionReady: true,
+    })
+    state.startMany.mockClear()
+    state.start.mockClear()
+    render(<Content />)
+    fireEvent.click(screen.getByRole('button', { name: 'Upload files' }))
+    const toggle = screen.getByRole('switch', { name: 'Encrypt upload (private)' })
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(toggle)
+    expect(screen.getByText(/Once public, files cannot be made private/)).toBeTruthy()
+    if (kind === 'folder') fireEvent.click(screen.getByRole('button', { name: 'Folder' }))
+    const file = new File(['hello'], 'hello.txt')
+    if (kind === 'folder') Object.defineProperty(file, 'webkitRelativePath', { value: 'folder/hello.txt' })
+    const input = document.querySelector('input[type="file"]')
+    if (!input) throw new Error('Missing file picker')
+    fireEvent.change(input, { target: { files: [file] } })
+    fireEvent.click(screen.getByRole('button', { name: 'Upload' }))
+    const { waitFor } = await import('@testing-library/react')
+    await waitFor(() =>
+      expect(kind === 'file' ? state.startMany : state.start).toHaveBeenCalledWith(
+        expect.anything(),
+        '',
+        ...(kind === 'file' ? [false] : [undefined, false])
+      )
+    )
+    await waitFor(() => expect(screen.queryByRole('switch')).toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: 'Upload files' }))
+    expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true')
+  }
+)

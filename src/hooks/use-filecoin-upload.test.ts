@@ -869,3 +869,32 @@ describe('useFilecoinUpload encrypts by default', () => {
     expect(executeUploadMock.mock.lastCall?.[3].pieceMetadata).toEqual({ label: `${testFile.name}/`, path: '' })
   })
 })
+
+it.each([false, true])(
+  'uploads original public CAR bytes with importedCar=%s after encryption setup',
+  async (importedCar) => {
+    useFilecoinPinContextMock.mockReturnValue(baseContext)
+    prepareUploadInputMock.mockResolvedValue({ ...baseCar, importedCar, isDirectory: false })
+    const { result } = renderHook(useFilecoinUpload)
+    await act(async () => {
+      expect(await result.current.uploadFile(testFile, undefined, false)).toBe(baseCar.rootCid.toString())
+    })
+    expect(executeUploadMock.mock.lastCall?.[1]).toEqual(baseCar.carBytes)
+    expect(String(executeUploadMock.mock.lastCall?.[2])).toBe(baseCar.rootCid.toString())
+    expect(result.current.uploadState.encrypted).toBe(false)
+    expect(result.current.uploadState.contentRootCid).toBeUndefined()
+    expect(result.current.uploadState.importedCar).toBe(importedCar)
+    expect(createFreshUploadContextsMock).toHaveBeenCalledWith(baseContext.synapse, expect.any(String), 2, [], {})
+  }
+)
+
+it('blocks explicitly public uploads until the encryption key is ready', async () => {
+  useFilecoinPinContextMock.mockReturnValue({ ...baseContext, encryption: { ready: false } })
+  const { result } = renderHook(useFilecoinUpload)
+  await act(async () => {
+    await expect(result.current.uploadFile(testFile, undefined, false)).rejects.toThrow('Add your encryption key')
+  })
+  expect(executeUploadMock).not.toHaveBeenCalled()
+  expect(prepareMock).not.toHaveBeenCalled()
+  expect(createFreshUploadContextsMock).not.toHaveBeenCalled()
+})
