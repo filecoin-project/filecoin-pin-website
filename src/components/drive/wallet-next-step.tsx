@@ -3,7 +3,10 @@ import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
 import { ButtonBase as Button } from '../ui/button/button-base.tsx'
 
-export type SetupTarget = 'session' | 'gas' | 'deposit' | 'approval'
+export type { SetupTarget } from '../../utils/upload/upload-readiness.ts'
+
+import { useUploadReadiness } from '../../hooks/use-upload-readiness.ts'
+import type { SetupTarget } from '../../utils/upload/upload-readiness.ts'
 
 export function WalletNextStep({
   onReview,
@@ -14,8 +17,11 @@ export function WalletNextStep({
   onContinue: () => void
   pendingFunding?: boolean
 }) {
+  const readiness = useUploadReadiness()
+  const blocker = readiness.blockers[0]
   const connection = useBrowserWallet()
-  const { wallet, synapse, storageSetup, refreshWallet } = useFilecoinPinContext()
+  const { storageSetup, refreshWallet, encryption } = useFilecoinPinContext()
+  const encryptionReady = encryption.ready
   const disabled =
     connection.busy || connection.uploading || connection.deleting || Boolean(connection.pendingTransaction)
   let title: string
@@ -33,47 +39,63 @@ export function WalletNextStep({
     title = 'Complete the request in your wallet'
     description = 'Confirm or cancel the open wallet request to continue.'
     checking = true
-  } else if (wallet.status === 'error' || storageSetup?.status === 'error') {
+  } else if (readiness.checkFailed) {
     title = 'Unable to check storage setup'
     description = 'Your balances or payment approval could not be verified. Retry the checks before continuing.'
     action = 'Retry checks'
     retry = true
-  } else if (
-    connection.sessionStatus === 'checking' ||
-    wallet.status === 'idle' ||
-    wallet.status === 'loading' ||
-    storageSetup?.status === 'checking'
-  ) {
+  } else if (readiness.checking) {
     title = 'Checking storage setup…'
     description = 'Checking your session, balances and payment approval.'
     checking = true
-  } else if (!storageSetup?.gasReady) {
-    title = 'Add FIL for transaction fees'
-    description = 'Send FIL to your connected wallet, then refresh balances. FIL pays gas; USDFC pays for storage.'
-    action = 'Review gas balance'
-    target = 'gas'
-  } else if (connection.sessionStatus !== 'active') {
-    title = 'Authorize this browser'
-    description = 'Review the session permissions and choose how long this browser can upload and delete files.'
-    action = 'Review session authorization'
-    target = 'session'
-  } else if (!storageSetup.depositReady) {
-    title = 'Add funds for storage'
-    description = 'Deposit USDFC from your wallet into your storage account.'
-    action = 'Go to deposit'
-    target = 'deposit'
-  } else if (!storageSetup.approvalReady) {
-    title = 'Approve storage payments'
-    description = 'Your storage account has funds. Review the approval so storage services can charge this balance.'
-    action = 'Review payment approval'
-    target = 'approval'
+  } else if (blocker) {
+    const guidance = {
+      session: {
+        title: 'Authorize this browser',
+        description: 'Review the session permissions and choose how long this browser can upload and delete files.',
+        action: 'Review session authorization',
+      },
+      encryption: connection.session?.encryption
+        ? {
+            title: 'Restore encryption access',
+            description: 'Restore encryption access to continue uploading.',
+            action: 'Restore encryption access',
+          }
+        : {
+            title: 'Add your encryption key',
+            description: 'Set up your encryption key to upload files securely.',
+            action: 'Review encryption key',
+          },
+      unsupported_wallet: { title: 'Use a supported wallet', description: blocker.message, action: 'Review wallet' },
+      gas: {
+        title: 'Add FIL for transaction fees',
+        description: 'Send FIL to your connected wallet, then refresh balances. FIL pays gas; USDFC pays for storage.',
+        action: 'Review gas balance',
+      },
+      deposit: {
+        title: 'Add funds for storage',
+        description: 'Deposit USDFC from your wallet into your storage account.',
+        action: 'Go to deposit',
+      },
+      approval: {
+        title: 'Approve storage payments',
+        description: 'Your storage account has funds. Review the approval so storage services can charge this balance.',
+        action: 'Review payment approval',
+      },
+      unknown: { title: 'Confirm storage setup', description: blocker.message, action: 'Refresh balances' },
+    }[blocker.code]
+    title = guidance.title
+    description = guidance.description
+    action = guidance.action
+    target = blocker.target
+    retry = blocker.code === 'unknown'
   } else if (pendingFunding) {
     title = 'An upload is waiting for funding'
     description =
       'Review the waiting upload below. After depositing or approving payments, recheck funding to continue.'
     action = 'Review waiting upload'
     target = 'deposit'
-  } else if (synapse && wallet.status === 'ready' && storageSetup.status === 'ready') {
+  } else if (readiness.canUpload) {
     title = 'Ready to upload'
     description = 'Wallet setup complete. Each upload checks its actual funding needs before transferring.'
     action = 'Continue to upload'
@@ -103,6 +125,12 @@ export function WalletNextStep({
             : 'Session not authorized',
     },
     {
+      key: 'encryption',
+      label: 'Encryption',
+      complete: encryptionReady,
+      status: encryptionReady ? 'Encryption key added' : 'Encryption key needed',
+    },
+    {
       key: 'deposit',
       label: 'Funds',
       complete: storageSetup?.depositReady,
@@ -119,9 +147,11 @@ export function WalletNextStep({
     <section aria-label="Next step" className="border-b border-border pb-5">
       <div className="flex items-center justify-between text-xs">
         <p className="font-medium text-foreground">Upload setup</p>
-        <p className="tabular-nums text-muted">{steps.filter((step) => step.complete).length} of 4 ready</p>
+        <p className="tabular-nums text-muted">
+          {steps.filter((step) => step.complete).length} of {steps.length} ready
+        </p>
       </div>
-      <ol aria-label="Storage setup checklist" className="mt-4 grid grid-cols-4">
+      <ol aria-label="Storage setup checklist" className="mt-4 grid grid-cols-5">
         {steps.map((step, index) => (
           <li aria-label={step.status} className="relative flex flex-col items-center gap-1.5" key={step.key}>
             {index < steps.length - 1 && (
@@ -157,7 +187,7 @@ export function WalletNextStep({
             className="min-h-8 w-auto gap-1.5 px-3 py-1.5 text-xs"
             disabled={disabled}
             onClick={() => {
-              if (ready) onContinue()
+              if (ready && readiness.canUpload) onContinue()
               else if (retry) void refreshWallet()
               else if (target) onReview(target)
             }}

@@ -9,8 +9,10 @@ vi.mock('@filoz/synapse-sdk/warm-storage', () => ({ WarmStorageService: class {}
 vi.mock('@filoz/synapse-sdk/storage', () => ({
   StorageContext: class {
     provider: { id: bigint }
-    constructor({ provider }: { provider: { id: bigint } }) {
+    dataSetMetadata: Record<string, string>
+    constructor({ provider, dataSetMetadata }: { provider: { id: bigint }; dataSetMetadata: Record<string, string> }) {
       this.provider = provider
+      this.dataSetMetadata = dataSetMetadata
     }
   },
 }))
@@ -37,4 +39,21 @@ it('does not reuse the existing provider when no additional provider is availabl
   mocks.providers.mockResolvedValue([{ id: 4n, pdp: { serviceURL: 'https://existing.example' } }])
   expect(await createFreshUploadContexts({ client: {} } as Synapse, 'browser', 1, [4n])).toEqual([])
   expect(mocks.ping).not.toHaveBeenCalled()
+})
+
+it('merges extra data-set metadata into the metadata every created dataset carries', async () => {
+  mocks.providers.mockResolvedValue([{ id: 4n, pdp: { serviceURL: 'https://existing.example' } }])
+  const contexts = await createFreshUploadContexts({ client: {} } as Synapse, 'browser', 1, [], {
+    'foc/enc': '1',
+    'foc/ks': '0xgroupkey',
+    'foc/kc': 'commitment',
+  })
+  expect(contexts).toHaveLength(1)
+  expect(contexts[0].dataSetMetadata).toMatchObject({
+    clientId: 'browser',
+    source: 'filecoin-drive',
+    'foc/enc': '1',
+    'foc/ks': '0xgroupkey',
+    'foc/kc': 'commitment',
+  })
 })

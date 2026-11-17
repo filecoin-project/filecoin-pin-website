@@ -3,14 +3,27 @@ import { isCopyRemovalScheduled, isDeletionScheduled } from '../../utils/file-de
 import { getIpfsGatewayPreviewLink } from '../../utils/links.ts'
 import { displayFileName } from './drive-api.ts'
 
-// Gateway previews need a stored piece and a root CID not known-unindexed on IPNI.
+// Gateway previews need a stored piece and a root CID not known-unindexed on
+// IPNI. Encrypted pieces never preview through a gateway: the public CID
+// serves ciphertext — they open the external viewer instead (canPreviewEncryptedFile).
 export const canPreviewFile = (file: DatasetPiece) =>
-  Boolean(file.cid && file.pieceCid) && file.ipfsIndexed !== false && !file.importedCar && !file.isDirectory
+  Boolean(file.cid && file.pieceCid) &&
+  file.ipfsIndexed !== false &&
+  !file.encrypted &&
+  !file.importedCar &&
+  !file.isDirectory
+
+/** Encrypted previews open the external viewer; format support is decided there. */
+export const canPreviewEncryptedFile = (file: DatasetPiece) =>
+  Boolean(file.encrypted && file.cid && file.pieceCid) && file.ipfsIndexed !== false && !file.importedCar
 
 // Share mirrors download availability: a link exists once a provider holds the
 // piece, regardless of remaining replication or indexing work.
 export function fileShareLink(file: DatasetPiece): string | undefined {
   if (isDeletionScheduled(file) || !file.pieceCid) return undefined
+  // Every public URL to an encrypted piece serves the envelope, not the file.
+  // Encrypted sharing mints a keysmith share link instead (ShareFileButton).
+  if (file.encrypted) return undefined
   if (!file.importedCar) {
     // Gateway links need an IPNI-indexed root; CAR shares below are provider-direct.
     if (!file.cid || file.ipfsIndexed === false) return undefined

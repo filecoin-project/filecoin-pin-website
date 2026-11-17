@@ -25,6 +25,23 @@ describe('browser session vault', () => {
     expect(await loadBrowserSession('314:alice')).toBeNull()
   })
 
+  it('round-trips a session carrying an encryption credential and still loads records without one', async () => {
+    const scope = '314:encrypted-wallet'
+    const session = {
+      privateKey: `0x${'5'.repeat(64)}` as const,
+      expiresAt: 1800000000,
+      encryption: {
+        grant: 'mGrantBytes',
+        groupKeyId: `0x${'a'.repeat(32)}` as const,
+        commitment: `v1.${'b'.repeat(32)}`,
+        owner: '0x44f08d1befe61255b3c3a349c392c560fa333759' as const,
+      },
+    }
+    await saveBrowserSession(scope, session)
+    expect(await loadBrowserSession(scope)).toEqual(session)
+    await saveBrowserSession(scope, null)
+  })
+
   it('selects one key for concurrent authorizations and notifies readers after durable writes', async () => {
     const scope = '314:concurrent-wallet'
     const first = { privateKey: `0x${'3'.repeat(64)}` as const, expiresAt: 1800000000 }

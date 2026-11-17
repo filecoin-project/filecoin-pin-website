@@ -43,10 +43,11 @@ export function UploadNotes({ kind = 'file' }: { kind?: 'file' | 'folder' }) {
       <p className="mt-2">
         {kind === 'folder'
           ? 'The folder is stored as one upload. Empty subfolders are not included by the browser picker.'
-          : 'Existing CAR archives are imported unchanged; the first root is used as the primary CID.'}
+          : 'CAR archives are encrypted as one upload and restored byte-for-byte when downloaded.'}
       </p>
       <p className="mt-2">
-        Uploaded content is not encrypted. Original file names and content identifiers may be publicly visible on-chain.
+        New uploads are encrypted in your browser. Names, upload paths, sizes, content identifiers and storage metadata
+        remain public. Existing unencrypted uploads are marked Public.
       </p>
     </details>
   )

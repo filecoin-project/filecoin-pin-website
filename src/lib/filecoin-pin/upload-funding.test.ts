@@ -39,7 +39,7 @@ it('keeps the existing dataset and quotes its missing copy before returning uplo
   const synapse = { storage: { prepare, createContexts } } as unknown as Synapse
   expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [123n] })).toEqual([...contexts, additional])
   expect(createContexts).toHaveBeenCalledWith({ withCDN: false, dataSetIds: [123n] })
-  expect(freshContexts).toHaveBeenCalledWith(synapse, expect.any(String), 1, [4n])
+  expect(freshContexts).toHaveBeenCalledWith(synapse, expect.any(String), 1, [4n], undefined)
   expect(prepare).toHaveBeenCalledWith({ context: [...contexts, additional], pieceSizes: [10n] })
 })
 
@@ -86,7 +86,7 @@ it('skips non-Drive datasets and fills the missing copy on a different provider'
   const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
   const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
   expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [1n, 2n] })).toEqual([drive, fresh])
-  expect(freshContexts).toHaveBeenLastCalledWith(synapse, expect.any(String), 1, [4n])
+  expect(freshContexts).toHaveBeenLastCalledWith(synapse, expect.any(String), 1, [4n], undefined)
   expect(prepare).toHaveBeenCalledWith({ context: [drive, fresh], pieceSizes: [10n] })
 })
 
@@ -100,7 +100,18 @@ it('creates two fresh copies when none of the known datasets has the Drive marke
   const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
   const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
   expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [1n, 2n] })).toEqual(fresh)
-  expect(freshContexts).toHaveBeenLastCalledWith(synapse, expect.any(String), 2, [])
+  expect(freshContexts).toHaveBeenLastCalledWith(synapse, expect.any(String), 2, [], undefined)
+})
+
+it('threads the caller metadata into fresh data sets created to fill missing copies', async () => {
+  const createContexts = vi.fn().mockResolvedValueOnce([{ dataSetMetadata: {} }])
+  const fresh = [{ provider: { id: 2n } }, { provider: { id: 4n } }]
+  freshContexts.mockResolvedValueOnce(fresh)
+  const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
+  const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
+  const metadata = { 'foc/enc': '1', 'foc/ks': '0xgroupkey', 'foc/kc': 'commitment' }
+  expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [1n], metadata })).toEqual(fresh)
+  expect(freshContexts).toHaveBeenLastCalledWith(synapse, expect.any(String), 2, [], metadata)
 })
 
 it('keeps the two-copy target when discovery finds datasets on more providers', async () => {
@@ -142,7 +153,7 @@ it('selects two fresh copies when every candidate is confirmed dead', async () =
   const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
   const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
   expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [1n, 2n] })).toEqual(fresh)
-  expect(freshContexts).toHaveBeenCalledExactlyOnceWith(synapse, expect.any(String), 2, [])
+  expect(freshContexts).toHaveBeenCalledExactlyOnceWith(synapse, expect.any(String), 2, [], undefined)
   expect(prepare).toHaveBeenCalledWith({ context: fresh, pieceSizes: [10n] })
 })
 
@@ -162,4 +173,26 @@ it('rounds displayed funding up without losing small shortfalls', () => {
   expect(formatFundingAmount(645192894000747211n)).toBe('0.6452')
   expect(formatFundingAmount(1n)).toBe('0.0001')
   expect(formatFundingAmount(0n)).toBe('0')
+})
+
+it('resumes only datasets matching the upload encryption group and commitment', async () => {
+  const metadata = { 'foc/enc': '1', 'foc/ks': 'group', 'foc/kc': 'commitment' }
+  const incompatible = [
+    { source: 'filecoin-drive' },
+    { source: 'filecoin-drive', ...metadata, 'foc/ks': 'other' },
+    { source: 'filecoin-drive', ...metadata, 'foc/kc': 'other' },
+  ]
+  const matching = { provider: { id: 4n }, dataSetMetadata: { source: 'filecoin-drive', ...metadata } }
+  const createContexts = vi.fn()
+  for (const dataSetMetadata of incompatible)
+    createContexts.mockResolvedValueOnce([{ provider: { id: 4n }, dataSetMetadata }])
+  createContexts.mockResolvedValueOnce([matching])
+  const additional = { provider: { id: 2n } }
+  freshContexts.mockResolvedValue([additional])
+  const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
+  await prepareUploadContexts({ storage: { createContexts, prepare } } as unknown as Synapse, 10n, {
+    dataSetIds: [1n, 2n, 3n, 4n],
+    metadata,
+  })
+  expect(prepare).toHaveBeenCalledWith({ context: [matching, additional], pieceSizes: [10n] })
 })

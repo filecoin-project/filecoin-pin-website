@@ -36,4 +36,13 @@ describe('local-storage/data-set', () => {
     expect(getStoredDataSetIds('0xaaa')).toEqual([100])
     expect(getStoredDataSetIds('0xbbb')).toEqual([200])
   })
+
+  it('never resumes into pre-encryption data sets: ids stored by older builds are invisible', () => {
+    // Pre-encryption keys. Data-set metadata is immutable, so these can never
+    // carry foc/enc: an encrypted upload resuming into them would be stored
+    // correctly but scanned as public (mislabeled) forever.
+    localStorage.setItem(`filecoin-pin-data-set-ids-v1-${WALLET}`, JSON.stringify([1832, 1833]))
+    localStorage.setItem(`filecoin-pin-data-set-id-v2-${WALLET}`, '1832')
+    expect(getStoredDataSetIds(WALLET)).toEqual([])
+  })
 })

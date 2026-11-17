@@ -1,4 +1,5 @@
 import type { StepState } from '../../types/upload/step.ts'
+import type { UploadFailureCode } from '../../utils/upload/upload-readiness.ts'
 
 export interface UploadProviderCheckpoint {
   providerId: string
@@ -18,6 +19,7 @@ export interface UploadCheckpoint {
   providers: UploadProviderCheckpoint[]
   steps: StepState[]
   funding?: { depositNeeded: string; needsApproval: boolean }
+  errorCode?: UploadFailureCode
   error?: string
   checks: number
   nextCheckAt: number

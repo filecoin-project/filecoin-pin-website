@@ -50,9 +50,21 @@ export function browserSynapse(
     await key.syncExpirations(SESSION_PERMISSIONS)
     if (!key.hasPermissions(SESSION_PERMISSIONS)) throw new SessionPermissionError()
   }
+  /**
+   * True when this session can encrypt uploads and silently decrypt downloads:
+   * a live session carrying a group-key grant issued by the connected owner.
+   * The grant is wrapped to the session key, so an expired session makes the
+   * stored grant dead weight and the setup flow must re-issue it.
+   */
+  const encryptionReady = () =>
+    session != null &&
+    session.encryption != null &&
+    session.encryption.owner === address.toLowerCase() &&
+    session.expiresAt > Math.floor(Date.now() / 1000)
   return {
     synapse,
     validate,
+    encryptionReady,
     isRevoked: async () => {
       if (!key) return false
       await key.syncExpirations(SESSION_REVOCATION_PERMISSIONS)

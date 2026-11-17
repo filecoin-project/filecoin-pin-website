@@ -4,6 +4,7 @@ import type { UploadExecutionOptions } from 'filecoin-pin/core/upload'
 import { formatUnits } from 'viem'
 import { getOrCreateClientId } from '../local-storage/client-id.ts'
 import { DEFAULT_STORAGE_COPIES } from './config.ts'
+import { ENCRYPTED_DATA_SET_KEYS } from './encryption.ts'
 import { createFreshUploadContexts } from './fresh-contexts.ts'
 import { assertCurrentStorageChain } from './storage-chain.ts'
 import { APPLICATION_SOURCE } from './synapse.ts'
@@ -58,7 +59,11 @@ export async function resolveUploadContexts(
           throw cause
         })
       for (const context of resolved) {
-        if (context.dataSetMetadata[METADATA_KEYS.SOURCE] !== APPLICATION_SOURCE || providers.has(context.provider.id))
+        if (
+          context.dataSetMetadata[METADATA_KEYS.SOURCE] !== APPLICATION_SOURCE ||
+          ENCRYPTED_DATA_SET_KEYS.some((key) => context.dataSetMetadata[key] !== options.metadata?.[key]) ||
+          providers.has(context.provider.id)
+        )
           continue
         providers.add(context.provider.id)
         contexts.push(context)
@@ -85,7 +90,8 @@ export async function resolveUploadContexts(
       synapse,
       getOrCreateClientId(),
       DEFAULT_STORAGE_COPIES - contexts.length,
-      contexts.map((context) => context.provider.id)
+      contexts.map((context) => context.provider.id),
+      options.metadata
     )
     contexts = [...contexts, ...additional]
   }

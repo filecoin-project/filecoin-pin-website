@@ -8,6 +8,8 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { BaseError, UserRejectedRequestError } from 'viem'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import * as encryptionModule from '../lib/filecoin-pin/encryption.ts'
+import * as groupKeyScan from '../lib/filecoin-pin/group-key-scan.ts'
 
 const mocks = vi.hoisted(() => ({
   write: vi.fn(),
@@ -330,6 +332,19 @@ describe('BYOW browser sessions', () => {
     act(() => result.current.setUploading(false))
     await waitFor(() => expect(result.current.address).toBe(BOB))
     expect(mocks.load).toHaveBeenLastCalledWith(`314:${BOB}`)
+  })
+  it('clears root-derived group keys cached for the old account on an extension account switch', async () => {
+    const clear = vi.spyOn(encryptionModule, 'clearRememberedOwnerKeys')
+    const { result } = renderHook(useBrowserWallet, { wrapper })
+    await act(async () => result.current.connect())
+    clear.mockClear()
+    act(() => {
+      accounts = [BOB]
+      listeners.get('accountsChanged')?.(accounts)
+    })
+    await waitFor(() => expect(result.current.address).toBe(BOB))
+    // Bob's wallet must never silently decrypt with Alice's still-cached key.
+    expect(clear).toHaveBeenCalled()
   })
   it('does not enable a session when its authorization transaction reverts', async () => {
     mocks.receipt.mockResolvedValue({ status: 'reverted' })
@@ -928,3 +943,53 @@ it('ignores an in-flight session check while a revocation signature is pending',
   })
   await waitFor(() => expect(result.current.sessionStatus).toBe('active'))
 })
+
+it.each(['rotated', 'removed', 'unchanged'] as const)(
+  'only saves an encryption credential when the session is unchanged (%s)',
+  async (change) => {
+    vi.spyOn(groupKeyScan, 'scanGroupKey').mockResolvedValue(undefined)
+    const credential: encryptionModule.EncryptionCredential = {
+      owner: ALICE,
+      groupKeyId: `0x${'a'.repeat(32)}`,
+      commitment: 'v1.test',
+      grant: 'test-grant',
+    }
+    let finish!: (value: encryptionModule.EncryptionCredential) => void
+    const issue = vi.spyOn(encryptionModule, 'issueEncryptionCredential').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const { result } = renderHook(useBrowserWallet, { wrapper })
+    await act(async () => result.current.connect())
+    await act(async () => result.current.authorize(7))
+    const original = result.current.session
+    if (!original) throw new Error('Expected an authorized session')
+    let setup!: Promise<void>
+    act(() => {
+      setup = result.current.addEncryptionKey()
+    })
+    await waitFor(() => expect(issue).toHaveBeenCalledOnce())
+    const current =
+      change === 'removed'
+        ? null
+        : change === 'rotated'
+          ? { ...original, privateKey: `0x${'2'.repeat(64)}`, revision: 'another-tab' }
+          : original
+    if (change !== 'unchanged') await act(async () => mocks.save(`314:${ALICE}`, current))
+    mocks.save.mockClear()
+    await act(async () => {
+      finish(credential)
+      await setup
+    })
+    if (change === 'unchanged') {
+      expect((await mocks.load(`314:${ALICE}`)).encryption).toEqual(credential)
+      expect(result.current.error).toBeNull()
+    } else {
+      expect(await mocks.load(`314:${ALICE}`)).toEqual(current)
+      expect(mocks.save).not.toHaveBeenCalled()
+      expect(result.current.error).toContain('The encryption key was not saved. Try again in Wallet setup.')
+    }
+  }
+)

@@ -10,7 +10,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock('./browser-wallet-provider.tsx', () => ({ useBrowserWallet: () => mocks.connection }))
 vi.mock('../lib/filecoin-pin/browser-wallet.ts', async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  browserSynapse: (address: string, network: string) => ({ synapse: { address, network }, validate: vi.fn() }),
+  browserSynapse: (address: string, network: string) => ({
+    synapse: { address, network },
+    validate: vi.fn(),
+    encryptionReady: () => false,
+  }),
 }))
 vi.mock('../lib/filecoin-pin/storage-chain.ts', () => ({ resolveStorageChain: vi.fn(async (chain) => chain) }))
 vi.mock('../lib/filecoin-pin/wallet.ts', () => ({ fetchWalletSnapshot: mocks.snapshot }))
