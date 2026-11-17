@@ -3,6 +3,8 @@ import { beforeEach, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   pending: null as object | null,
+  preflight: vi.fn(),
+  toastError: vi.fn(),
   prepare: vi.fn(),
   execute: vi.fn(),
   setUploading: vi.fn(),
@@ -10,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   removalError: vi.fn(),
   lastRoot: '',
 }))
+vi.mock('../lib/filecoin-pin/upload-preflight.ts', () => ({ preflightUpload: mocks.preflight }))
+vi.mock('../utils/toast.tsx', () => ({ toast: { error: mocks.toastError, warning: vi.fn() } }))
 vi.mock('../lib/filecoin-pin/drive-api.ts', async (original) => ({
   ...(await original<object>()),
   loadDriveFiles: vi.fn().mockResolvedValue([]),
@@ -70,6 +74,7 @@ vi.mock('./browser-wallet-provider.tsx', () => ({
 }))
 
 import { acquireContentLock } from '../lib/filecoin-pin/content-lock.ts'
+import { UploadFundingRequired } from '../lib/filecoin-pin/upload-funding.ts'
 import { getCachedPieces, setCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import { UploadHistoryProvider, useUploadHistory } from './upload-history-context.tsx'
 import { UploadTasksProvider, useUploadTasks } from './upload-tasks-context.tsx'
@@ -171,12 +176,14 @@ function Harness() {
         Remove all records
       </button>
       <output>{history.map((file) => `${file.fileName}:${file.upload?.phase}:${file.copyCount}`).join('|')}</output>
+      <span data-testid="upload-preparation">{tasks.preparing ? 'checking' : 'idle'}</span>
     </>
   )
 }
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.pending = null
+  mocks.preflight.mockReset().mockResolvedValue(undefined)
   localStorage.clear()
   setCachedPieces(scope, [])
   mocks.prepare.mockResolvedValue({ costs: { ready: true } })
@@ -185,6 +192,88 @@ beforeEach(() => {
     (_synapse, _bytes, _root, options) =>
       new Promise((resolve, reject) => operations.push({ progress: options.onProgress, resolve, reject }))
   )
+})
+it('rejects insufficient funds before creating any task or sending bytes, then permits a funded retry', async () => {
+  mocks.preflight.mockRejectedValueOnce(new UploadFundingRequired(10n ** 18n, false, 2))
+  render(
+    <UploadHistoryProvider>
+      <UploadTasksProvider>
+        <Harness />
+      </UploadTasksProvider>
+    </UploadHistoryProvider>
+  )
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Batch' })))
+  expect(getCachedPieces(scope)).toEqual([])
+  expect(mocks.prepare).not.toHaveBeenCalled()
+  expect(operations).toHaveLength(0)
+  expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining('1 more USDFC'))
+  expect(mocks.setUploading).toHaveBeenLastCalledWith(false)
+  expect(screen.getByTestId('upload-preparation').textContent).toBe('idle')
+
+  fireEvent.click(screen.getByRole('button', { name: 'Batch' }))
+  await waitFor(() => expect(operations).toHaveLength(1))
+  expect(getCachedPieces(scope)).toHaveLength(2)
+  expect(mocks.preflight).toHaveBeenCalledTimes(2)
+})
+
+it('waits for the full preflight before writing the queue and prevents duplicate submissions', async () => {
+  let resolve!: () => void
+  mocks.preflight.mockReturnValueOnce(new Promise<void>((done) => (resolve = done)))
+  render(
+    <UploadHistoryProvider>
+      <UploadTasksProvider>
+        <Harness />
+      </UploadTasksProvider>
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Batch' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Batch' }))
+  expect(screen.getByTestId('upload-preparation').textContent).toBe('checking')
+  expect(mocks.preflight).toHaveBeenCalledTimes(1)
+  expect(getCachedPieces(scope)).toEqual([])
+  expect(operations).toHaveLength(0)
+  await act(async () => resolve())
+  await waitFor(() => expect(operations).toHaveLength(1))
+  expect(getCachedPieces(scope)).toHaveLength(2)
+  expect(screen.getByTestId('upload-preparation').textContent).toBe('idle')
+})
+
+it('leaves no records when a current-state read fails', async () => {
+  mocks.preflight.mockRejectedValueOnce(new Error('Payment RPC unavailable'))
+  render(
+    <UploadHistoryProvider>
+      <UploadTasksProvider>
+        <Harness />
+      </UploadTasksProvider>
+    </UploadHistoryProvider>
+  )
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'First' })))
+  expect(getCachedPieces(scope)).toEqual([])
+  expect(operations).toHaveLength(0)
+  expect(mocks.toastError).toHaveBeenCalledWith('Payment RPC unavailable')
+  expect(screen.getByTestId('upload-preparation').textContent).toBe('idle')
+})
+
+it('discards an in-flight preflight when changing wallets unmounts the task provider', async () => {
+  let resolve!: () => void
+  mocks.preflight.mockReturnValueOnce(new Promise<void>((done) => (resolve = done)))
+  const { unmount } = render(
+    <UploadHistoryProvider>
+      <UploadTasksProvider>
+        <Harness />
+      </UploadTasksProvider>
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'First' }))
+  expect(mocks.preflight).toHaveBeenCalledTimes(1)
+  unmount()
+  mocks.setUploading.mockClear()
+  await act(async () => resolve())
+  expect(getCachedPieces(scope)).toEqual([])
+  expect(mocks.prepare).not.toHaveBeenCalled()
+  expect(operations).toHaveLength(0)
+  expect(mocks.setUploading).not.toHaveBeenCalled()
+  expect(mocks.toastError).not.toHaveBeenCalled()
 })
 it('persists parked files, allows the next transfer and isolates each task when an earlier confirmation times out', async () => {
   render(
@@ -457,6 +546,7 @@ it('preserves public mode through funding pauses and resumes', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Public' }))
   await waitFor(() => expect(screen.getByRole('button', { name: 'Continue funded upload' })).toBeTruthy())
   expect(getCachedPieces(scope)?.[0].upload?.encrypt).toBe(false)
+  expect(mocks.preflight).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ metadata: {} }))
   fireEvent.click(screen.getByRole('button', { name: 'Continue funded upload' }))
   await waitFor(() => expect(operations).toHaveLength(1))
   expect(getCachedPieces(scope)?.[0].upload?.encrypt).toBe(false)

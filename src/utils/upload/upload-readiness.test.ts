@@ -13,6 +13,25 @@ const ready: UploadSetupInput = {
   hasClient: true,
   storage: { status: 'ready', gasReady: true, depositReady: true, approvalReady: true },
 }
+it.each([
+  ['deposit', 'Waiting for storage deposit confirmation.'],
+  ['approve', 'Waiting for storage payment approval confirmation.'],
+  ['authorize', 'Waiting for session authorization confirmation.'],
+  ['revoke', 'Waiting for session revocation confirmation.'],
+] as const)('explains a submitted %s while confirmation is pending', (kind, message) => {
+  const state = getUploadReadiness({ ...ready, busy: true, pendingTransactionKind: kind })
+  expect(state.canUpload).toBe(false)
+  expect(state.message).toBe(message)
+  expect(state.actionLabel).toBe('View transaction')
+  expect(state.actionTarget).toBeUndefined()
+  expect(getUploadReadiness(ready).canUpload).toBe(true)
+})
+
+it('keeps an unresolved deposit blocked after the signing request has ended', () => {
+  const state = getUploadReadiness({ ...ready, busy: false, pendingTransactionKind: 'deposit' })
+  expect(state.canUpload).toBe(false)
+  expect(state.message).toBe('Waiting for storage deposit confirmation.')
+})
 it('blocks uploads without encryption and provides the exact repair target', () => {
   const state = getUploadReadiness({ ...ready, encryptionReady: false })
   expect(state.canUpload).toBe(false)

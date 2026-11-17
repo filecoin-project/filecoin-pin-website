@@ -1,4 +1,12 @@
 import type { UploadCheckpoint } from '../../lib/filecoin-pin/upload-checkpoint.ts'
+import type { WalletTransactionKind } from '../../lib/local-storage/wallet-transaction.ts'
+
+const PENDING_TRANSACTION_MESSAGES: Record<WalletTransactionKind, string> = {
+  deposit: 'Waiting for storage deposit confirmation.',
+  approve: 'Waiting for storage payment approval confirmation.',
+  authorize: 'Waiting for session authorization confirmation.',
+  revoke: 'Waiting for session revocation confirmation.',
+}
 
 export type SetupTarget = 'session' | 'encryption' | 'gas' | 'deposit' | 'approval'
 export type UploadFailureCode = SetupTarget | 'unsupported_wallet' | 'unknown'
@@ -21,6 +29,7 @@ export interface UploadSetupInput {
   walletStatus: string
   hasClient: boolean
   busy?: boolean
+  pendingTransactionKind?: WalletTransactionKind
   storage?: { status: string; gasReady: boolean; depositReady: boolean; approvalReady: boolean } | null
   walletError?: string | null
 }
@@ -37,6 +46,8 @@ export function uploadFailureMessage(message?: string, code = classifyUploadFail
     : (message ?? 'Upload failed')
 }
 export function getUploadReadiness(input: UploadSetupInput) {
+  const pendingTransaction = input.pendingTransactionKind
+  const busy = input.busy || Boolean(pendingTransaction)
   const checking =
     input.sessionStatus === 'checking' ||
     ['idle', 'loading'].includes(input.walletStatus) ||
@@ -54,17 +65,20 @@ export function getUploadReadiness(input: UploadSetupInput) {
   if (input.sessionStatus !== 'active') add('session', 'Authorize this browser to upload.', 'session')
   if (input.sessionStatus !== 'active' && !input.encryptionReady)
     add('encryption', 'Add your encryption key to upload.', 'encryption')
-  if (storageVerified && !input.storage?.depositReady) add('deposit', 'Add storage funds to upload.', 'deposit')
+  if (storageVerified && !input.storage?.depositReady)
+    add('deposit', 'Storage funds are running low. Add funds to resume uploads.', 'deposit')
   if (storageVerified && !input.storage?.approvalReady)
     add('approval', 'Approve storage payments to upload.', 'approval')
   const verified = input.walletStatus === 'ready' && input.storage?.status === 'ready' && input.hasClient
-  const message = checking
-    ? 'Checking wallet setup…'
-    : input.busy
-      ? 'Complete the current wallet operation first.'
-      : checkFailed
-        ? 'Unable to check wallet setup. Retry the checks to continue.'
-        : (blockers[0]?.message ?? 'Refresh Wallet setup before uploading.')
+  const message = pendingTransaction
+    ? PENDING_TRANSACTION_MESSAGES[pendingTransaction]
+    : checking
+      ? 'Checking wallet setup…'
+      : busy
+        ? 'Complete the current wallet operation first.'
+        : checkFailed
+          ? 'Unable to check wallet setup. Retry the checks to continue.'
+          : (blockers[0]?.message ?? 'Refresh Wallet setup before uploading.')
   const actionLabels: Record<UploadFailureCode, string> = {
     session: 'Authorize browser',
     encryption: 'Add encryption key',
@@ -74,13 +88,17 @@ export function getUploadReadiness(input: UploadSetupInput) {
     unsupported_wallet: 'Review wallet',
     unknown: 'Set up wallet',
   }
-  const actionLabel = checkFailed ? 'Retry checks' : actionLabels[blockers[0]?.code ?? 'unknown']
-  const actionTarget = checkFailed ? undefined : blockers[0]?.target
+  const actionLabel = pendingTransaction
+    ? 'View transaction'
+    : checkFailed
+      ? 'Retry checks'
+      : actionLabels[blockers[0]?.code ?? 'unknown']
+  const actionTarget = checkFailed || pendingTransaction ? undefined : blockers[0]?.target
   return {
     actionLabel,
     actionTarget,
     checkFailed,
-    canUpload: verified && !checking && !input.busy && blockers.length === 0,
+    canUpload: verified && !checking && !busy && blockers.length === 0,
     checking,
     blockers,
     message,

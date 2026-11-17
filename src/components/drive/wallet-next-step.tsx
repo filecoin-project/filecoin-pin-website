@@ -1,6 +1,7 @@
-import { ArrowRight, Check, Loader2 } from 'lucide-react'
+import { ArrowRight, Check, Loader2, TriangleAlert } from 'lucide-react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
+import { LOW_STORAGE_RUNWAY_DAYS } from '../../lib/filecoin-pin/config.ts'
 import { ButtonBase as Button } from '../ui/button/button-base.tsx'
 
 export type { SetupTarget } from '../../utils/upload/upload-readiness.ts'
@@ -22,6 +23,7 @@ export function WalletNextStep({
   const connection = useBrowserWallet()
   const { storageSetup, refreshWallet, encryption } = useFilecoinPinContext()
   const encryptionReady = encryption.ready
+  const fundsLow = storageSetup?.fundsStatus === 'low'
   const disabled =
     connection.busy || connection.uploading || connection.deleting || Boolean(connection.pendingTransaction)
   let title: string
@@ -32,7 +34,7 @@ export function WalletNextStep({
   let checking = false
   let retry = false
   if (connection.pendingTransaction) {
-    title = 'Waiting for transaction confirmation'
+    title = readiness.message
     description = 'Your transaction has not been confirmed yet. Check its status before submitting again.'
     checking = true
   } else if (connection.busy) {
@@ -73,8 +75,8 @@ export function WalletNextStep({
         action: 'Review gas balance',
       },
       deposit: {
-        title: 'Add funds for storage',
-        description: 'Deposit USDFC from your wallet into your storage account.',
+        title: 'Add funds to resume uploads',
+        description: `New uploads pause when available storage funds cover less than ${LOW_STORAGE_RUNWAY_DAYS} days. The deposit estimate below defaults to 30 days. Each upload checks that at least ${LOW_STORAGE_RUNWAY_DAYS} days remain after adding the selected files.`,
         action: 'Go to deposit',
       },
       approval: {
@@ -97,7 +99,7 @@ export function WalletNextStep({
     target = 'deposit'
   } else if (readiness.canUpload) {
     title = 'Ready to upload'
-    description = 'Wallet setup complete. Each upload checks its actual funding needs before transferring.'
+    description = `Each upload checks its actual costs and keeps at least ${LOW_STORAGE_RUNWAY_DAYS} days of storage funds available after uploading.`
     action = 'Continue to upload'
     ready = true
   } else {
@@ -134,7 +136,12 @@ export function WalletNextStep({
       key: 'deposit',
       label: 'Funds',
       complete: storageSetup?.depositReady,
-      status: storageSetup?.depositReady ? 'Storage funds available' : 'Storage funds needed',
+      warning: fundsLow,
+      status: fundsLow
+        ? 'Storage funds running low'
+        : storageSetup?.depositReady
+          ? 'Storage funds available'
+          : 'Storage funds needed',
     },
     {
       key: 'approval',
@@ -162,9 +169,9 @@ export function WalletNextStep({
             )}
             <span
               aria-hidden="true"
-              className={`relative flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-medium ${step.complete ? 'bg-emerald-500/10 text-success' : target === step.key ? 'bg-brand-800/15 text-accent' : 'bg-surface-raised text-muted'}`}
+              className={`relative flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-medium ${step.warning ? 'bg-warning-surface text-warning' : step.complete ? 'bg-emerald-500/10 text-success' : target === step.key ? 'bg-brand-800/15 text-accent' : 'bg-surface-raised text-muted'}`}
             >
-              {step.complete ? <Check size={12} /> : index + 1}
+              {step.warning ? <TriangleAlert size={12} /> : step.complete ? <Check size={12} /> : index + 1}
             </span>
             <span className={`text-[11px] ${target === step.key ? 'font-medium text-accent' : 'text-muted'}`}>
               {step.label}

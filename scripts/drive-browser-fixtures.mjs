@@ -131,9 +131,9 @@ export async function prepareBrowserPage(
           functionName: 'accounts',
           result: [
             funding.depositedBalance == null ? (funding.funded ? 10n ** 19n : 0n) : BigInt(funding.depositedBalance),
-            0n,
-            0n,
-            0n,
+            BigInt(funding.lockupCurrent ?? 0),
+            BigInt(funding.lockupRate ?? 0),
+            BigInt(funding.lockupLastSettledAt ?? 0),
           ],
         })
       if (data.startsWith(toFunctionSelector('operatorApprovals(address,address,address)')))
@@ -184,7 +184,8 @@ export async function prepareBrowserPage(
     }
     const reply = (request) => {
       let result = `0x${'0'.repeat(64 * 10)}`
-      if (request.method === 'eth_getBalance') result = '0x1000000000000000000'
+      if (request.method === 'eth_getBalance')
+        result = funding.filBalance == null ? '0x1000000000000000000' : `0x${BigInt(funding.filBalance).toString(16)}`
       if (request.method === 'eth_chainId') result = '0x13a'
       if (request.method === 'eth_blockNumber') result = '0x100'
       if (request.method === 'eth_call') {

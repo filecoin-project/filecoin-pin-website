@@ -3,6 +3,7 @@ import { chromium } from 'playwright'
 import { checkDirectoryTabs } from './check-drive-directory-tabs.mjs'
 import { checkFileAccessErrors } from './check-drive-file-access-errors.mjs'
 import { checkSessionTabs } from './check-drive-session-tabs.mjs'
+import { checkUploadPreflight } from './check-drive-upload-preflight.mjs'
 import { checkUploadTasks } from './check-drive-upload-tasks.mjs'
 import { checkWalletSelection } from './check-drive-wallet-selection.mjs'
 import { prepareBrowserPage, prepareEncryptedBrowserPage } from './drive-browser-fixtures.mjs'
@@ -14,6 +15,7 @@ try {
   if (!process.env.DRIVE_TEST_WALLETCONNECT) {
     await checkFileAccessErrors(browser)
     await checkWalletSelection(browser)
+    await checkUploadPreflight(browser)
     await checkUploadTasks(browser)
   }
   const context = await browser.newContext({ viewport: { width: 1440, height: 1080 } })
@@ -155,9 +157,12 @@ try {
   await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Wallet and Storage')
   await page.getByRole('button', { name: 'Wallet and Storage', exact: true }).click()
   await page
-    .getByText('Wallet setup complete. Each upload checks its actual funding needs before transferring.', {
-      exact: true,
-    })
+    .getByText(
+      'Each upload checks its actual costs and keeps at least 7 days of storage funds available after uploading.',
+      {
+        exact: true,
+      }
+    )
     .waitFor()
   await page.getByRole('button', { name: 'Continue to upload', exact: true }).click()
   await page.getByRole('textbox', { name: 'Upload location', exact: true }).waitFor()

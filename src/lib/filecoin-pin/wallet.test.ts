@@ -4,8 +4,10 @@ const { getPaymentStatusMock } = vi.hoisted(() => ({ getPaymentStatusMock: vi.fn
 
 vi.mock('filecoin-pin/core/payments', () => ({ getPaymentStatus: getPaymentStatusMock }))
 
+import { TIME_CONSTANTS } from '@filoz/synapse-core/utils'
+import { LOW_STORAGE_RUNWAY_DAYS } from './config.ts'
 import type { Synapse } from './synapse.ts'
-import { fetchWalletSnapshot } from './wallet.ts'
+import { fetchWalletSnapshot, storageFundsStatus } from './wallet.ts'
 
 const status = (network: string) => ({
   network,
@@ -16,6 +18,19 @@ const status = (network: string) => ({
   filecoinPayBalance: 0n,
   currentAllowances: {},
 })
+
+it.each([
+  ['needed', 0n, 0n, 1n, 0n],
+  ['needed', 1n, 1n, 1n, 0n],
+  ['low', 100n, 0n, 1n, 100n],
+  ['available', 1n, 0n, 0n, 0n],
+  ['available', 100n, 0n, 1n, BigInt(LOW_STORAGE_RUNWAY_DAYS) * TIME_CONSTANTS.EPOCHS_PER_DAY],
+] as const)(
+  'classifies %s funds from unreserved balance and current charges',
+  (status, availableFunds, debt, lockupRatePerEpoch, runwayInEpochs) => {
+    expect(storageFundsStatus({ availableFunds, debt, lockupRatePerEpoch, runwayInEpochs })).toBe(status)
+  }
+)
 
 beforeEach(() => {
   sessionStorage.clear()

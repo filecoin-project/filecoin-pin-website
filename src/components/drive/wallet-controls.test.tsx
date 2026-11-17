@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeEach, expect, it, vi } from 'vitest'
-import { WalletSetup } from './wallet-controls.tsx'
+import { WalletControls, WalletSetup } from './wallet-controls.tsx'
 
 const state = vi.hoisted(() => ({
   sessionStatus: 'inactive',
@@ -9,10 +9,20 @@ const state = vi.hoisted(() => ({
   storageStatus: 'ready',
   walletStatus: 'ready',
   resume: vi.fn(),
+  busy: false,
+  pending: null as { hash: string; kind: 'deposit' } | null,
 }))
 vi.mock('../../context/browser-wallet-provider.tsx', () => ({
-  useBrowserWallet: () => ({ sessionStatus: state.sessionStatus, session: null, busy: false, network: 'mainnet' }),
+  useBrowserWallet: () => ({
+    sessionStatus: state.sessionStatus,
+    session: null,
+    busy: state.busy,
+    pendingTransaction: state.pending,
+    address: '0x1111111111111111111111111111111111111111',
+    network: 'mainnet',
+  }),
 }))
+vi.mock('../../context/theme-provider.tsx', () => ({ useTheme: () => ({ theme: 'light', toggleTheme: vi.fn() }) }))
 vi.mock('../../hooks/use-filecoin-pin-context.ts', () => ({
   useFilecoinPinContext: () => ({
     synapse: {},
@@ -53,8 +63,27 @@ beforeEach(() => {
     encryptionReady: false,
     storageStatus: 'ready',
     walletStatus: 'ready',
+    busy: false,
+    pending: null,
   })
   state.resume.mockReset()
+})
+
+it('keeps wallet-request progress visible globally before a transaction hash exists', () => {
+  state.busy = true
+  const view = render(<WalletControls />)
+  expect(screen.getByText('Waiting for wallet confirmation…')).toBeTruthy()
+  expect(screen.getByText('Review the request in your wallet. Confirm or cancel it to continue.')).toBeTruthy()
+  expect(screen.queryByRole('link', { name: 'View transaction' })).toBeNull()
+  state.pending = { hash: `0x${'a'.repeat(64)}`, kind: 'deposit' }
+  view.rerender(<WalletControls />)
+  expect(screen.queryByText('Waiting for wallet confirmation…')).toBeNull()
+  expect(screen.getByText('Waiting for transaction confirmation…')).toBeTruthy()
+  expect(screen.getAllByRole('link', { name: 'View transaction' })).toHaveLength(1)
+  state.busy = false
+  state.pending = null
+  view.rerender(<WalletControls />)
+  expect(screen.queryByText('Waiting for transaction confirmation…')).toBeNull()
 })
 
 it('keeps the funding checkpoint paused until every prerequisite is ready', () => {

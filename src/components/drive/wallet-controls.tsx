@@ -103,7 +103,7 @@ export function WalletControls() {
             </>
           )}
         </div>
-        {wallet.pendingTransaction && (
+        {(wallet.busy || wallet.pendingTransaction) && (
           <div className="w-full">
             <div
               className="flex w-full flex-col gap-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 sm:p-5 md:flex-row md:items-center md:gap-6"
@@ -115,35 +115,40 @@ export function WalletControls() {
                 </span>
                 <div className="min-w-0 max-w-3xl space-y-1">
                   <p className="text-sm font-semibold text-foreground">
-                    {wallet.busy
-                      ? 'Waiting for transaction confirmation…'
-                      : 'Confirmation is taking longer than expected'}
+                    {wallet.pendingTransaction
+                      ? wallet.busy
+                        ? 'Waiting for transaction confirmation…'
+                        : 'Confirmation is taking longer than expected'
+                      : 'Waiting for wallet confirmation…'}
                   </p>
                   <p className="text-sm leading-relaxed text-muted">
-                    Your transaction may still confirm. Wait, or use “Speed up” in your wallet if available. Avoid
-                    submitting again.
+                    {wallet.pendingTransaction
+                      ? 'Your transaction may still confirm. Wait, or use “Speed up” in your wallet if available. Avoid submitting again.'
+                      : 'Review the request in your wallet. Confirm or cancel it to continue.'}
                   </p>
                 </div>
               </div>
-              <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 pl-12 md:pl-0">
-                <a
-                  className="inline-flex items-center gap-1 text-sm font-medium text-foreground underline decoration-border underline-offset-4 transition-colors hover:text-accent"
-                  href={`${chains[wallet.network].blockExplorers?.default.url}/tx/${wallet.pendingTransaction.hash}`}
-                  rel="noopener noreferrer"
-                  target="_blank"
-                >
-                  View transaction <ArrowUpRight aria-hidden="true" size={14} />
-                </a>
-                <ButtonBase
-                  className="w-auto"
-                  disabled={wallet.busy || wallet.checkingTransaction}
-                  onClick={wallet.refreshTransaction}
-                  size="sm"
-                  variant="secondary"
-                >
-                  {wallet.checkingTransaction ? 'Checking…' : 'Refresh status'}
-                </ButtonBase>
-              </div>
+              {wallet.pendingTransaction && (
+                <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 pl-12 md:pl-0">
+                  <a
+                    className="inline-flex items-center gap-1 text-sm font-medium text-foreground underline decoration-border underline-offset-4 transition-colors hover:text-accent"
+                    href={`${chains[wallet.network].blockExplorers?.default.url}/tx/${wallet.pendingTransaction.hash}`}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    View transaction <ArrowUpRight aria-hidden="true" size={14} />
+                  </a>
+                  <ButtonBase
+                    className="w-auto"
+                    disabled={wallet.busy || wallet.checkingTransaction}
+                    onClick={wallet.refreshTransaction}
+                    size="sm"
+                    variant="secondary"
+                  >
+                    {wallet.checkingTransaction ? 'Checking…' : 'Refresh status'}
+                  </ButtonBase>
+                </div>
+              )}
             </div>
           </div>
         )}
