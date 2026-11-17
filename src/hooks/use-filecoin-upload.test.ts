@@ -485,6 +485,7 @@ it('restores two-copy uploads after a one-copy result without changing existing 
   expect(prepareMock).toHaveBeenLastCalledWith({
     context: [primary, secondary],
     pieceSizes: [BigInt(outerCarLength)],
+    extraRunwayEpochs: 20160n,
   })
   expect(executeUploadMock.mock.lastCall?.[3].contexts).toEqual([primary, secondary])
   expect(getStoredDataSetIds(scope)).toEqual([44585, 44586])

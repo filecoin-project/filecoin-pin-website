@@ -1,5 +1,5 @@
 import { Root } from '@radix-ui/react-form'
-import { useState } from 'react'
+import { Loader2 } from 'lucide-react'
 import { MAX_FILE_SIZE } from '@/constants/files.ts'
 import { FilePicker } from '../file-picker/index.tsx'
 import { UploadNotes } from '../file-picker/upload-instructions.tsx'
@@ -7,30 +7,32 @@ import { ButtonBase as Button } from '../ui/button/button-base.tsx'
 
 interface DragNDropProps {
   onUpload: (files: File[]) => void
+  files: File[]
+  onFilesChange: (files: File[]) => void
   isUploading?: boolean
+  isChecking?: boolean
 }
 
-export default function DragNDrop({ onUpload, isUploading }: DragNDropProps) {
-  const [files, setFiles] = useState<File[]>([])
-
+export default function DragNDrop({ onUpload, files, onFilesChange, isUploading, isChecking }: DragNDropProps) {
   const fileIsSelected = files.length > 0
-  const buttonIsDisabled = !fileIsSelected || isUploading
+  const busy = isUploading || isChecking
+  const buttonIsDisabled = !fileIsSelected || busy
 
   function uploadFile(e: React.MouseEvent) {
     e.preventDefault() // Prevent form submission
-    if (files.length) {
+    if (files.length && !busy) {
       onUpload(files)
     }
   }
 
   function clearFile(e: React.MouseEvent) {
     e.preventDefault() // Prevent form submission
-    setFiles([])
+    onFilesChange([])
   }
 
   return (
     <Root className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-      <FilePicker disabled={isUploading} files={files} maxSize={MAX_FILE_SIZE} onChange={setFiles} />
+      <FilePicker disabled={busy} files={files} maxSize={MAX_FILE_SIZE} onChange={onFilesChange} />
 
       <UploadNotes />
       <div className="flex justify-end">
@@ -46,15 +48,17 @@ export default function DragNDrop({ onUpload, isUploading }: DragNDropProps) {
             Cancel
           </Button>
           <Button
+            aria-busy={busy}
             className="w-auto min-w-24"
             disabled={buttonIsDisabled}
-            loading={isUploading}
+            loading={busy}
             onClick={uploadFile}
             size="sm"
             type="button"
             variant="primary"
           >
-            {files.length > 1 ? `Upload ${files.length} files` : 'Upload'}
+            {isChecking && <Loader2 aria-hidden="true" className="animate-spin" size={16} />}
+            {isChecking ? 'Checking upload…' : files.length > 1 ? `Upload ${files.length} files` : 'Upload'}
           </Button>
         </div>
       </div>

@@ -1,7 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ setUploading: vi.fn(), refreshWallet: vi.fn(), createCar: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  setUploading: vi.fn(),
+  refreshWallet: vi.fn(),
+  createCar: vi.fn(),
+  synapse: {},
+  ensurePermissions: vi.fn(),
+}))
 const scope = '314:0x1111111111111111111111111111111111111111'
 vi.mock('../../context/browser-wallet-provider.tsx', () => ({
   useBrowserWallet: () => ({
@@ -15,9 +21,11 @@ vi.mock('../../hooks/use-filecoin-pin-context.ts', () => ({
   useFilecoinPinContext: () => ({
     wallet: { status: 'ready', data: { address: scope.slice(4), network: 'mainnet' } },
     storageScope: scope,
-    synapse: {},
+    synapse: mocks.synapse,
+    ensurePermissions: mocks.ensurePermissions,
+    debugParams: { providerId: null, dataSetId: null },
     storageSetup: { status: 'ready', gasReady: true, depositReady: true, approvalReady: true },
-    encryption: { ready: true },
+    encryption: { ready: true, credential: { groupKeyId: 'group', commitment: 'commitment' } },
     refreshWallet: mocks.refreshWallet,
   }),
 }))
@@ -26,6 +34,7 @@ vi.mock('../../lib/filecoin-pin/drive-api.ts', async (original) => ({
   loadDriveFiles: vi.fn().mockResolvedValue([]),
 }))
 vi.mock('../../lib/filecoin-pin/upload-input.ts', () => ({ prepareUploadInput: mocks.createCar }))
+vi.mock('../../lib/filecoin-pin/upload-preflight.ts', () => ({ preflightUpload: vi.fn() }))
 vi.mock('../drive/file-browser.tsx', () => ({
   FileBrowser: ({ onUpload, uploadDisabled }: { onUpload: (location: string) => void; uploadDisabled: boolean }) => (
     <button disabled={uploadDisabled} onClick={() => onUpload('')} type="button">

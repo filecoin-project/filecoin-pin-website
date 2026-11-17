@@ -11,6 +11,7 @@ export function useUploadReadiness() {
     walletStatus: wallet.status,
     hasClient: Boolean(synapse),
     busy: connection.busy || Boolean(connection.pendingTransaction),
+    pendingTransactionKind: connection.pendingTransaction?.kind,
     storage: storageSetup,
     walletError: connection.error,
   })

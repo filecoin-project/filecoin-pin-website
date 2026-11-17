@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   storageStatus: 'ready',
   gasReady: true,
   depositReady: true,
+  fundsStatus: 'available',
   approvalReady: true,
   encryptionReady: true,
   session: {} as { encryption?: object } | null,
@@ -35,6 +36,7 @@ vi.mock('../../hooks/use-filecoin-pin-context.ts', () => ({
       status: state.storageStatus,
       gasReady: state.gasReady,
       depositReady: state.depositReady,
+      fundsStatus: state.fundsStatus,
       approvalReady: state.approvalReady,
     },
   }),
@@ -47,6 +49,7 @@ beforeEach(() => {
     storageStatus: 'ready',
     gasReady: true,
     depositReady: true,
+    fundsStatus: 'available',
     approvalReady: true,
     encryptionReady: true,
     session: {},
@@ -127,6 +130,20 @@ it('offers Continue only when every prerequisite is ready', () => {
   const { proceed } = renderStep()
   fireEvent.click(screen.getByRole('button', { name: 'Continue to upload' }))
   expect(proceed).toHaveBeenCalledOnce()
+})
+
+it('requires restoring the safety balance before continuing uploads', () => {
+  state.fundsStatus = 'low'
+  state.depositReady = false
+  state.storageStatus = 'blocked'
+  const { proceed, review } = renderStep()
+  expect(screen.getByLabelText('Storage funds running low')).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Add funds to resume uploads' })).toBeTruthy()
+  expect(screen.getByText('4 of 5 ready')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Continue to upload' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Go to deposit' }))
+  expect(review).toHaveBeenCalledWith('deposit')
+  expect(proceed).not.toHaveBeenCalled()
 })
 
 it.each(['checking', 'pending', 'busy'])('does not offer another setup action while %s', (kind) => {
