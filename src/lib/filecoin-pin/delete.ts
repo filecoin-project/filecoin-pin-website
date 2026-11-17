@@ -11,12 +11,23 @@ import { acquireContentLock } from './content-lock.ts'
 import { resolveTransactionReceipt } from './transaction-receipt.ts'
 
 /** Hold through the chain operation and its durable directory checkpoints. */
-export async function withFileDeletionLock<T>(scope: string, rootCid: string, operation: () => Promise<T>): Promise<T> {
-  const release = await acquireContentLock(scope, rootCid)
+export async function withFileDeletionLock<T>(
+  scope: string,
+  rootCid: string,
+  operation: () => Promise<T>,
+  contentRootCid?: string
+): Promise<T> {
+  const releases: Array<() => Promise<void>> = []
   try {
+    // Keep the public identity locked too: independently discovered records
+    // may not yet know the plaintext identity.
+    for (const root of [
+      ...new Set(rootCid ? [rootCid, contentRootCid].filter((cid): cid is string => !!cid) : ['']),
+    ].sort())
+      releases.push(await acquireContentLock(scope, root))
     return await operation()
   } finally {
-    await release()
+    for (const release of releases.reverse()) await release()
   }
 }
 

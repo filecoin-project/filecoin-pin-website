@@ -271,6 +271,23 @@ describe('encrypted piece retrieval', () => {
     }
   }
 
+  it.each([false, true])(
+    'rejects an invalid encrypted envelope without saving (imported CAR: %s)',
+    async (importedCar) => {
+      const outer = await createCarFromFile(new File(['invalid FEE envelope'], 'encrypted.fee'))
+      const save = captureSaves()
+      try {
+        await expect(
+          downloadFile(synapseFor(outer.carBytes), piece({ cid: outer.rootCid.toString(), importedCar }))
+        ).rejects.toThrow(/invalid or unsupported encryption envelope/)
+        expect(save.anchor.click).not.toHaveBeenCalled()
+        expect(save.blobs).toHaveLength(0)
+      } finally {
+        save.restore()
+      }
+    }
+  )
+
   it.each(['missing child', 'malformed root'] as const)(
     'surfaces a %s instead of saving ciphertext or offering a public share',
     async (damage) => {

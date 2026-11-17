@@ -319,6 +319,8 @@ export async function downloadFile(
     saveBlob(blob, `${displayFileName(file)}${blob.type === 'application/zip' ? '.zip' : ''}`)
     return target.root
   }
+  if (file.encrypted)
+    throw new Error('The encrypted upload has an invalid or unsupported encryption envelope. No file was saved.')
   if (file.importedCar) {
     saveBlob(new Blob([new Uint8Array(bytes).buffer], { type: CAR_CONTENT_TYPE }), displayFileName(file))
     return

@@ -57,22 +57,29 @@ export function useFileDeletion() {
     clearDeletionError(selected.pieceCid)
     if (running.current.size === 1) connection.setDeleting(true)
     try {
-      await withFileDeletionLock(storageScope, selected.cid, async () => {
-        // Retry retained checkpoints before planning from the latest locked directory.
-        await mutateHistory((current) => current)
-        if (getLatestHistory().some((record) => record.pieceCid === selected.pieceCid && blocksFileDeletion(record)))
-          throw new Error('This content has an unfinished upload. Check its status before deleting.')
-        await ensurePermissions()
-        const { aliasIds, file } = planDeletion(getLatestHistory(), selected)
-        await mutateHistory((current) =>
-          current.map((record) => (aliasIds.has(record.id) && !record.deletion ? { ...record, deletion: {} } : record))
-        )
-        await scheduleFileDeletion(synapse, file, async (_changed, change) => {
+      await withFileDeletionLock(
+        storageScope,
+        selected.cid,
+        async () => {
+          // Retry retained checkpoints before planning from the latest locked directory.
+          await mutateHistory((current) => current)
+          if (getLatestHistory().some((record) => record.pieceCid === selected.pieceCid && blocksFileDeletion(record)))
+            throw new Error('This content has an unfinished upload. Check its status before deleting.')
+          await ensurePermissions()
+          const { aliasIds, file } = planDeletion(getLatestHistory(), selected)
           await mutateHistory((current) =>
-            current.map((record) => (aliasIds.has(record.id) ? applyDeletionUpdate(record, change) : record))
+            current.map((record) =>
+              aliasIds.has(record.id) && !record.deletion ? { ...record, deletion: {} } : record
+            )
           )
-        })
-      })
+          await scheduleFileDeletion(synapse, file, async (_changed, change) => {
+            await mutateHistory((current) =>
+              current.map((record) => (aliasIds.has(record.id) ? applyDeletionUpdate(record, change) : record))
+            )
+          })
+        },
+        selected.contentRootCid
+      )
       return true
     } catch (cause) {
       if (cause instanceof DeletionConfirmationPendingError) return false

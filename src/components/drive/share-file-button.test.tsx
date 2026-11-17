@@ -387,16 +387,15 @@ it('discards cached links when switching scope and switching back', async () => 
   expect(mocks.mint).toHaveBeenCalledTimes(2)
 })
 
-it.each(['reservation', 'lookup', 'reset'] as const)(
+it.each(['reservation', 'lookup'] as const)(
   'keeps sharing usable and reports an indexing %s failure',
   async (failure) => {
     mocks.mint.mockReset().mockResolvedValue('https://viewer.example/#test')
     mocks.ipni.mockReset().mockResolvedValue(true)
     const reserve = vi.spyOn(indexing, 'reserveIndexingCheck').mockResolvedValue({ attempts: 1, nextAt: 0 })
-    const reset = vi.spyOn(indexing, 'resetIndexingChecks').mockResolvedValue(undefined)
+    vi.spyOn(indexing, 'resetIndexingChecks').mockResolvedValue(undefined)
     if (failure === 'reservation') reserve.mockRejectedValueOnce(new Error('Storage unavailable'))
     if (failure === 'lookup') mocks.ipni.mockRejectedValueOnce(new Error('Network unavailable'))
-    if (failure === 'reset') reset.mockRejectedValueOnce(new Error('Storage unavailable'))
     render(<ShareFileButton file={{ ...file, encrypted: true, ipfsIndexed: false }} />)
     fireEvent.click(screen.getByRole('button', { name: 'Share' }))
     await screen.findByText(/Availability couldn’t be checked/)
@@ -407,3 +406,27 @@ it.each(['reservation', 'lookup', 'reset'] as const)(
     expect(mocks.mint).toHaveBeenCalledOnce()
   }
 )
+
+it('preserves a successful availability check when background checkpoint reset fails', async () => {
+  mocks.mint.mockReset().mockResolvedValue('https://viewer.example/#test')
+  mocks.ipni.mockReset().mockResolvedValue(true)
+  vi.spyOn(indexing, 'reserveIndexingCheck').mockResolvedValue({ attempts: 1, nextAt: 0 })
+  const reset = vi
+    .spyOn(indexing, 'resetIndexingChecks')
+    .mockReset()
+    .mockRejectedValue(new Error('Storage unavailable'))
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+  try {
+    render(<ShareFileButton file={{ ...file, encrypted: true, ipfsIndexed: false }} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+    await screen.findByRole('textbox')
+    await waitFor(() => expect(warning).toHaveBeenCalledOnce())
+    expect(reset).toHaveBeenCalledOnce()
+    expect(screen.queryByText(/Availability couldn’t be checked|hasn’t appeared/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Close share' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+    expect(mocks.ipni).toHaveBeenCalledOnce()
+  } finally {
+    warning.mockRestore()
+  }
+})

@@ -23,6 +23,7 @@ vi.mock('../context/browser-wallet-provider.tsx', () => ({
 }))
 
 import { UploadHistoryProvider } from '../context/upload-history-context.tsx'
+import { acquireContentLock } from '../lib/filecoin-pin/content-lock.ts'
 import { getCachedPieces, setCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import type { DatasetPiece } from './use-dataset-pieces.ts'
 import { useFileDeletion } from './use-file-deletion.ts'
@@ -123,4 +124,20 @@ it('rechecks saved provider submissions under the content lock before permitting
   expect(result.current.deletionErrors.piece).toContain('unfinished upload')
   expect(mocks.resolve).not.toHaveBeenCalled()
   expect(getCachedPieces('314:0xabc')?.[0].deletion).toBeUndefined()
+})
+
+it('prevents encrypted deletion while the plaintext identity is uploading', async () => {
+  const encrypted = { ...file, encrypted: true, contentRootCid: 'inner-root', deletion: {} }
+  setCachedPieces('314:0xabc', [encrypted])
+  const { result } = renderHook(() => useFileDeletion(), { wrapper: UploadHistoryProvider })
+  await act(async () => undefined)
+  const release = await acquireContentLock('314:0xabc', 'inner-root')
+  try {
+    await act(async () => {
+      expect(await result.current.deleteFile(encrypted)).toBe(false)
+    })
+    expect(result.current.deletionErrors.piece).toMatch(/Retry after/)
+  } finally {
+    await release()
+  }
 })

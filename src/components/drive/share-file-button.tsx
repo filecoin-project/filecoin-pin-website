@@ -89,7 +89,13 @@ export function ShareFileButton({
             if (controller.signal.aborted) return
             setIndexed({ key: shareKey, onIpni })
             // Let the background watcher re-confirm and update the file row.
-            if (onIpni) await resetIndexingChecks(storageScope, shareRootCid)
+            if (onIpni) {
+              try {
+                await resetIndexingChecks(storageScope, shareRootCid)
+              } catch (cause) {
+                console.warn('Unable to reset background indexing checks after successful lookup.', cause)
+              }
+            }
           })
           .catch(() => {
             if (!controller.signal.aborted) setIndexed({ key: shareKey, onIpni: undefined })
