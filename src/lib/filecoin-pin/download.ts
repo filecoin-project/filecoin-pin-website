@@ -21,6 +21,7 @@ import {
   ownerKeyResolver,
   ShareCredentialError,
 } from './encryption.ts'
+import { contentReader } from './ipfs-content.ts'
 
 /** Stages surfaced to the download queue; 'unlocking' marks the owner-wallet signature fallback. */
 export type DownloadStage = 'downloading' | 'preparing' | 'unlocking'
@@ -117,16 +118,14 @@ async function carRootFile(reader: CarReader) {
   if (entry.type === 'file' || entry.type === 'raw' || entry.type === 'identity') return entry
 }
 
-async function detectEnvelope(entry: NonNullable<Awaited<ReturnType<typeof carRootFile>>>) {
-  // The exporter yields no file content for these legacy entry types.
-  if (entry.type === 'file' && (entry.unixfs.type === 'metadata' || entry.unixfs.type === 'symlink')) return false
-  return isEncryptionEnvelope({
+function envelopePrefix(entry: NonNullable<Awaited<ReturnType<typeof carRootFile>>>): fee.RandomAccessSource {
+  return {
     size: Number(entry.size),
     async openRange(offset, length) {
       // Legacy UnixFS entries with inline data can report inaccurate nonzero ranges.
       // If the parser needs more than the prefix, use the full extraction below.
       if (offset > 0) throw new Error('Envelope detection needs more than the file prefix')
-      const chunks = entry.content({ length })
+      const chunks = entry.content({ length, blockReadConcurrency: 1 })
       return new ReadableStream<Uint8Array>({
         async pull(controller) {
           const next = await chunks.next()
@@ -138,7 +137,13 @@ async function detectEnvelope(entry: NonNullable<Awaited<ReturnType<typeof carRo
         },
       })
     },
-  })
+  }
+}
+
+async function detectEnvelope(entry: NonNullable<Awaited<ReturnType<typeof carRootFile>>>) {
+  // The exporter yields no file content for these legacy entry types.
+  if (entry.type === 'file' && (entry.unixfs.type === 'metadata' || entry.unixfs.type === 'symlink')) return false
+  return isEncryptionEnvelope(envelopePrefix(entry))
 }
 
 export async function carRootFileBytes(
@@ -186,22 +191,19 @@ async function downloadEnvelope(reader: CarReader, file: DatasetPiece): Promise<
   if (bytes && (await isEncryptionEnvelope(bytes))) return bytes
 }
 
-export async function fetchPieceCar(synapse: Synapse | null, file: DatasetPiece): Promise<Uint8Array> {
-  return (await fetchPieceCarWithReader(synapse, file)).bytes
-}
-
 /**
  * Fetch a piece's CAR from any dataset context or storage-provider endpoint
  * holding a copy. A copy whose root does not match the record falls through to
  * the next copy; content processing happens once, after retrieval.
  */
-async function fetchPieceCarWithReader(synapse: Synapse | null, file: DatasetPiece) {
+async function fetchPieceCarWithReader(synapse: Synapse | null, file: DatasetPiece, signal?: AbortSignal) {
   const attempts: (() => Promise<Uint8Array>)[] = []
   if (synapse)
     for (const datasetId of file.datasetIds ?? [file.datasetId]) {
       if (!datasetId) continue
       attempts.push(async () => {
         const context = await synapse.storage.createContext({ dataSetId: BigInt(datasetId) })
+        signal?.throwIfAborted()
         return context.download({ pieceCid: file.pieceCid, withCDN: false })
       })
     }
@@ -220,19 +222,23 @@ async function fetchPieceCarWithReader(synapse: Synapse | null, file: DatasetPie
       downloadAndValidate({
         url: new URL(`/piece/${encodeURIComponent(file.pieceCid)}`, serviceURL).href,
         expectedPieceCid: file.pieceCid,
+        signal,
       })
     )
   }
   const expectedRoot = file.cid
   let failure: unknown
   for (const retrieve of attempts) {
+    signal?.throwIfAborted()
     try {
       const bytes = await retrieve()
+      signal?.throwIfAborted()
       const reader = await CarReader.fromBytes(bytes)
       if (!(await reader.getRoots()).some((cid) => cid.toString() === expectedRoot))
         throw new Error('Downloaded CAR does not contain the expected root CID')
       return { bytes, reader }
     } catch (cause) {
+      signal?.throwIfAborted()
       failure = cause
     }
   }
@@ -363,14 +369,7 @@ export async function encryptedPieceShareLink(
   signal?: AbortSignal
 ): Promise<string> {
   signal?.throwIfAborted()
-  const bytes = await fetchPieceCar(synapse, file)
-  const envelope = await carRootFileBytes(bytes)
-  if (!envelope || !(await isEncryptionEnvelope(envelope))) {
-    if (file.encrypted) throw new Error('The encrypted upload has an invalid or unsupported encryption envelope.')
-    throw new Error('This record is not an encrypted upload.')
-  }
-  signal?.throwIfAborted()
-  const info = await fee.parse(envelope)
+  const info = await readShareEnvelope(synapse, file, signal)
   signal?.throwIfAborted()
   const appMetadata = info.appMetadata as Record<string, unknown>
   if (credentials.session) {
@@ -397,4 +396,29 @@ export async function encryptedPieceShareLink(
     appMetadata,
     signal,
   })
+}
+
+async function readShareEnvelope(synapse: Synapse | null, file: DatasetPiece, signal?: AbortSignal) {
+  try {
+    const entry = await contentReader(file, signal ?? new AbortController().signal).entry()
+    if (entry.type === 'raw' || entry.type === 'identity' || entry.type === 'file') {
+      return await fee.parse(envelopePrefix(entry))
+    }
+  } catch {
+    // Older providers may not serve raw IPFS blocks. Keep piece retrieval available.
+    signal?.throwIfAborted()
+  }
+  const { reader } = await fetchPieceCarWithReader(synapse, file, signal)
+  signal?.throwIfAborted()
+  const entry = await carRootFile(reader)
+  const envelope = entry && (await readRootFile(entry))
+  if (envelope) {
+    try {
+      return await fee.parse(envelope)
+    } catch (cause) {
+      if (!(cause instanceof fee.errors.MalformedEnvelopeError)) throw cause
+    }
+  }
+  if (file.encrypted) throw new Error('The encrypted upload has an invalid or unsupported encryption envelope.')
+  throw new Error('This record is not an encrypted upload.')
 }

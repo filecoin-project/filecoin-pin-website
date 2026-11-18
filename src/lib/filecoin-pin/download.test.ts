@@ -743,6 +743,77 @@ describe('encrypted piece retrieval', () => {
     ).rejects.toThrow(/not an encrypted upload/i)
   })
 
+  it('shares a multi-block encrypted file using only the verified root and first file block', async () => {
+    const inner = await createCarFromFile(new File([new Uint8Array(2 * 1024 * 1024)], 'large.bin'))
+    const { sessionPrivateKey, credential, envelope, outer } = await encrypted(inner.carBytes)
+    const reader = await CarReader.fromBytes(outer.carBytes)
+    const rootBlock = await reader.get(outer.rootCid)
+    if (!rootBlock) throw new Error('Fixture root block missing')
+    const firstChild = dagPb.decode(rootBlock.bytes).Links[0].Hash
+    const fetchBlock = vi.fn(async (input: URL) => {
+      const cid = CID.parse(input.pathname.split('/').at(-1) ?? '')
+      const block = await reader.get(cid)
+      return new Response(block ? new Uint8Array(block.bytes) : null, {
+        status: block ? 200 : 404,
+        headers: { 'content-type': 'application/vnd.ipld.raw' },
+      })
+    })
+    vi.stubGlobal('fetch', fetchBlock)
+    try {
+      const link = await encryptedPieceShareLink(
+        null,
+        piece({ cid: outer.rootCid.toString(), serviceURL: 'https://sp.example' }),
+        { session: { privateKey: sessionPrivateKey, credential } }
+      )
+      expect(fetchBlock.mock.calls.map(([url]) => url.pathname)).toEqual([
+        `/ipfs/${outer.rootCid}`,
+        `/ipfs/${firstChild}`,
+      ])
+      const fragment = link.split('#')[1]
+      const params = new URLSearchParams(fragment.slice(`v1/${outer.rootCid}&`.length))
+      const throwaway = bytesToHex(base64url.baseDecode(params.get('k')?.slice('fak1_'.length) ?? ''))
+      const grant = decodeGrant(base64url.baseDecode(params.get('d') ?? ''))
+      const key = await unwrapWith(throwaway, grant)
+      const { appMetadata } = await fee.parse(envelope)
+      const plaintext = await decryptEnvelope(envelope, () => keyForEnvelope(key, appMetadata as never, grant))
+      expect(Buffer.compare(plaintext, inner.carBytes)).toBe(0)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('cancels the direct piece fallback when sharing is cancelled', async () => {
+    const { calculate } = await import('@filoz/synapse-core/piece')
+    const inner = await createCarFromFile(new File(['payload'], 'file.txt'))
+    const { outer } = await encrypted(inner.carBytes)
+    const pieceCid = (await calculate(outer.carBytes)).toString()
+    const controller = new AbortController()
+    let fallbackRequest: Request | undefined
+    vi.stubGlobal('fetch', async (request: URL | Request) => {
+      if (!(request instanceof Request)) return new Response(null, { status: 404 })
+      fallbackRequest = request
+      return new Promise<Response>((_resolve, reject) => {
+        request.signal.addEventListener('abort', () => reject(request.signal.reason), { once: true })
+      })
+    })
+    try {
+      const sharing = encryptedPieceShareLink(
+        null,
+        piece({ cid: outer.rootCid.toString(), pieceCid, serviceURL: 'https://sp.example' }),
+        {},
+        controller.signal
+      )
+      const rejected = expect(sharing).rejects.toMatchObject({ name: 'AbortError' })
+      await vi.waitFor(() => expect(fallbackRequest?.url).toContain('/piece/'))
+      controller.abort()
+      await rejected
+      expect(fallbackRequest?.signal.aborted).toBe(true)
+    } finally {
+      controller.abort()
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('mints a share link from the owner wallet alone when no grant exists', async () => {
     const inner = await createCarFromFile(new File(['no grant here'], 'solo.txt'))
     const { credential, envelope, outer } = await encrypted(inner.carBytes)
