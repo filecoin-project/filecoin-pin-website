@@ -10,7 +10,7 @@ import { DEFAULT_STORAGE_COPIES } from '../lib/filecoin-pin/config.ts'
 import { acquireContentLock } from '../lib/filecoin-pin/content-lock.ts'
 import { driveMetadataLabel, validateDriveMetadata } from '../lib/filecoin-pin/drive-metadata.ts'
 import { buildEncryptedPayload, wrapCarPayload } from '../lib/filecoin-pin/encrypted-payload.ts'
-import { encryptCar, encryptedDataSetMetadata } from '../lib/filecoin-pin/encryption.ts'
+import { encryptCarFile, encryptedDataSetMetadata } from '../lib/filecoin-pin/encryption.ts'
 import { createFreshUploadContexts } from '../lib/filecoin-pin/fresh-contexts.ts'
 import { ensureSessionKeyPermissions } from '../lib/filecoin-pin/synapse.ts'
 import type { UploadProviderCheckpoint } from '../lib/filecoin-pin/upload-checkpoint.ts'
@@ -165,24 +165,25 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           },
         })
 
-        if (carResult.isDirectory && carResult.carBytes.length > MAX_FILE_SIZE)
+        const { isDirectory, importedCar } = carResult
+        if (isDirectory && carResult.carBytes.length > MAX_FILE_SIZE)
           throw new Error('The packed folder exceeds the 200 MB browser upload limit.')
 
         if (!encryption.ready)
           throw new UploadSetupError('encryption', 'Add your encryption key in Wallet setup before uploading.')
 
         let dataSetMetadata: Record<string, string> = {}
-        let outerCar = carResult
+        let outerCar: Pick<typeof carResult, 'carBytes' | 'rootCid'> = carResult
         let innerRoot = carResult.rootCid.toString()
         if (encrypt) {
           dataSetMetadata = encryptedDataSetMetadata(encryption.credential)
           // Keep the CLI/viewer-compatible payload inside the encrypted envelope.
-          const payload = carResult.importedCar
+          const payload = importedCar
             ? await buildEncryptedPayload({ kind: 'car', carBytes: carResult.carBytes, name: file.name })
             : await wrapCarPayload(carResult, file.name)
-          const envelope = await encryptCar(encryption.sessionPrivateKey, encryption.credential, payload.carBytes)
-          outerCar = { ...carResult, ...(await createCarFromFile(new File([envelope as BlobPart], 'encrypted.fee'))) }
+          const envelope = await encryptCarFile(encryption.sessionPrivateKey, encryption.credential, payload.carBytes)
           innerRoot = payload.rootCid
+          outerCar = await createCarFromFile(envelope)
         }
         if (outerCar.carBytes.length > MAX_FILE_SIZE)
           throw new Error(`The ${encrypt ? 'encrypted' : 'packed'} upload exceeds the 200 MB browser upload limit.`)
@@ -192,8 +193,8 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           currentCid: rootCid,
           contentRootCid: encrypt ? innerRoot : undefined,
           encrypted: encrypt,
-          importedCar: carResult.importedCar,
-          isDirectory: carResult.isDirectory,
+          importedCar,
+          isDirectory,
         }))
 
         updateStepState('creating-car', { status: 'completed', progress: 100 })
@@ -256,8 +257,8 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           logger,
           contextId: `upload-${Date.now()}`,
           pieceMetadata: {
-            label: driveMetadataLabel(file.name, carResult.isDirectory),
-            [carResult.importedCar ? 'carPath' : 'path']: folderPath,
+            label: driveMetadataLabel(file.name, isDirectory),
+            [importedCar ? 'carPath' : 'path']: folderPath,
           },
           onProgress: (event) => {
             sawUploadProgress = true

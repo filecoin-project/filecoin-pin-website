@@ -13,6 +13,7 @@ import {
   decryptEnvelope,
   defaultGroupKeyId,
   encryptCar,
+  encryptCarFile,
   grantKeyResolver,
   isEncryptionEnvelope,
   issueEncryptionCredential,
@@ -140,6 +141,17 @@ describe('encryptCar / decryptEnvelope', () => {
     expect(envelope).not.toEqual(innerCar)
     const plaintext = await decryptEnvelope(envelope, grantKeyResolver(sessionPrivateKey, credential))
     expect(plaintext).toEqual(innerCar)
+  })
+
+  it('writes an upload envelope that decrypts byte-exact across input chunks', async () => {
+    const { sessionPrivateKey, credential } = await setup()
+    const bytes = Uint8Array.from({ length: 160 * 1024 }, (_, index) => index % 251)
+    const envelope = await encryptCarFile(sessionPrivateKey, credential, bytes)
+    const plaintext = await decryptEnvelope(
+      new Uint8Array(await envelope.arrayBuffer()),
+      grantKeyResolver(sessionPrivateKey, credential)
+    )
+    expect(Buffer.compare(plaintext, bytes)).toBe(0)
   })
 
   it('produces a fresh ciphertext per upload (new salt, new key)', async () => {

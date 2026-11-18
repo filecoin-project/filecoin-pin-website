@@ -366,10 +366,19 @@ export async function checkUploadTasks(browser) {
           !file.encrypted
       )
     )
+    const publicRow = page.getByRole('row').filter({
+      has: page.getByRole('button', { name: 'public.txt', exact: true }),
+    })
+    const [publicDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      publicRow.getByRole('button', { name: 'Download', exact: true }).click(),
+    ])
+    assert.equal(publicDownload.suggestedFilename(), 'public.txt')
+    assert.equal(await readFile(await publicDownload.path(), 'utf8'), 'public.txt original bytes')
     await page.screenshot({ path: '/tmp/filecoin-drive-public-upload.png', fullPage: true })
     assert.deepEqual(errors, [])
     console.log(
-      'Upload task browser checks passed: encryption setup and signatures, encrypted envelopes, public plaintext uploads and default privacy reset, decrypted file and folder ZIP downloads, directory labels, consecutive uploads and reload recovery.'
+      'Upload task browser checks passed: encryption setup and signatures, encrypted envelopes, public plaintext upload and download, default privacy reset, decrypted file and folder ZIP downloads, directory labels, consecutive uploads and reload recovery.'
     )
   } finally {
     await context.close()

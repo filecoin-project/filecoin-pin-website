@@ -26,7 +26,8 @@ vi.mock('../lib/filecoin-pin/upload-input.ts', () => ({
 // through and the outer root mirrors the inner one, keeping cid assertions stable.
 vi.mock('../lib/filecoin-pin/encryption.ts', async (original) => ({
   ...(await original<object>()),
-  encryptCar: async (_key: string, _credential: unknown, bytes: Uint8Array) => bytes,
+  encryptCarFile: async (_key: string, _credential: unknown, bytes: Uint8Array) =>
+    new File([bytes as BlobPart], 'encrypted.fee'),
 }))
 vi.mock('../lib/filecoin-pin/encrypted-payload.ts', () => ({
   wrapCarPayload: async (base: { carBytes: Uint8Array; rootCid: { toString(): string } }) => ({
