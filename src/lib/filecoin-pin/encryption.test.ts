@@ -13,6 +13,7 @@ import {
   decryptEnvelope,
   defaultGroupKeyId,
   encryptCar,
+  encryptCarFile,
   grantKeyResolver,
   isEncryptionEnvelope,
   issueEncryptionCredential,
@@ -140,6 +141,19 @@ describe('encryptCar / decryptEnvelope', () => {
     expect(envelope).not.toEqual(innerCar)
     const plaintext = await decryptEnvelope(envelope, grantKeyResolver(sessionPrivateKey, credential))
     expect(plaintext).toEqual(innerCar)
+  })
+
+  it('writes an upload envelope that decrypts byte-exact and rejects an oversized envelope', async () => {
+    const { sessionPrivateKey, credential } = await setup()
+    const envelope = await encryptCarFile(sessionPrivateKey, credential, innerCar, 200_000_000)
+    const plaintext = await decryptEnvelope(
+      new Uint8Array(await envelope.arrayBuffer()),
+      grantKeyResolver(sessionPrivateKey, credential)
+    )
+    expect(plaintext).toEqual(innerCar)
+    await expect(encryptCarFile(sessionPrivateKey, credential, innerCar, envelope.size - 1)).rejects.toThrow(
+      'The encrypted upload exceeds the 200 MB browser upload limit.'
+    )
   })
 
   it('produces a fresh ciphertext per upload (new salt, new key)', async () => {

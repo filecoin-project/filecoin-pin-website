@@ -170,6 +170,42 @@ export async function encryptCar(
   credential: EncryptionCredential,
   innerCar: Uint8Array
 ): Promise<Uint8Array> {
+  return withEncryptedCar(sessionPrivateKey, credential, innerCar, readStreamBytes)
+}
+
+export async function encryptCarFile(
+  sessionPrivateKey: Hex,
+  credential: EncryptionCredential,
+  innerCar: Uint8Array,
+  maxSize: number
+): Promise<File> {
+  return withEncryptedCar(sessionPrivateKey, credential, innerCar, async (stream) => {
+    const chunks: BlobPart[] = []
+    const reader = stream.getReader()
+    let size = 0
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) return new File(chunks, 'encrypted.fee')
+        size += value.byteLength
+        if (size > maxSize) {
+          await reader.cancel()
+          throw new Error('The encrypted upload exceeds the 200 MB browser upload limit.')
+        }
+        chunks.push(value as BlobPart)
+      }
+    } finally {
+      reader.releaseLock()
+    }
+  })
+}
+
+async function withEncryptedCar<T>(
+  sessionPrivateKey: Hex,
+  credential: EncryptionCredential,
+  innerCar: Uint8Array,
+  consume: (stream: ReadableStream<Uint8Array>) => Promise<T>
+): Promise<T> {
   const grant = decodeGrant(base64.baseDecode(credential.grant))
   const node = await unwrapWith(sessionPrivateKey, grant)
   try {
@@ -177,12 +213,24 @@ export async function encryptCar(
     const cek = pieceKey(node, salt)
     const appMetadata = pieceMetadata({ owner: credential.owner, keyspace: credential.groupKeyId }, { salt })
     try {
-      // fee.encrypt()'s stream imports cek lazily on its first pull(), copying
-      // it into an opaque CryptoKey; safe to wipe only once the stream (fully
-      // drained below) has actually started and consumed it.
-      return await throughStream(innerCar, {
-        ...fee.encrypt({ cek, appMetadata, contentLength: innerCar.byteLength, contentType: CAR_CONTENT_TYPE }),
+      let offset = 0
+      const plaintext = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (offset === innerCar.length) {
+            controller.close()
+            return
+          }
+          const end = Math.min(offset + 64 * 1024, innerCar.length)
+          controller.enqueue(innerCar.subarray(offset, end))
+          offset = end
+        },
       })
+      // The stream imports the key lazily, so retain it until consumption finishes.
+      return await consume(
+        plaintext.pipeThrough(
+          fee.encrypt({ cek, appMetadata, contentLength: innerCar.byteLength, contentType: CAR_CONTENT_TYPE })
+        )
+      )
     } finally {
       cek.fill(0)
     }
@@ -192,7 +240,7 @@ export async function encryptCar(
 }
 
 /** Malformed syntax returns false; unsupported schemes and unexpected failures propagate. */
-export async function isEncryptionEnvelope(bytes: Uint8Array): Promise<boolean> {
+export async function isEncryptionEnvelope(bytes: Uint8Array | fee.RandomAccessSource): Promise<boolean> {
   try {
     await fee.parse(bytes)
     return true
