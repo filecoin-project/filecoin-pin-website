@@ -3,12 +3,17 @@ import { beforeEach, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   pending: null as object | null,
+  preflight: vi.fn(),
+  toastError: vi.fn(),
   prepare: vi.fn(),
   execute: vi.fn(),
   setUploading: vi.fn(),
   refresh: vi.fn(),
   removalError: vi.fn(),
+  lastRoot: '',
 }))
+vi.mock('../lib/filecoin-pin/upload-preflight.ts', () => ({ preflightUpload: mocks.preflight }))
+vi.mock('../utils/toast.tsx', () => ({ toast: { error: mocks.toastError, warning: vi.fn() } }))
 vi.mock('../lib/filecoin-pin/drive-api.ts', async (original) => ({
   ...(await original<object>()),
   loadDriveFiles: vi.fn().mockResolvedValue([]),
@@ -18,19 +23,38 @@ vi.mock('filecoin-pin/core/payments', () => ({
   checkFILBalance: vi.fn().mockResolvedValue({ balance: 10n ** 18n, isCalibnet: false }),
   validateGasRequirement: vi.fn().mockReturnValue({ isValid: true }),
 }))
-vi.mock('filecoin-pin/core/upload', () => ({
-  executeUpload: mocks.execute,
-  checkUploadReadiness: vi.fn().mockResolvedValue({ status: 'ready' }),
-}))
+vi.mock('filecoin-pin/core/upload', () => ({ executeUpload: mocks.execute }))
 vi.mock('../lib/filecoin-pin/upload-input.ts', () => ({
-  prepareUploadInput: async (file: File) => ({
-    rootCid: {
-      toString: () =>
-        file.name === 'first.txt'
-          ? 'bafkreigh2akiscaildcgck5x5wqlooqkztdxqv5t5uwmybnv5brkw4zj3m'
-          : 'bafkreig4nl6nqu64xpwqfimx5bwhcntmpbgbjnly7dzs6u6zkeqfkimtfe',
-    },
-    carBytes: new Uint8Array([1]),
+  prepareUploadInput: async (file: File) => {
+    mocks.lastRoot =
+      file.name === 'first.txt'
+        ? 'bafkreigh2akiscaildcgck5x5wqlooqkztdxqv5t5uwmybnv5brkw4zj3m'
+        : 'bafkreig4nl6nqu64xpwqfimx5bwhcntmpbgbjnly7dzs6u6zkeqfkimtfe'
+    return { rootCid: { toString: () => mocks.lastRoot }, carBytes: new Uint8Array([1]) }
+  },
+}))
+// These suites exercise queueing/checkpoints, not the envelope format (covered
+// by use-filecoin-upload.test.ts with real crypto): encryption passes bytes
+// through and the outer root mirrors the inner one, keeping cid assertions stable.
+vi.mock('../lib/filecoin-pin/encryption.ts', async (original) => ({
+  ...(await original<object>()),
+  encryptCarFile: async (_key: string, _credential: unknown, bytes: Uint8Array) =>
+    new File([bytes as BlobPart], 'encrypted.fee'),
+}))
+vi.mock('../lib/filecoin-pin/encrypted-payload.ts', () => ({
+  wrapCarPayload: async (base: { carBytes: Uint8Array; rootCid: { toString(): string } }) => ({
+    carBytes: base.carBytes,
+    rootCid: base.rootCid.toString(),
+  }),
+  buildEncryptedPayload: async (input: { carBytes: Uint8Array }) => ({
+    carBytes: input.carBytes,
+    rootCid: mocks.lastRoot,
+  }),
+}))
+vi.mock('filecoin-pin/core/unixfs', () => ({
+  createCarFromFile: async (file: File) => ({
+    rootCid: { toString: () => mocks.lastRoot },
+    carBytes: new Uint8Array(await file.arrayBuffer()),
   }),
 }))
 vi.mock('../lib/filecoin-pin/fresh-contexts.ts', () => ({
@@ -51,6 +75,7 @@ vi.mock('./browser-wallet-provider.tsx', () => ({
 }))
 
 import { acquireContentLock } from '../lib/filecoin-pin/content-lock.ts'
+import { UploadFundingRequired } from '../lib/filecoin-pin/upload-funding.ts'
 import { getCachedPieces, setCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import { UploadHistoryProvider, useUploadHistory } from './upload-history-context.tsx'
 import { UploadTasksProvider, useUploadTasks } from './upload-tasks-context.tsx'
@@ -64,6 +89,16 @@ const context = {
   ensurePermissions: async () => undefined,
   addDataSetId: vi.fn(),
   debugParams: { providerId: null, dataSetId: null },
+  encryption: {
+    ready: true,
+    sessionPrivateKey: `0x${'1'.repeat(64)}`,
+    credential: {
+      grant: 'mGrant',
+      groupKeyId: `0x${'a'.repeat(32)}`,
+      commitment: `v1.${'b'.repeat(32)}`,
+      owner: scope.slice(4).toLowerCase(),
+    },
+  },
 }
 const pieceCid = 'bafkzcibcd4bdomn3tgwgrh3g532zopskstnbrd2n3sxfqbze7rxt7vqn7veigmy'
 type Operation = {
@@ -78,6 +113,9 @@ function Harness() {
   const { history, mutateHistory } = useUploadHistory()
   return (
     <>
+      <button onClick={() => void tasks.start(new File(['public'], 'public.txt'), '', undefined, false)} type="button">
+        Public
+      </button>
       <button onClick={() => void tasks.start(new File(['first'], 'first.txt'), 'one')} type="button">
         First
       </button>
@@ -139,12 +177,14 @@ function Harness() {
         Remove all records
       </button>
       <output>{history.map((file) => `${file.fileName}:${file.upload?.phase}:${file.copyCount}`).join('|')}</output>
+      <span data-testid="upload-preparation">{tasks.preparing ? 'checking' : 'idle'}</span>
     </>
   )
 }
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.pending = null
+  mocks.preflight.mockReset().mockResolvedValue(undefined)
   localStorage.clear()
   setCachedPieces(scope, [])
   mocks.prepare.mockResolvedValue({ costs: { ready: true } })
@@ -153,6 +193,88 @@ beforeEach(() => {
     (_synapse, _bytes, _root, options) =>
       new Promise((resolve, reject) => operations.push({ progress: options.onProgress, resolve, reject }))
   )
+})
+it('rejects insufficient funds before creating any task or sending bytes, then permits a funded retry', async () => {
+  mocks.preflight.mockRejectedValueOnce(new UploadFundingRequired(10n ** 18n, false, 2))
+  render(
+    <UploadHistoryProvider>
+      <UploadTasksProvider>
+        <Harness />
+      </UploadTasksProvider>
+    </UploadHistoryProvider>
+  )
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Batch' })))
+  expect(getCachedPieces(scope)).toEqual([])
+  expect(mocks.prepare).not.toHaveBeenCalled()
+  expect(operations).toHaveLength(0)
+  expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining('1 more USDFC'))
+  expect(mocks.setUploading).toHaveBeenLastCalledWith(false)
+  expect(screen.getByTestId('upload-preparation').textContent).toBe('idle')
+
+  fireEvent.click(screen.getByRole('button', { name: 'Batch' }))
+  await waitFor(() => expect(operations).toHaveLength(1))
+  expect(getCachedPieces(scope)).toHaveLength(2)
+  expect(mocks.preflight).toHaveBeenCalledTimes(2)
+})
+
+it('waits for the full preflight before writing the queue and prevents duplicate submissions', async () => {
+  let resolve!: () => void
+  mocks.preflight.mockReturnValueOnce(new Promise<void>((done) => (resolve = done)))
+  render(
+    <UploadHistoryProvider>
+      <UploadTasksProvider>
+        <Harness />
+      </UploadTasksProvider>
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Batch' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Batch' }))
+  expect(screen.getByTestId('upload-preparation').textContent).toBe('checking')
+  expect(mocks.preflight).toHaveBeenCalledTimes(1)
+  expect(getCachedPieces(scope)).toEqual([])
+  expect(operations).toHaveLength(0)
+  await act(async () => resolve())
+  await waitFor(() => expect(operations).toHaveLength(1))
+  expect(getCachedPieces(scope)).toHaveLength(2)
+  expect(screen.getByTestId('upload-preparation').textContent).toBe('idle')
+})
+
+it('leaves no records when a current-state read fails', async () => {
+  mocks.preflight.mockRejectedValueOnce(new Error('Payment RPC unavailable'))
+  render(
+    <UploadHistoryProvider>
+      <UploadTasksProvider>
+        <Harness />
+      </UploadTasksProvider>
+    </UploadHistoryProvider>
+  )
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'First' })))
+  expect(getCachedPieces(scope)).toEqual([])
+  expect(operations).toHaveLength(0)
+  expect(mocks.toastError).toHaveBeenCalledWith('Payment RPC unavailable')
+  expect(screen.getByTestId('upload-preparation').textContent).toBe('idle')
+})
+
+it('discards an in-flight preflight when changing wallets unmounts the task provider', async () => {
+  let resolve!: () => void
+  mocks.preflight.mockReturnValueOnce(new Promise<void>((done) => (resolve = done)))
+  const { unmount } = render(
+    <UploadHistoryProvider>
+      <UploadTasksProvider>
+        <Harness />
+      </UploadTasksProvider>
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'First' }))
+  expect(mocks.preflight).toHaveBeenCalledTimes(1)
+  unmount()
+  mocks.setUploading.mockClear()
+  await act(async () => resolve())
+  expect(getCachedPieces(scope)).toEqual([])
+  expect(mocks.prepare).not.toHaveBeenCalled()
+  expect(operations).toHaveLength(0)
+  expect(mocks.setUploading).not.toHaveBeenCalled()
+  expect(mocks.toastError).not.toHaveBeenCalled()
 })
 it('persists parked files, allows the next transfer and isolates each task when an earlier confirmation times out', async () => {
   render(
@@ -411,4 +533,23 @@ it('does not resume a paused record while another tab holds its task lock', asyn
   }
   fireEvent.click(screen.getByRole('button', { name: 'Continue funded upload' }))
   await waitFor(() => expect(operations).toHaveLength(1))
+})
+
+it('preserves public mode through funding pauses and resumes', async () => {
+  mocks.prepare.mockResolvedValueOnce({ costs: { ready: false, depositNeeded: 1n, needsFwssMaxApproval: false } })
+  render(
+    <UploadHistoryProvider>
+      <UploadTasksProvider>
+        <Harness />
+      </UploadTasksProvider>
+    </UploadHistoryProvider>
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Public' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Continue funded upload' })).toBeTruthy())
+  expect(getCachedPieces(scope)?.[0].upload?.encrypt).toBe(false)
+  expect(mocks.preflight).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ metadata: {} }))
+  fireEvent.click(screen.getByRole('button', { name: 'Continue funded upload' }))
+  await waitFor(() => expect(operations).toHaveLength(1))
+  expect(getCachedPieces(scope)?.[0].upload?.encrypt).toBe(false)
+  expect(getCachedPieces(scope)?.[0].encrypted).toBeUndefined()
 })

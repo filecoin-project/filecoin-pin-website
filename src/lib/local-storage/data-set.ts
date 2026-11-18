@@ -17,10 +17,16 @@
  *    (e.g., shared computers, testing), each wallet maintains its own data set.
  *
  * Storage format: `filecoin-pin-data-set-id-{version}-{walletAddress}` → `{dataSetId}`
+ *
+ * The keys retain the encryption rollout's generation names for compatibility.
+ * This candidate cache now includes public and encrypted datasets. Upload
+ * context resolution verifies their immutable encryption metadata against the
+ * requested privacy mode, group key and commitment before reuse. Older cache
+ * generations remain ignored; indexed discovery can recover usable candidates.
  */
 
-const DATA_SET_ID_KEY = 'filecoin-pin-data-set-id-v2'
-const DATA_SET_IDS_KEY = 'filecoin-pin-data-set-ids-v1'
+const DATA_SET_ID_KEY = 'filecoin-pin-data-set-id-v3-encrypted'
+const DATA_SET_IDS_KEY = 'filecoin-pin-data-set-ids-v2-encrypted'
 
 const getDataSetIdsKey = (walletAddress: string): string => `${DATA_SET_IDS_KEY}-${walletAddress}`
 

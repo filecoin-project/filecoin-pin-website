@@ -18,6 +18,8 @@ import { useIpfsIndexing } from './use-ipfs-indexing.ts'
 export interface DatasetPiece {
   id: string
   fileName: string
+  /** Indexed encrypted sizes include encryption overhead rather than original bytes. */
+  fileSizeIsStored?: boolean
   fileSize: string
   cid: string
   pieceCid: string
@@ -40,9 +42,11 @@ export interface DatasetPiece {
   removalQueuedCopies?: string[]
   /** Original CAR bytes are downloaded directly instead of unpacking a UnixFS file. */
   isDirectory?: boolean
-  /** Transient child selection; never an independent storage/deletion record. */
-  directoryEntry?: { rootCid: string; path: string }
   importedCar?: boolean
+  /** True when the stored piece is an FEE envelope (content encrypted at rest). */
+  encrypted?: boolean
+  /** Plaintext root CID inside an encrypted piece; `cid` stays the public envelope root. Known after a local upload or successful decrypted download; discovery alone does not populate it. */
+  contentRootCid?: string
   folderPath?: string
   ipfsIndexed?: boolean
   ipfsCheckAttempts?: number
@@ -162,16 +166,23 @@ export const useDatasetPieces = () => {
       controller.signal.throwIfAborted()
       if (!mounted.current || currentScope.current !== walletAddress) return
       await mutatePieces((current) => mergeIndexedFiles(current, indexed))
+      for (const id of new Set(indexed.map((file) => file.datasetId))) addDataSetId?.(BigInt(id))
+      // Recover candidates for both privacy modes. Upload context resolution
+      // checks immutable encryption metadata before reusing any dataset.
       for (const id of new Set(indexed.map((file) => file.datasetId))) {
         addStoredDataSetId(walletAddress, Number(id))
-        addDataSetId?.(BigInt(id))
       }
       void recoverMissingFileSizes(getLatestPieces(), controller.signal, async (file, fileSize, isDirectory) => {
         if (controller.signal.aborted || !mounted.current || currentScope.current !== walletAddress) return
         await mutatePieces((current) =>
           current.map((record) =>
             record.cid === file.cid && !record.importedCar && record.fileSize === 'Unknown'
-              ? { ...record, fileSize, isDirectory: isDirectory || record.isDirectory }
+              ? {
+                  ...record,
+                  fileSize,
+                  fileSizeIsStored: record.encrypted === true,
+                  isDirectory: isDirectory || record.isDirectory,
+                }
               : record
           )
         )

@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import type { DatasetPiece } from '../../hooks/use-dataset-pieces.ts'
-import { canPreviewFile, fileShareLink } from './file-links.ts'
+import { canPreviewEncryptedFile, canPreviewFile, fileShareLink } from './file-links.ts'
 
 const cid = 'bafkreig4nl6nqu64xpwqfimx5bwhcntmpbgbjnly7dzs6u6zkeqfkimtfe'
 const file = {
@@ -65,12 +65,11 @@ it('shares a remaining CAR copy rather than a removed or queued provider', () =>
   expect(fileShareLink({ ...car, removalQueuedCopies: ['1'] })).toBe('https://active.example/piece/bafk-piece')
 })
 
-it('offers Markdown preview and shares its preview link, including directory entries', () => {
+it('offers Markdown preview and shares its preview link, for whole uploads', () => {
   for (const fileName of ['README.md', 'notes.markdown', 'README.MD']) {
     const markdown = {
       ...file,
       fileName,
-      directoryEntry: { rootCid: cid, path: `docs/${fileName}` },
     }
     expect(canPreviewFile(markdown)).toBe(true)
     const url = new URL(fileShareLink(markdown) as string)
@@ -137,4 +136,33 @@ it('skips invalid and removal-scheduled upload providers when sharing a CAR', ()
       },
     })
   ).toBe('https://stored.example/piece/bafk-piece')
+})
+
+it('never hands out gateway links or gateway previews for encrypted pieces', () => {
+  // A gateway URL to an encrypted piece serves the raw envelope (ciphertext):
+  // never offer it as "the file". Sharing goes through keysmith share links.
+  const encrypted = { ...file, encrypted: true, contentRootCid: 'bafy-inner' }
+  expect(fileShareLink(encrypted)).toBeUndefined()
+  expect(canPreviewFile(encrypted)).toBe(false)
+  expect(fileShareLink({ ...encrypted, isDirectory: true })).toBeUndefined()
+  expect(fileShareLink({ ...encrypted, importedCar: true })).toBeUndefined()
+})
+
+it('opens encrypted uploads in the external viewer without extension restrictions', () => {
+  const encrypted = { ...file, encrypted: true }
+  for (const fileName of ['page.html', 'page.htm', 'icon.svg', 'clip.mov', 'installer.dmg', 'paper.pdf', '研究.txt']) {
+    expect(canPreviewEncryptedFile({ ...encrypted, fileName })).toBe(true)
+  }
+  expect(canPreviewFile(encrypted)).toBe(false)
+  expect(canPreviewEncryptedFile(file)).toBe(false)
+  expect(canPreviewEncryptedFile({ ...encrypted, isDirectory: true })).toBe(true)
+  expect(canPreviewEncryptedFile({ ...encrypted, importedCar: true })).toBe(false)
+  expect(canPreviewEncryptedFile({ ...encrypted, pieceCid: '' })).toBe(false)
+  expect(canPreviewEncryptedFile({ ...encrypted, cid: '' })).toBe(false)
+})
+
+it.each([true, false, undefined])('uses the existing IPNI flag %s for encrypted previews', (ipfsIndexed) => {
+  const encrypted = { ...file, encrypted: true, ipfsIndexed }
+  expect(canPreviewEncryptedFile(encrypted)).toBe(ipfsIndexed !== false)
+  expect(canPreviewEncryptedFile({ ...encrypted, isDirectory: true })).toBe(ipfsIndexed !== false)
 })

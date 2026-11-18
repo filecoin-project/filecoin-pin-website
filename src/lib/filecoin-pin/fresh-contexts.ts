@@ -31,17 +31,19 @@ export async function createFreshUploadContexts(
   synapse: Synapse,
   clientId: string,
   copies = DEFAULT_STORAGE_COPIES,
-  existingProviderIds: bigint[] = []
+  existingProviderIds: bigint[] = [],
+  dataSetMetadata: Record<string, string> = {}
 ): Promise<StorageContext[]> {
   const [providers, endorsedIds] = await Promise.all([
     getApprovedPDPProviders(synapse.client),
     getEndorsedProviderIds(synapse.client),
   ])
 
-  const dataSetMetadata: Record<string, string> = {
+  const metadata: Record<string, string> = {
     [METADATA_KEYS.WITH_IPFS_INDEXING]: '',
     [METADATA_KEYS.SOURCE]: APPLICATION_SOURCE,
     clientId,
+    ...dataSetMetadata,
   }
 
   const excludeProviderIds = [...existingProviderIds]
@@ -57,7 +59,7 @@ export async function createFreshUploadContexts(
         clientDataSets: [],
         count: 1,
         excludeProviderIds,
-        metadata: dataSetMetadata,
+        metadata,
       })
       const candidate = candidates[0]
       if (candidate == null) break
@@ -89,7 +91,7 @@ export async function createFreshUploadContexts(
         provider,
         dataSetId: undefined,
         options: { withCDN },
-        dataSetMetadata,
+        dataSetMetadata: metadata,
       })
   )
 }

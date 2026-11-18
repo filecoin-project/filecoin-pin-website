@@ -1,9 +1,17 @@
 import { calibration, mainnet } from '@filoz/synapse-sdk'
 import { decodeFunctionData, encodeFunctionResult, maxUint256, multicall3Abi, toFunctionSelector } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
 
 export async function prepareBrowserPage(
   page,
-  { seedDirectory = true, funded = true, approved = true, indexedDirectory = false, depositedBalance } = {}
+  {
+    seedDirectory = true,
+    funded = true,
+    approved = true,
+    indexedDirectory = false,
+    depositedBalance,
+    walletAddress = '0x1111111111111111111111111111111111111111',
+  } = {}
 ) {
   let remoteSdkLoads = 0
   const mockedExpiry = Math.floor(Date.now() / 1000) + 7 * 86400
@@ -40,7 +48,7 @@ export async function prepareBrowserPage(
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers })
     if (url.hostname === 'api.filecoin.io') {
       const visible = indexedDirectory && url.pathname.startsWith('/mainnet/')
-      const owner = '0x1111111111111111111111111111111111111111'
+      const owner = walletAddress
       let response = { data: [], nextCursor: null }
       if (visible && url.pathname === '/mainnet/data-sets' && url.searchParams.get('owner') === owner)
         response = {
@@ -123,9 +131,9 @@ export async function prepareBrowserPage(
           functionName: 'accounts',
           result: [
             funding.depositedBalance == null ? (funding.funded ? 10n ** 19n : 0n) : BigInt(funding.depositedBalance),
-            0n,
-            0n,
-            0n,
+            BigInt(funding.lockupCurrent ?? 0),
+            BigInt(funding.lockupRate ?? 0),
+            BigInt(funding.lockupLastSettledAt ?? 0),
           ],
         })
       if (data.startsWith(toFunctionSelector('operatorApprovals(address,address,address)')))
@@ -176,7 +184,8 @@ export async function prepareBrowserPage(
     }
     const reply = (request) => {
       let result = `0x${'0'.repeat(64 * 10)}`
-      if (request.method === 'eth_getBalance') result = '0x1000000000000000000'
+      if (request.method === 'eth_getBalance')
+        result = funding.filBalance == null ? '0x1000000000000000000' : `0x${BigInt(funding.filBalance).toString(16)}`
       if (request.method === 'eth_chainId') result = '0x13a'
       if (request.method === 'eth_blockNumber') result = '0x100'
       if (request.method === 'eth_call') {
@@ -197,7 +206,7 @@ export async function prepareBrowserPage(
           transactionIndex: '0x0',
           blockHash: `0x${'b'.repeat(64)}`,
           blockNumber: '0xff',
-          from: '0x1111111111111111111111111111111111111111',
+          from: walletAddress,
           to: '0x2222222222222222222222222222222222222222',
           cumulativeGasUsed: '0x100',
           gasUsed: '0x100',
@@ -217,10 +226,10 @@ export async function prepareBrowserPage(
     })
   })
   await page.addInitScript(
-    ({ seedDirectory, funded, approved, depositedBalance }) => {
+    ({ seedDirectory, funded, approved, depositedBalance, walletAddress }) => {
       window.__driveFunding = { funded, approved, depositedBalance }
       window.__driveAuthorized = localStorage.getItem('__mockDriveAuthorized') === 'true'
-      const address = '0x1111111111111111111111111111111111111111'
+      const address = walletAddress
       const handlers = new Map()
       let accounts = [address]
       let chainId = localStorage.getItem('filecoin-drive-network') === 'calibration' ? '0x4cb2f' : '0x13a'
@@ -229,6 +238,8 @@ export async function prepareBrowserPage(
         request: async ({ method, params }) => {
           window.__driveWalletRequests.push(method)
           if (method === 'eth_requestAccounts' || method === 'eth_accounts') return accounts
+          if (method === 'eth_signTypedData_v4' && window.__signDriveTestTypedData)
+            return window.__signDriveTestTypedData(params[0], params[1])
           if (method === 'eth_chainId') return chainId
           if (method === 'wallet_switchEthereumChain') {
             chainId = params[0].chainId
@@ -273,7 +284,7 @@ export async function prepareBrowserPage(
           })
         )
       })
-      const scope = `314:${address}`
+      const scope = `314:${address.toLowerCase()}`
       localStorage.setItem('filecoin-pin-client-id', 'test-browser')
       if (seedDirectory && !localStorage.getItem(`filecoin-pin-piece-cache-v1-${scope}`)) {
         localStorage.setItem(`filecoin-pin-data-set-ids-v1-${scope}`, JSON.stringify([1]))
@@ -302,7 +313,36 @@ export async function prepareBrowserPage(
         )
       }
     },
-    { seedDirectory, funded, approved, depositedBalance }
+    { seedDirectory, funded, approved, depositedBalance, walletAddress }
   )
   return { sdkLoads: () => remoteSdkLoads }
+}
+
+/** Real deterministic test signatures and grants; wallet transactions and all RPCs remain mocked. */
+export async function prepareEncryptedBrowserPage(page, options = {}) {
+  // Public development key; never funded or used to submit a real transaction.
+  const owner = privateKeyToAccount('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80')
+  let signatures = 0
+  await page.exposeFunction('__signDriveTestTypedData', async (address, json) => {
+    if (address.toLowerCase() !== owner.address.toLowerCase()) throw new Error('Unexpected test signing account')
+    signatures++
+    return owner.signTypedData(JSON.parse(json))
+  })
+  const mocks = await prepareBrowserPage(page, { ...options, walletAddress: owner.address })
+  // This fixture starts with no existing encrypted datasets; derivation itself is real.
+  await page.route('**/src/lib/filecoin-pin/group-key-scan.ts*', (route) =>
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: 'export async function scanGroupKey(){ return undefined }',
+    })
+  )
+  await page.addInitScript((address) => {
+    window.__driveTestScope = `314:${address.toLowerCase()}`
+  }, owner.address)
+  return {
+    ...mocks,
+    walletAddress: owner.address,
+    scope: `314:${owner.address.toLowerCase()}`,
+    signatures: () => signatures,
+  }
 }

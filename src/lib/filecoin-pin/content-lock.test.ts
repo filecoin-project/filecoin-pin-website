@@ -38,3 +38,34 @@ describe('content operation exclusion', () => {
     }
   })
 })
+
+it('locks both encrypted identities and releases partial acquisition on conflict', async () => {
+  const upload = await acquireContentLock('encrypted-wallet', 'inner')
+  try {
+    await expect(withFileDeletionLock('encrypted-wallet', 'envelope', async () => 'deleted', 'inner')).rejects.toThrow(
+      'Retry after'
+    )
+    const publicLock = await acquireContentLock('encrypted-wallet', 'envelope')
+    await publicLock()
+  } finally {
+    await upload()
+  }
+  await expect(
+    withFileDeletionLock(
+      'encrypted-wallet',
+      'envelope',
+      async () => {
+        await expect(acquireContentLock('encrypted-wallet', 'inner')).rejects.toThrow('Retry after')
+        await expect(acquireContentLock('encrypted-wallet', 'envelope')).rejects.toThrow('Retry after')
+        const unrelated = await acquireContentLock('encrypted-wallet', 'other')
+        await unrelated()
+        throw new Error('Provider unavailable')
+      },
+      'inner'
+    )
+  ).rejects.toThrow('Provider unavailable')
+  for (const root of ['inner', 'envelope']) {
+    const release = await acquireContentLock('encrypted-wallet', root)
+    await release()
+  }
+})

@@ -6,6 +6,8 @@ import { useUploadRecovery } from '../hooks/use-upload-recovery.ts'
 import { DEFAULT_STORAGE_COPIES } from '../lib/filecoin-pin/config.ts'
 import { acquireContentLock } from '../lib/filecoin-pin/content-lock.ts'
 import { validateDriveMetadata } from '../lib/filecoin-pin/drive-metadata.ts'
+import { encryptedDataSetMetadata } from '../lib/filecoin-pin/encryption.ts'
+import { preflightUpload } from '../lib/filecoin-pin/upload-preflight.ts'
 import { isDirectoryUpload, type UploadSource } from '../lib/filecoin-pin/upload-source.ts'
 import { directoryFolders, normalizeFolder } from '../lib/local-storage/drive-directory.ts'
 import { isDeletionScheduled } from '../utils/file-deletion.ts'
@@ -19,6 +21,7 @@ type Job = {
   id: string
   file: UploadSource
   folder: string
+  encrypt: boolean
   phase: 'funding' | 'waiting' | 'transferring' | 'confirming' | 'canceling'
 }
 
@@ -29,13 +32,14 @@ function advanceQueue(jobs: Job[]): Job[] {
   return next ? jobs.map((job) => (job.id === next.id ? { ...job, phase: 'transferring' } : job)) : jobs
 }
 type Tasks = {
+  preparing: boolean
   transferring: boolean
   activeIds: ReadonlySet<string>
   queuedIds: ReadonlySet<string>
-  startMany: (files: UploadSource[], folder: string) => Promise<boolean>
+  startMany: (files: UploadSource[], folder: string, encrypt?: boolean) => Promise<boolean>
   cancelQueued: (id: string) => Promise<boolean>
   removeMany: (ids: readonly string[]) => Promise<void>
-  start: (file: UploadSource, folder: string, replaceId?: string) => Promise<boolean>
+  start: (file: UploadSource, folder: string, replaceId?: string, encrypt?: boolean) => Promise<boolean>
   check: (id: string) => Promise<void>
   resume: (id: string) => Promise<boolean>
   retainedIds: ReadonlySet<string>
@@ -61,7 +65,7 @@ function Worker({
     queueMicrotask(() => {
       if (cancelled || started.current) return
       started.current = true
-      void orchestration.startUpload(job.file, job.folder)
+      void orchestration.startUpload(job.file, job.folder, job.encrypt)
     })
     return () => {
       cancelled = true
@@ -99,9 +103,13 @@ function Worker({
 
 export function UploadTasksProvider({ children }: { children: ReactNode }) {
   const connection = useBrowserWallet()
-  const { storageScope, refreshWallet } = useFilecoinPinContext()
+  const { storageScope, refreshWallet, synapse, ensurePermissions, encryption, debugParams } = useFilecoinPinContext()
+  const currentClient = useRef(synapse)
+  currentClient.current = synapse
+  const mounted = useRef(true)
   const { mutateHistory, history } = useUploadHistory()
   const [jobs, setJobs] = useState<Job[]>([])
+  const [preparing, setPreparing] = useState(false)
   const latest = useRef(jobs)
   const retained = useRef(new Map<string, Job>())
   const starting = useRef(false)
@@ -154,33 +162,46 @@ export function UploadTasksProvider({ children }: { children: ReactNode }) {
   const setUploadingRef = useRef(setUploading)
   setUploadingRef.current = setUploading
   useEffect(() => {
-    setUploading(jobs.some((job) => job.phase === 'transferring' || job.phase === 'confirming'))
+    setUploading(preparing || jobs.some((job) => job.phase === 'transferring' || job.phase === 'confirming'))
     if (previousCount.current > 0 && jobs.length === 0) void refreshWallet()
     previousCount.current = jobs.length
-  }, [jobs, setUploading, refreshWallet])
-  useEffect(
-    () => () => {
+  }, [jobs, preparing, setUploading, refreshWallet])
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
       setUploadingRef.current(false)
       for (const release of taskLocks.current.values()) void release()
       taskLocks.current.clear()
-    },
-    []
-  )
+    }
+  }, [])
   const enqueue = useCallback(
-    async (files: UploadSource[], folder: string, replaceId?: string) => {
+    async (files: UploadSource[], folder: string, replaceId?: string, encrypt = true) => {
       if (!files.length || starting.current) return false
       if (!storageScope || connection.busy || connection.pendingTransaction) {
         toast.warning('Wallet setup is busy or unavailable. Wait for it to finish before uploading.')
         return false
       }
       starting.current = true
+      setPreparing(true)
       setUploading(true)
-      const added: Job[] = files.map((file) => ({ id: crypto.randomUUID(), file, folder, phase: 'waiting' }))
+      const added: Job[] = files.map((file) => ({ id: crypto.randomUUID(), file, folder, encrypt, phase: 'waiting' }))
       for (const job of added) reserved.current.add(job.id)
       let releasePrevious: (() => Promise<void>) | undefined
       try {
         folder = normalizeFolder(folder)
-        for (const file of files) validateDriveMetadata(file.name, folder)
+        for (const file of files) validateDriveMetadata(file.name, folder, isDirectoryUpload(file))
+        if (!synapse || !ensurePermissions) throw new Error('Wait for wallet setup to finish before uploading.')
+        if (!encryption.ready) throw new Error('Add your encryption key in Wallet setup before uploading.')
+        await preflightUpload(synapse, {
+          storageScope,
+          providerId: debugParams.providerId,
+          metadata: encrypt ? encryptedDataSetMetadata(encryption.credential) : {},
+          sourceSizes: files.map((file) => file.size),
+          ensurePermissions,
+        })
+        if (!mounted.current || currentClient.current !== synapse)
+          throw new Error('Wallet setup changed. Check the connected wallet before uploading again.')
         if (replaceId) releasePrevious = await acquireContentLock(`${storageScope}:upload-task`, replaceId)
         for (const job of added) {
           job.folder = folder
@@ -246,6 +267,7 @@ export function UploadTasksProvider({ children }: { children: ReactNode }) {
               datasetIds: [],
               copyCount: 0,
               upload: {
+                encrypt,
                 phase: 'waiting' as const,
                 expectedCopies: DEFAULT_STORAGE_COPIES,
                 providers: [],
@@ -268,14 +290,17 @@ export function UploadTasksProvider({ children }: { children: ReactNode }) {
           await taskLocks.current.get(job.id)?.()
           taskLocks.current.delete(job.id)
         }
-        setUploading(latest.current.some((job) => job.phase === 'transferring' || job.phase === 'confirming'))
-        toast.error(cause instanceof Error ? cause.message : 'Unable to start upload')
+        if (mounted.current) {
+          setUploading(latest.current.some((job) => job.phase === 'transferring' || job.phase === 'confirming'))
+          toast.error(cause instanceof Error ? cause.message : 'Unable to start upload')
+        }
         return false
       } finally {
         try {
           await releasePrevious?.()
         } finally {
           starting.current = false
+          if (mounted.current) setPreparing(false)
           for (const job of added) reserved.current.delete(job.id)
         }
       }
@@ -285,16 +310,24 @@ export function UploadTasksProvider({ children }: { children: ReactNode }) {
       connection.pendingTransaction,
       connection.network,
       storageScope,
+      synapse,
+      ensurePermissions,
+      encryption,
+      debugParams.providerId,
       mutateHistory,
       setUploading,
       updateJobs,
     ]
   )
   const start = useCallback(
-    (file: UploadSource, folder: string, replaceId?: string) => enqueue([file], folder, replaceId),
+    (file: UploadSource, folder: string, replaceId?: string, encrypt = true) =>
+      enqueue([file], folder, replaceId, encrypt),
     [enqueue]
   )
-  const startMany = useCallback((files: UploadSource[], folder: string) => enqueue(files, folder), [enqueue])
+  const startMany = useCallback(
+    (files: UploadSource[], folder: string, encrypt = true) => enqueue(files, folder, undefined, encrypt),
+    [enqueue]
+  )
   const removeMany = useCallback(
     async (selectedIds: readonly string[]) => {
       if (starting.current || !storageScope) throw new Error('Wait for the current queue update to finish.')
@@ -353,13 +386,14 @@ export function UploadTasksProvider({ children }: { children: ReactNode }) {
   return (
     <Context.Provider
       value={{
+        preparing,
         transferring: jobs.some((job) => job.phase === 'transferring'),
         activeIds,
         queuedIds: new Set(jobs.filter((job) => job.phase === 'waiting').map((job) => job.id)),
         start,
         resume: async (id) => {
           const job = retained.current.get(id)
-          return job ? start(job.file, job.folder, id) : false
+          return job ? start(job.file, job.folder, id, job.encrypt) : false
         },
         retainedIds: new Set(retained.current.keys()),
         startMany,

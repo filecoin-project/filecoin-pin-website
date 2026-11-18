@@ -1,8 +1,11 @@
-import { File, Folder, Loader2, ShieldCheck, Wallet } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { File, Folder, Loader2, TriangleAlert, Wallet } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 import { useBrowserWallet } from '../../context/browser-wallet-provider.tsx'
 import { useUploadTasks } from '../../context/upload-tasks-context.tsx'
 import { useFilecoinPinContext } from '../../hooks/use-filecoin-pin-context.ts'
+import { useUploadReadiness } from '../../hooks/use-upload-readiness.ts'
+import type { DirectoryUpload } from '../../lib/filecoin-pin/upload-source.ts'
+import type { SetupTarget } from '../../utils/upload/upload-readiness.ts'
 import { DeveloperFooter } from '../drive/developer-footer.tsx'
 import { FileBrowser } from '../drive/file-browser.tsx'
 import { FolderPicker } from '../drive/folder-picker.tsx'
@@ -14,28 +17,44 @@ import DragNDrop from '../upload/drag-n-drop.tsx'
 
 export default function Content() {
   const connection = useBrowserWallet()
-  const { wallet, synapse, storageSetup } = useFilecoinPinContext()
+  const { wallet, refreshWallet, storageSetup } = useFilecoinPinContext()
   const tasks = useUploadTasks()
+  const preparingUpload = tasks?.preparing ?? false
+  const uploadBusy = connection.busy || preparingUpload
+  const [encrypt, setEncrypt] = useState(true)
   const [folder, setFolder] = useState('')
   const [uploadFolder, setUploadFolder] = useState('')
   const [uploadKind, setUploadKind] = useState<'file' | 'folder'>('file')
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [selectedDirectory, setSelectedDirectory] = useState<DirectoryUpload | null>(null)
   const [panel, setPanel] = useState<'wallet' | 'upload' | null>(null)
+  const [setupRequest, setSetupRequest] = useState<{ target: SetupTarget } | undefined>()
+  const readiness = useUploadReadiness()
+  const canUpload = readiness.canUpload
+  const setupChecking = readiness.checking
+  const fundsLow = storageSetup?.fundsStatus === 'low'
+  const openWallet = useCallback(
+    (target?: SetupTarget) => {
+      setSetupRequest(target ? { target } : undefined)
+      setPanel('wallet')
+      void refreshWallet()
+    },
+    [refreshWallet]
+  )
   useEffect(() => {
-    const open = () => setPanel('wallet')
+    const open = (event: Event) => openWallet((event as CustomEvent<{ target?: SetupTarget }>).detail?.target)
     window.addEventListener('drive-open-wallet', open)
     return () => window.removeEventListener('drive-open-wallet', open)
-  }, [])
-  const canUpload = Boolean(
-    connection.sessionStatus === 'active' && synapse && wallet.status === 'ready' && storageSetup?.status === 'ready'
-  )
-  const setupChecking =
-    connection.sessionStatus === 'checking' ||
-    wallet.status === 'idle' ||
-    wallet.status === 'loading' ||
-    storageSetup?.status === 'checking'
+  }, [openWallet])
+  const handleSetupAction = () => {
+    if (readiness.checkFailed) void refreshWallet()
+    else openWallet(readiness.actionTarget)
+  }
   const openUpload = (location: string) => {
     setUploadFolder(location)
-    setPanel(canUpload ? 'upload' : 'wallet')
+    setEncrypt(true)
+    if (canUpload) setPanel('upload')
+    else handleSetupAction()
   }
 
   return (
@@ -46,11 +65,12 @@ export default function Content() {
           <p className="mt-1 text-sm text-muted">Store and manage files on Filecoin.</p>
         </div>
         <Button
+          aria-description={fundsLow ? 'Storage funds running low' : undefined}
           aria-label="Wallet and Storage"
           className="w-auto"
           onClick={() => {
             setUploadFolder(folder)
-            setPanel('wallet')
+            openWallet()
           }}
           size="sm"
           variant="secondary"
@@ -60,30 +80,28 @@ export default function Content() {
           {setupChecking ? (
             <Loader2 aria-label="Checking wallet setup" className="animate-spin text-muted" size={14} />
           ) : (
-            <span className={`h-1.5 w-1.5 rounded-full ${canUpload ? 'bg-success' : 'bg-warning'}`} />
+            <span
+              aria-hidden="true"
+              className={`h-1.5 w-1.5 rounded-full ${canUpload && !fundsLow ? 'bg-success' : 'bg-warning'}`}
+            />
           )}
         </Button>
       </div>
-      <Alert
-        description="Uploaded files are public. Anyone with the CID can view their content. Encryption support is coming soon."
-        message="Filecoin Drive is in beta."
-        variant="info"
-      />
       {connection.network === 'calibration' && (
         <p className="text-xs text-muted">Calibration is a test network. Data and infrastructure may reset.</p>
       )}
-      {!canUpload && !setupChecking && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-surface px-4 py-3">
-          <p className="flex items-center gap-2 text-sm text-muted">
-            <ShieldCheck aria-hidden="true" className="shrink-0 text-accent" size={16} />
-            Configure your wallet to upload and delete files.
+      {!canUpload && !setupChecking && !connection.busy && !connection.pendingTransaction && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning-border bg-warning-surface px-4 py-2">
+          <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <TriangleAlert aria-hidden="true" className="shrink-0 text-warning" size={16} />
+            {readiness.message}
           </p>
           <button
-            className="text-sm text-link hover:text-link-hover underline focus:brand-outline"
-            onClick={() => setPanel('wallet')}
+            className="inline-flex min-h-8 shrink-0 items-center rounded-md border border-warning-border bg-surface px-3 py-1 text-sm font-medium text-foreground transition-colors hover:bg-warning/10 focus:brand-outline"
+            onClick={handleSetupAction}
             type="button"
           >
-            Set up wallet
+            {readiness.actionLabel}
           </button>
         </div>
       )}
@@ -91,12 +109,7 @@ export default function Content() {
       <span className="sr-only" role="status">
         {setupChecking ? 'Checking wallet setup…' : canUpload ? 'Session ready' : 'Setup required'}
       </span>
-      <FileBrowser
-        folder={folder}
-        onFolderChange={setFolder}
-        onUpload={openUpload}
-        uploadDisabled={setupChecking || connection.busy}
-      />
+      <FileBrowser folder={folder} onFolderChange={setFolder} onUpload={openUpload} uploadDisabled={!canUpload} />
       <div className="flex flex-wrap justify-between gap-2 text-xs text-muted">
         <span>
           File records sync from the Filecoin index. Recent changes may take time to appear on another browser.
@@ -112,16 +125,52 @@ export default function Content() {
         open={panel === 'wallet'}
         title="Wallet and Storage"
       >
-        <WalletSetup inDrawer onContinueUpload={() => setPanel('upload')} />
+        <WalletSetup
+          inDrawer
+          onContinueUpload={() => {
+            setEncrypt(true)
+            if (canUpload) setPanel('upload')
+          }}
+          setupRequest={setupRequest}
+        />
       </SidePanel>
       <SidePanel
         description="Choose a location, then upload a file or an entire folder."
         onOpenChange={(open) => {
-          if (!open) setPanel(null)
+          if (!open) {
+            setSelectedFiles([])
+            setSelectedDirectory(null)
+            setPanel(null)
+          }
         }}
         open={panel === 'upload'}
         title="Upload files"
       >
+        <div className="mb-5 rounded-xl border border-border bg-surface-raised/40 p-4">
+          <label className="flex items-center justify-between gap-3 text-sm font-medium" htmlFor="encrypt-upload">
+            Encrypt upload (private)
+            <button
+              aria-checked={encrypt}
+              aria-describedby="upload-privacy-help"
+              aria-label="Encrypt upload (private)"
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-border transition-colors focus:brand-outline ${encrypt ? 'bg-accent' : 'bg-surface'}`}
+              disabled={uploadBusy || Boolean(connection.pendingTransaction)}
+              id="encrypt-upload"
+              onClick={() => setEncrypt((value) => !value)}
+              role="switch"
+              type="button"
+            >
+              <span
+                className={`h-4 w-4 rounded-full shadow-sm transition-transform ${encrypt ? 'translate-x-6 bg-surface' : 'translate-x-1 bg-muted'}`}
+              />
+            </button>
+          </label>
+          <p className="mt-2 text-xs text-muted" id="upload-privacy-help">
+            {encrypt
+              ? 'File contents are encrypted. Names, paths, sizes and storage metadata remain public.'
+              : 'Files will be uploaded publicly without encryption. Anyone with the CID can read them. Once public, files cannot be made private.'}
+          </p>
+        </div>
         {canUpload ? (
           <>
             <div className="mb-5 rounded-xl border border-border bg-surface-raised/40 p-4">
@@ -130,11 +179,11 @@ export default function Content() {
                 Upload location
               </label>
               <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent">
-                <span className="shrink-0 text-sm text-muted">Files /</span>
+                <span className="shrink-0 text-sm text-muted">My Drive /</span>
                 <input
                   aria-describedby="upload-path-help"
                   className="h-11 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted"
-                  disabled={connection.busy}
+                  disabled={uploadBusy}
                   id="upload-folder"
                   onChange={(event) => setUploadFolder(event.target.value)}
                   placeholder="Choose a folder (optional)"
@@ -142,13 +191,13 @@ export default function Content() {
                 />
               </div>
               <p className="mt-2 text-xs leading-relaxed text-muted" id="upload-path-help">
-                Leave empty to upload to Files. Use / for subfolders, e.g. documents/2026.
+                Leave empty to upload to My Drive. Use / for subfolders, e.g. documents/2026.
               </p>
               <details className="mt-3 text-xs text-muted">
                 <summary className="w-fit cursor-pointer hover:text-foreground">Name and folder requirements</summary>
                 <p className="mt-2 leading-relaxed">
-                  File names and full folder paths each allow 96 UTF-8 bytes. Names and paths are public and cannot be
-                  changed after upload.
+                  File names and full folder paths each allow 96 UTF-8 bytes; uploaded folder names allow 95. Names and
+                  paths are public and cannot be changed after upload.
                 </p>
               </details>
             </div>
@@ -162,6 +211,7 @@ export default function Content() {
                   <button
                     aria-pressed={uploadKind === kind}
                     className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${uploadKind === kind ? 'bg-surface-raised text-foreground shadow-sm' : 'text-muted hover:text-foreground'}`}
+                    disabled={uploadBusy}
                     key={kind}
                     onClick={() => setUploadKind(kind)}
                     type="button"
@@ -174,20 +224,34 @@ export default function Content() {
             </fieldset>
             {uploadKind === 'folder' ? (
               <FolderPicker
-                disabled={connection.busy}
+                disabled={uploadBusy}
+                isChecking={preparingUpload}
+                onSelectionChange={setSelectedDirectory}
                 onUpload={(source) => {
-                  void tasks?.start(source, uploadFolder).then((started) => {
-                    if (started) setPanel(null)
+                  void tasks?.start(source, uploadFolder, undefined, encrypt).then((started) => {
+                    if (started) {
+                      setSelectedFiles([])
+                      setSelectedDirectory(null)
+                      setPanel(null)
+                    }
                   })
                 }}
+                selection={selectedDirectory}
               />
             ) : (
               <DragNDrop
+                files={selectedFiles}
+                isChecking={preparingUpload}
                 isUploading={connection.busy}
                 key={panel === 'upload' ? 'picker' : 'closed'}
+                onFilesChange={setSelectedFiles}
                 onUpload={(files) => {
-                  void tasks?.startMany(files, uploadFolder).then((started) => {
-                    if (started) setPanel(null)
+                  void tasks?.startMany(files, uploadFolder, encrypt).then((started) => {
+                    if (started) {
+                      setSelectedFiles([])
+                      setSelectedDirectory(null)
+                      setPanel(null)
+                    }
                   })
                 }}
               />
@@ -196,7 +260,7 @@ export default function Content() {
         ) : (
           <>
             <p className="text-sm text-muted">Complete wallet setup before uploading.</p>
-            <Button onClick={() => setPanel('wallet')} size="sm">
+            <Button onClick={handleSetupAction} size="sm">
               Set up wallet
             </Button>
           </>

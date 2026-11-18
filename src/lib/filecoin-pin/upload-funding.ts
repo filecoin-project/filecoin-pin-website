@@ -3,7 +3,8 @@ import { METADATA_KEYS, type Synapse } from '@filoz/synapse-sdk'
 import type { UploadExecutionOptions } from 'filecoin-pin/core/upload'
 import { formatUnits } from 'viem'
 import { getOrCreateClientId } from '../local-storage/client-id.ts'
-import { DEFAULT_STORAGE_COPIES } from './config.ts'
+import { DEFAULT_STORAGE_COPIES, LOW_STORAGE_RUNWAY_DAYS, MIN_UPLOAD_RUNWAY_EPOCHS } from './config.ts'
+import { ENCRYPTED_DATA_SET_KEYS } from './encryption.ts'
 import { createFreshUploadContexts } from './fresh-contexts.ts'
 import { assertCurrentStorageChain } from './storage-chain.ts'
 import { APPLICATION_SOURCE } from './synapse.ts'
@@ -22,7 +23,7 @@ export class UploadFundingRequired extends Error {
     super(
       [
         depositNeeded > 0n
-          ? `Deposit at least ${formatFundingAmount(depositNeeded)} more USDFC for these ${copies} storage copies, including dataset fees and lockups.`
+          ? `Deposit at least ${formatFundingAmount(depositNeeded)} more USDFC for these ${copies} storage copies, including dataset fees, lockups and the required ${LOW_STORAGE_RUNWAY_DAYS}-day safety balance.`
           : '',
         needsApproval ? 'Approve storage payments in Wallet and Storage.' : '',
       ]
@@ -58,7 +59,11 @@ export async function resolveUploadContexts(
           throw cause
         })
       for (const context of resolved) {
-        if (context.dataSetMetadata[METADATA_KEYS.SOURCE] !== APPLICATION_SOURCE || providers.has(context.provider.id))
+        if (
+          context.dataSetMetadata[METADATA_KEYS.SOURCE] !== APPLICATION_SOURCE ||
+          ENCRYPTED_DATA_SET_KEYS.some((key) => context.dataSetMetadata[key] !== options.metadata?.[key]) ||
+          providers.has(context.provider.id)
+        )
           continue
         providers.add(context.provider.id)
         contexts.push(context)
@@ -85,7 +90,8 @@ export async function resolveUploadContexts(
       synapse,
       getOrCreateClientId(),
       DEFAULT_STORAGE_COPIES - contexts.length,
-      contexts.map((context) => context.provider.id)
+      contexts.map((context) => context.provider.id),
+      options.metadata
     )
     contexts = [...contexts, ...additional]
   }
@@ -95,13 +101,17 @@ export async function resolveUploadContexts(
 
 export async function prepareUploadContexts(
   synapse: Synapse,
-  dataSize: bigint,
+  dataSize: bigint | bigint[],
   options: Pick<UploadExecutionOptions, 'contexts' | 'dataSetIds' | 'providerIds' | 'metadata'>
 ) {
   const contexts = await resolveUploadContexts(synapse, options)
   // prepare is a read-only quote. Never execute its optional funding transaction:
   // deposits and owner approvals require the separate Wallet setup actions.
-  const { costs } = await synapse.storage.prepare({ context: contexts, pieceSizes: [dataSize] })
+  const { costs } = await synapse.storage.prepare({
+    context: contexts,
+    pieceSizes: Array.isArray(dataSize) ? dataSize : [dataSize],
+    extraRunwayEpochs: MIN_UPLOAD_RUNWAY_EPOCHS,
+  })
   if (!costs.ready) {
     throw new UploadFundingRequired(costs.depositNeeded, costs.needsFwssMaxApproval, contexts.length)
   }

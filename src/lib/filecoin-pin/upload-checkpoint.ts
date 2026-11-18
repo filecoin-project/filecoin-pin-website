@@ -1,4 +1,5 @@
 import type { StepState } from '../../types/upload/step.ts'
+import type { UploadFailureCode } from '../../utils/upload/upload-readiness.ts'
 
 export interface UploadProviderCheckpoint {
   providerId: string
@@ -13,11 +14,14 @@ export interface UploadProviderCheckpoint {
 
 /** JSON-only recovery data. File bytes and SDK objects are never persisted. */
 export interface UploadCheckpoint {
+  /** Missing on older checkpoints means encrypted upload. */
+  encrypt?: boolean
   phase: 'funding' | 'waiting' | 'uploading' | 'confirming' | 'pending' | 'interrupted' | 'failed' | 'complete'
   expectedCopies: number
   providers: UploadProviderCheckpoint[]
   steps: StepState[]
   funding?: { depositNeeded: string; needsApproval: boolean }
+  errorCode?: UploadFailureCode
   error?: string
   checks: number
   nextCheckAt: number

@@ -2,11 +2,13 @@ import type { FilecoinChain } from '@filoz/synapse-core/chains'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { checkAllowances, validateGasRequirement } from 'filecoin-pin/core/payments'
 import { createContext, type ReactNode, useCallback, useEffect, useMemo } from 'react'
+import type { Hex } from 'viem'
 import { type DataSetState, useDataSetManager } from '../hooks/use-data-set-manager.ts'
 import { browserSynapse, chains, scopeFor } from '../lib/filecoin-pin/browser-wallet.ts'
+import type { EncryptionCredential } from '../lib/filecoin-pin/encryption.ts'
 import { resolveStorageChain } from '../lib/filecoin-pin/storage-chain.ts'
 import type { Synapse } from '../lib/filecoin-pin/synapse.ts'
-import { fetchWalletSnapshot, type WalletSnapshot } from '../lib/filecoin-pin/wallet.ts'
+import { fetchWalletSnapshot, storageFundsStatus, type WalletSnapshot } from '../lib/filecoin-pin/wallet.ts'
 import { getOrCreateClientId } from '../lib/local-storage/client-id.ts'
 import { type DebugParams, getDebugParams, logDebugParams } from '../utils/debug-params.ts'
 import { useBrowserWallet } from './browser-wallet-provider.tsx'
@@ -24,6 +26,7 @@ export interface FilecoinPinContextValue {
     approvalReady: boolean
     gasReady: boolean
     gasIssue?: string
+    fundsStatus?: ReturnType<typeof storageFundsStatus>
   }
   wallet: WalletState
   refreshWallet: () => Promise<void>
@@ -33,6 +36,14 @@ export interface FilecoinPinContextValue {
   addDataSetId: (id: bigint) => void
   debugParams: DebugParams
   storageScope?: string
+  /**
+   * Encryption credentials for the active session. `ready` false blocks
+   * uploads (encryption is never silently skipped); downloads fall back to
+   * the owner wallet when no grant is usable.
+   */
+  encryption:
+    | { ready: true; sessionPrivateKey: Hex; credential: EncryptionCredential }
+    | { ready: false; sessionPrivateKey?: undefined; credential?: undefined }
   ensurePermissions?: () => Promise<void>
 }
 
@@ -70,15 +81,24 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
 
   const transactionRevision = connection.transactionRevision ?? 0
   const snapshotQuery = useQuery({
-    queryKey: ['drive-wallet-snapshot', storageScope, storageChain?.contracts.fwssView.address, transactionRevision],
+    queryKey: [
+      'drive-wallet-snapshot',
+      storageScope,
+      storageChain?.contracts.fwssView.address,
+      transactionRevision,
+      'account-summary-v1',
+    ],
     enabled: !!runtime,
+    refetchOnWindowFocus: 'always',
+    refetchInterval: 30_000,
     queryFn: async () => {
       if (!runtime) throw new Error('Connect a wallet first.')
-      const [snapshot, approval] = await Promise.all([
+      const [snapshot, approval, account] = await Promise.all([
         fetchWalletSnapshot(runtime.synapse),
         checkAllowances(runtime.synapse),
+        runtime.synapse.payments.accountSummary(),
       ])
-      return { snapshot, approval }
+      return { snapshot, approval, account }
     },
   })
   const refreshWallet = useCallback(async () => {
@@ -110,12 +130,19 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
     }
     if (!runtime) return { wallet: initialWalletState, storageSetup: checking }
     const result = snapshotQuery.data
-    const depositReady = !!result && result.snapshot.raw.filecoinPayBalance > 0n
+    const fundsStatus = result ? storageFundsStatus(result.account) : undefined
+    const depositReady = !!result && fundsStatus === 'available'
     const approvalReady = !!result && !result.approval.needsUpdate
     const gas = result
       ? validateGasRequirement(result.snapshot.filBalance, result.snapshot.network === 'calibration')
       : undefined
-    const readiness = { depositReady, approvalReady, gasReady: gas?.isValid ?? false, gasIssue: gas?.errorMessage }
+    const readiness = {
+      depositReady,
+      fundsStatus,
+      approvalReady,
+      gasReady: gas?.isValid ?? false,
+      gasIssue: gas?.errorMessage,
+    } as const
     if (snapshotQuery.isError) {
       return {
         wallet: {
@@ -128,25 +155,15 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
     }
     if (!result) return { wallet: { status: 'loading' }, storageSetup: checking }
     return {
-      wallet: { status: snapshotQuery.isFetching ? 'loading' : 'ready', data: result.snapshot },
+      // Preserve selected files during background balance refreshes. The last
+      // verified setup remains usable until new data or a read error arrives.
+      wallet: { status: 'ready', data: result.snapshot },
       storageSetup: {
         ...readiness,
-        status: snapshotQuery.isFetching
-          ? 'checking'
-          : depositReady && approvalReady && gas?.isValid
-            ? 'ready'
-            : 'blocked',
+        status: depositReady && approvalReady && gas?.isValid ? 'ready' : 'blocked',
       },
     }
-  }, [
-    storageChain,
-    runtime,
-    chainQuery.failureCount,
-    snapshotQuery.data,
-    snapshotQuery.isError,
-    snapshotQuery.error,
-    snapshotQuery.isFetching,
-  ])
+  }, [storageChain, runtime, chainQuery.failureCount, snapshotQuery.data, snapshotQuery.isError, snapshotQuery.error])
 
   useEffect(() => {
     logDebugParams()
@@ -166,6 +183,18 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [wallet.status, runtime, checkIfDatasetExists, dataSet.status])
 
+  const encryption = useMemo<FilecoinPinContextValue['encryption']>(
+    () =>
+      runtime?.encryptionReady() && connection.session?.encryption
+        ? {
+            ready: true,
+            sessionPrivateKey: connection.session.privateKey,
+            credential: connection.session.encryption,
+          }
+        : { ready: false },
+    [runtime, connection.session]
+  )
+
   const value = useMemo<FilecoinPinContextValue>(
     () => ({
       wallet,
@@ -177,6 +206,7 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
       addDataSetId,
       debugParams,
       storageScope,
+      encryption,
       ensurePermissions: runtime?.validate,
     }),
     [
@@ -188,6 +218,7 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
       addDataSetId,
       debugParams,
       storageScope,
+      encryption,
       runtime,
     ]
   )

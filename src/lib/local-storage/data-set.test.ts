@@ -36,4 +36,12 @@ describe('local-storage/data-set', () => {
     expect(getStoredDataSetIds('0xaaa')).toEqual([100])
     expect(getStoredDataSetIds('0xbbb')).toEqual([200])
   })
+
+  it('ignores old cache generations until datasets are rediscovered', () => {
+    // Old keys stay ignored. Indexed discovery can recover these datasets;
+    // upload context resolution checks their metadata before any reuse.
+    localStorage.setItem(`filecoin-pin-data-set-ids-v1-${WALLET}`, JSON.stringify([1832, 1833]))
+    localStorage.setItem(`filecoin-pin-data-set-id-v2-${WALLET}`, '1832')
+    expect(getStoredDataSetIds(WALLET)).toEqual([])
+  })
 })

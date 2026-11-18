@@ -1,24 +1,28 @@
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { checkDirectoryTabs } from './check-drive-directory-tabs.mjs'
+import { checkFileAccessErrors } from './check-drive-file-access-errors.mjs'
 import { checkSessionTabs } from './check-drive-session-tabs.mjs'
+import { checkUploadPreflight } from './check-drive-upload-preflight.mjs'
 import { checkUploadTasks } from './check-drive-upload-tasks.mjs'
 import { checkWalletSelection } from './check-drive-wallet-selection.mjs'
-import { prepareBrowserPage } from './drive-browser-fixtures.mjs'
+import { prepareBrowserPage, prepareEncryptedBrowserPage } from './drive-browser-fixtures.mjs'
 import { landingFrame, openDrive, waitForLanding } from './drive-browser-navigation.mjs'
 
 // Run against npm run dev. All wallet requests and external RPCs are mocked.
 const browser = await chromium.launch({ headless: true, channel: process.env.PLAYWRIGHT_CHANNEL || undefined })
 try {
   if (!process.env.DRIVE_TEST_WALLETCONNECT) {
+    await checkFileAccessErrors(browser)
     await checkWalletSelection(browser)
+    await checkUploadPreflight(browser)
     await checkUploadTasks(browser)
   }
   const context = await browser.newContext({ viewport: { width: 1440, height: 1080 } })
   const page = await context.newPage()
   const errors = []
   page.on('pageerror', (error) => errors.push(error.message))
-  const mockBrowser = await prepareBrowserPage(page)
+  const mockBrowser = await prepareEncryptedBrowserPage(page)
   await page.goto(process.env.DRIVE_TEST_URL || 'http://127.0.0.1:5173/')
   await waitForLanding(page)
   await page.screenshot({ path: '/tmp/filecoin-drive-landing-desktop.png', fullPage: true, animations: 'disabled' })
@@ -75,10 +79,10 @@ try {
     })
   }
   await checkSessionTabs(page)
-  await checkDirectoryTabs(page, errors)
+  await checkDirectoryTabs(page, errors, mockBrowser.walletAddress)
   await page.evaluate(async () => {
     const { mutateCachedPieces } = await import('/src/lib/local-storage/piece-cache.ts')
-    await mutateCachedPieces('314:0x1111111111111111111111111111111111111111', (files) =>
+    await mutateCachedPieces(window.__driveTestScope, (files) =>
       files.map((file) => ({ ...file, fileName: 'Annual report.pdf', folderPath: 'reports/2026' }))
     )
   })
@@ -135,7 +139,7 @@ try {
   await page.evaluate(async () => {
     window.__driveAuthorized = false
     const { updateBrowserSession } = await import('/src/lib/local-storage/session-vault.ts')
-    await updateBrowserSession('314:0x1111111111111111111111111111111111111111', (current) => ({
+    await updateBrowserSession(window.__driveTestScope, (current) => ({
       ...current,
       expiresAt: Math.floor(Date.now() / 1000) - 60,
     }))
@@ -146,13 +150,19 @@ try {
   assert.equal(await page.getByText(/^Key 0x/).count(), 0)
   await page.getByRole('button', { name: 'Authorize session', exact: true }).click()
   await page.getByLabel('Session authorized', { exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Add encryption key', exact: true }).click()
+  await page.getByLabel('Encryption key added', { exact: true }).waitFor()
+  assert.equal(mockBrowser.signatures(), 2, 'Encryption setup must verify deterministic wallet signatures')
   await page.getByRole('button', { name: 'Close Wallet and Storage', exact: true }).click()
   await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Wallet and Storage')
   await page.getByRole('button', { name: 'Wallet and Storage', exact: true }).click()
   await page
-    .getByText('Wallet setup complete. Each upload checks its actual funding needs before transferring.', {
-      exact: true,
-    })
+    .getByText(
+      'Each upload checks its actual costs and keeps at least 7 days of storage funds available after uploading.',
+      {
+        exact: true,
+      }
+    )
     .waitFor()
   await page.getByRole('button', { name: 'Continue to upload', exact: true }).click()
   await page.getByRole('textbox', { name: 'Upload location', exact: true }).waitFor()
@@ -198,7 +208,7 @@ try {
   await page.getByRole('button', { name: 'Close Upload files', exact: true }).click()
   await page.screenshot({ path: '/tmp/filecoin-drive-desktop.png', fullPage: true, animations: 'disabled' })
   const backup = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem('filecoin-pin-piece-cache-v1-314:0x1111111111111111111111111111111111111111'))
+    JSON.parse(localStorage.getItem(`filecoin-pin-piece-cache-v1-${window.__driveTestScope}`))
   )
   assert.equal(backup[0].folderPath, 'reports/2026')
   assert.equal(backup[0].fileName, 'Annual report.pdf')
@@ -206,7 +216,7 @@ try {
   // A new browser context shares neither the directory nor the session vault.
   const restored = await browser.newPage({ viewport: { width: 1440, height: 1080 } })
   restored.on('pageerror', (error) => errors.push(error.message))
-  await prepareBrowserPage(restored, { seedDirectory: false, indexedDirectory: true })
+  await prepareEncryptedBrowserPage(restored, { seedDirectory: false, indexedDirectory: true })
   await restored.goto(process.env.DRIVE_TEST_URL || 'http://127.0.0.1:5173/')
   await openDrive(restored)
   await restored.getByRole('button', { name: 'Connect wallet', exact: true }).click()
@@ -281,7 +291,8 @@ try {
     await blockedPage.goto(process.env.DRIVE_TEST_URL || 'http://127.0.0.1:5173/')
     await openDrive(blockedPage)
     await blockedPage.getByRole('button', { name: 'Connect wallet', exact: true }).click()
-    await blockedPage.getByRole('button', { name: 'Upload files', exact: true }).click()
+    assert.equal(await blockedPage.getByRole('button', { name: 'Upload files', exact: true }).isDisabled(), true)
+    await blockedPage.getByRole('button', { name: 'Wallet and Storage', exact: true }).click()
     await blockedPage.getByRole('dialog', { name: 'Wallet and Storage', exact: true }).waitFor()
     await blockedPage
       .getByRole('checkbox', {

@@ -15,6 +15,7 @@ interface UploadedFile {
   cid: string
   id?: string
   folderPath?: string
+  encrypt: boolean
   startedAt?: number
 }
 
@@ -130,10 +131,12 @@ export function useUploadOrchestration(taskId?: string) {
                 : (copies?.length ?? 0) < uploadState.expectedCopies
                   ? 'pending'
                   : 'complete',
+          encrypt: uploadedFile.encrypt,
           expectedCopies: uploadState.expectedCopies || DEFAULT_STORAGE_COPIES,
           providers,
           steps: uploadState.stepStates,
           error: uploadState.error,
+          errorCode: uploadState.errorCode,
           funding: uploadState.funding,
           checks: 0,
           nextCheckAt: Date.now() + 30_000,
@@ -151,6 +154,8 @@ export function useUploadOrchestration(taskId?: string) {
       fileSize: formatFileSize(uploadedFile.file.size),
       cid: uploadState.currentCid || '',
       pieceCid: uploadState.pieceCid ?? '',
+      ...(uploadState.encrypted ? { encrypted: true } : {}),
+      ...(uploadState.contentRootCid ? { contentRootCid: uploadState.contentRootCid } : {}),
       ...(upload ? { upload } : {}),
       providerName: primary ? providerNameFor(primary.providerId) : '',
       datasetId: primary ? String(primary.dataSetId) : '',
@@ -202,11 +207,14 @@ export function useUploadOrchestration(taskId?: string) {
     uploadState.pieceCid,
     uploadState.importedCar,
     uploadState.currentCid,
+    uploadState.encrypted,
+    uploadState.contentRootCid,
     uploadState.transactionHash,
     uploadState.copies,
     uploadState.confirmedPieces,
     uploadState.isUploading,
     uploadState.error,
+    uploadState.errorCode,
     uploadState.funding,
     uploadState.network,
     uploadState.providersById,
@@ -220,17 +228,17 @@ export function useUploadOrchestration(taskId?: string) {
   ])
 
   const handleUpload = useCallback(
-    (file: UploadSource, folderPath = '') => {
+    (file: UploadSource, folderPath = '', encrypt = true) => {
       console.debug('[UploadOrchestration] Starting upload for file:', file.name)
 
       const id = taskId ?? crypto.randomUUID()
       setDirectorySaveError(null)
       setIsSavingDirectory(false)
       setSaveAttempt(0)
-      setUploadedFile({ file, cid: '', id, folderPath, startedAt: Date.now() })
+      setUploadedFile({ file, cid: '', id, folderPath, encrypt, startedAt: Date.now() })
 
       // Expose completion so callers can release their operation lock even on early failures.
-      return uploadFile(file, { path: folderPath, ...(taskId ? { taskId } : {}) })
+      return uploadFile(file, { path: folderPath, ...(taskId ? { taskId } : {}) }, encrypt)
         .then((cid) => {
           console.debug('[UploadOrchestration] Upload returned CID:', cid)
           setUploadedFile((current) => (current?.id === id ? { ...current, cid } : current))
@@ -259,7 +267,7 @@ export function useUploadOrchestration(taskId?: string) {
       return
     }
     console.debug('[UploadOrchestration] Retrying upload for file:', uploadedFile.file.name)
-    return handleUpload(uploadedFile.file, uploadedFile.folderPath)
+    return handleUpload(uploadedFile.file, uploadedFile.folderPath, uploadedFile.encrypt)
   }, [uploadedFile, handleUpload])
 
   const retryDirectorySave = useCallback(() => setSaveAttempt((attempt) => attempt + 1), [])

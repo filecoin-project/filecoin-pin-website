@@ -1,6 +1,23 @@
+import { TIME_CONSTANTS } from '@filoz/synapse-core/utils'
 import { getPaymentStatus, type PaymentStatus } from 'filecoin-pin/core/payments'
 import { formatFIL, formatUSDFC } from 'filecoin-pin/core/utils'
+import { LOW_STORAGE_RUNWAY_DAYS } from './config.ts'
 import type { Synapse } from './synapse.ts'
+
+export function storageFundsStatus(account: {
+  availableFunds: bigint
+  debt: bigint
+  lockupRatePerEpoch: bigint
+  runwayInEpochs: bigint
+}) {
+  if (account.availableFunds <= 0n || account.debt > 0n) return 'needed'
+  if (
+    account.lockupRatePerEpoch > 0n &&
+    account.runwayInEpochs < BigInt(LOW_STORAGE_RUNWAY_DAYS) * TIME_CONSTANTS.EPOCHS_PER_DAY
+  )
+    return 'low'
+  return 'available'
+}
 
 export const shortenAddress = (address: string, visibleChars = 4) => {
   if (address.length <= visibleChars * 2) return address

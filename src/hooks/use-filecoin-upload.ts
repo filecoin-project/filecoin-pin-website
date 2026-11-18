@@ -1,5 +1,6 @@
 import { CommitError, type PDPProvider, StoreError } from '@filoz/synapse-sdk'
 import { checkFILBalance, validateGasRequirement } from 'filecoin-pin/core/payments'
+import { createCarFromFile } from 'filecoin-pin/core/unixfs'
 import { executeUpload, type UploadExecutionOptions, type UploadExecutionResult } from 'filecoin-pin/core/upload'
 import pino from 'pino'
 import prettyBytes from 'pretty-bytes'
@@ -7,20 +8,22 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { MAX_FILE_SIZE } from '../constants/files.ts'
 import { DEFAULT_STORAGE_COPIES } from '../lib/filecoin-pin/config.ts'
 import { acquireContentLock } from '../lib/filecoin-pin/content-lock.ts'
-import { cacheDirectoryUpload } from '../lib/filecoin-pin/directory.ts'
-import { validateDriveMetadata } from '../lib/filecoin-pin/drive-metadata.ts'
+import { driveMetadataLabel, validateDriveMetadata } from '../lib/filecoin-pin/drive-metadata.ts'
+import { buildEncryptedPayload, wrapCarPayload } from '../lib/filecoin-pin/encrypted-payload.ts'
+import { encryptCarFile, encryptedDataSetMetadata } from '../lib/filecoin-pin/encryption.ts'
 import { createFreshUploadContexts } from '../lib/filecoin-pin/fresh-contexts.ts'
 import { ensureSessionKeyPermissions } from '../lib/filecoin-pin/synapse.ts'
 import type { UploadProviderCheckpoint } from '../lib/filecoin-pin/upload-checkpoint.ts'
 import { prepareUploadContexts, UploadFundingRequired } from '../lib/filecoin-pin/upload-funding.ts'
 import { prepareUploadInput } from '../lib/filecoin-pin/upload-input.ts'
-import type { UploadSource } from '../lib/filecoin-pin/upload-source.ts'
+import { isDirectoryUpload, type UploadSource } from '../lib/filecoin-pin/upload-source.ts'
 import { getOrCreateClientId } from '../lib/local-storage/client-id.ts'
 import { addStoredDataSetId, clearStoredDataSetIds, getStoredDataSetIds } from '../lib/local-storage/data-set.ts'
 import { requireDirectoryLocks } from '../lib/local-storage/directory-store.ts'
 import { getCachedPieces } from '../lib/local-storage/piece-cache.ts'
 import type { StepState } from '../types/upload/step.ts'
 import { hasRemovalProgress, isDeletionScheduled } from '../utils/file-deletion.ts'
+import { classifyUploadFailure, type UploadFailureCode, UploadSetupError } from '../utils/upload/upload-readiness.ts'
 import { useFilecoinPinContext } from './use-filecoin-pin-context.ts'
 import { useWaitableRef } from './use-waitable-ref.ts'
 
@@ -32,8 +35,13 @@ export interface UploadState {
   isUploading: boolean
   stepStates: StepState[]
   error?: string
+  errorCode?: UploadFailureCode
   funding?: { depositNeeded: string; needsApproval: boolean }
   currentCid?: string
+  /** Plaintext root CID inside the encrypted envelope; the stable content identity. `currentCid` stays the public envelope root. */
+  contentRootCid?: string
+  /** True when the upload's bytes are an FEE envelope. */
+  encrypted?: boolean
   pieceCid?: string
   transactionHash?: string
   transactionHashes: string[]
@@ -99,7 +107,8 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
     contentLock.current = null
   }, [])
   useEffect(() => releaseUploadLock, [releaseUploadLock])
-  const { synapse, wallet, addDataSetId, debugParams, storageScope, ensurePermissions } = useFilecoinPinContext()
+  const { synapse, wallet, addDataSetId, debugParams, storageScope, ensurePermissions, encryption } =
+    useFilecoinPinContext()
 
   // Waitable ref so the upload callback can access synapse even if initialized after callback creation
   const synapseRef = useWaitableRef(synapse)
@@ -123,7 +132,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
   }, [])
 
   const uploadFile = useCallback(
-    async (file: UploadSource, metadata?: Record<string, string>): Promise<string> => {
+    async (file: UploadSource, metadata?: Record<string, string>, encrypt = true): Promise<string> => {
       // Freeze the network before any asynchronous upload or balance refresh.
       const network = wallet.status === 'ready' ? wallet.data.network : undefined
       setUploadState({
@@ -144,7 +153,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           throw new Error('Wait for wallet setup to finish before uploading.')
         if (file.size > MAX_FILE_SIZE)
           throw new Error(`Files must be ${prettyBytes(MAX_FILE_SIZE)} or smaller for browser uploads.`)
-        const folderPath = validateDriveMetadata(file.name, metadata?.path ?? '')
+        const folderPath = validateDriveMetadata(file.name, metadata?.path ?? '', isDirectoryUpload(file))
         requireDirectoryLocks()
         updateStepState('creating-car', { status: 'in-progress', progress: 0 })
         logger.info('Preparing IPFS input')
@@ -156,45 +165,63 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           },
         })
 
-        if (carResult.isDirectory && carResult.carBytes.length > MAX_FILE_SIZE)
+        const { isDirectory, importedCar } = carResult
+        if (isDirectory && carResult.carBytes.length > MAX_FILE_SIZE)
           throw new Error('The packed folder exceeds the 200 MB browser upload limit.')
-        const rootCid = carResult.rootCid.toString()
-        if (carResult.isDirectory) {
-          try {
-            await cacheDirectoryUpload(carResult.carBytes, rootCid)
-          } catch {
-            // Optional browsing cache must not prevent a valid upload.
-            logger.warn('Unable to cache folder contents; browsing will use storage providers')
-          }
+
+        if (!encryption.ready)
+          throw new UploadSetupError('encryption', 'Add your encryption key in Wallet setup before uploading.')
+
+        let dataSetMetadata: Record<string, string> = {}
+        let outerCar: Pick<typeof carResult, 'carBytes' | 'rootCid'> = carResult
+        let innerRoot = carResult.rootCid.toString()
+        if (encrypt) {
+          dataSetMetadata = encryptedDataSetMetadata(encryption.credential)
+          // Keep the CLI/viewer-compatible payload inside the encrypted envelope.
+          const payload = importedCar
+            ? await buildEncryptedPayload({ kind: 'car', carBytes: carResult.carBytes, name: file.name })
+            : await wrapCarPayload(carResult, file.name)
+          const envelope = await encryptCarFile(encryption.sessionPrivateKey, encryption.credential, payload.carBytes)
+          innerRoot = payload.rootCid
+          outerCar = await createCarFromFile(envelope)
         }
+        if (outerCar.carBytes.length > MAX_FILE_SIZE)
+          throw new Error(`The ${encrypt ? 'encrypted' : 'packed'} upload exceeds the 200 MB browser upload limit.`)
+        const rootCid = outerCar.rootCid.toString()
         setUploadState((prev) => ({
           ...prev,
           currentCid: rootCid,
-          importedCar: carResult.importedCar,
-          isDirectory: carResult.isDirectory,
+          contentRootCid: encrypt ? innerRoot : undefined,
+          encrypted: encrypt,
+          importedCar,
+          isDirectory,
         }))
 
         updateStepState('creating-car', { status: 'completed', progress: 100 })
         logger.info('IPFS data prepared')
 
+        // Lock and dedup key on the inner root: fresh salt makes the outer root
+        // differ on every upload of identical plaintext.
         contentLock.current = await acquireContentLock(
           storageScope ??
             `${network === 'mainnet' ? 314 : 314159}:${wallet.status === 'ready' ? wallet.data.address.toLowerCase() : ''}`,
-          rootCid
+          innerRoot
         )
 
         if (
           storageScope &&
-          getCachedPieces(storageScope)?.some(
-            (piece) =>
-              piece.id !== metadata?.taskId &&
-              (((!piece.cid || piece.cid === rootCid) && hasRemovalProgress(piece) && !isDeletionScheduled(piece)) ||
-                (piece.cid === rootCid &&
-                  piece.upload &&
-                  piece.upload.phase !== 'complete' &&
-                  piece.upload.phase !== 'failed' &&
-                  piece.upload.phase !== 'funding'))
-          )
+          getCachedPieces(storageScope)?.some((piece) => {
+            if (piece.id === metadata?.taskId) return false
+            const recordRoot = piece.contentRootCid ?? piece.cid
+            return (
+              ((!recordRoot || recordRoot === innerRoot) && hasRemovalProgress(piece) && !isDeletionScheduled(piece)) ||
+              (recordRoot === innerRoot &&
+                piece.upload &&
+                piece.upload.phase !== 'complete' &&
+                piece.upload.phase !== 'failed' &&
+                piece.upload.phase !== 'funding')
+            )
+          })
         )
           throw new Error(
             'This content has an unfinished deletion or upload. Check its status before uploading it again.'
@@ -211,7 +238,8 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
 
         const gas = await checkFILBalance(synapse)
         const gasCheck = validateGasRequirement(gas.balance, gas.isCalibnet)
-        if (!gasCheck.isValid) throw new Error(gasCheck.errorMessage)
+        if (!gasCheck.isValid)
+          throw new UploadSetupError('gas', gasCheck.errorMessage ?? 'Insufficient FIL for transaction fees.')
 
         logger.info('Uploading CAR to Synapse')
         // Distinguishes resolution failures (safe to retry into fresh data
@@ -229,8 +257,8 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           logger,
           contextId: `upload-${Date.now()}`,
           pieceMetadata: {
-            label: file.name,
-            [carResult.importedCar ? 'carPath' : 'path']: folderPath,
+            label: driveMetadataLabel(file.name, isDirectory),
+            [importedCar ? 'carPath' : 'path']: folderPath,
           },
           onProgress: (event) => {
             sawUploadProgress = true
@@ -421,7 +449,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
         let uploadExecutionStarted = false
         const executeFundedUpload = async (options: UploadExecutionOptions) => {
           uploadExecutionStarted = false
-          const contexts = await prepareUploadContexts(synapse, BigInt(carResult.carBytes.length), options)
+          const contexts = await prepareUploadContexts(synapse, BigInt(outerCar.carBytes.length), options)
           executionContexts = contexts
           setUploadState((prev) => ({
             ...prev,
@@ -446,7 +474,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           delete executionOptions.copies
           delete executionOptions.excludeProviderIds
           uploadExecutionStarted = true
-          return executeUpload(synapse, carResult.carBytes, carResult.rootCid, executionOptions)
+          return executeUpload(synapse, outerCar.carBytes, outerCar.rootCid, executionOptions)
         }
 
         // Select providers directly from the registry and create fresh
@@ -457,7 +485,13 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
         const uploadIntoFreshDataSets = async (): Promise<UploadExecutionResult> => {
           let contexts: Awaited<ReturnType<typeof createFreshUploadContexts>> | null = null
           try {
-            contexts = await createFreshUploadContexts(synapse, getOrCreateClientId())
+            contexts = await createFreshUploadContexts(
+              synapse,
+              getOrCreateClientId(),
+              DEFAULT_STORAGE_COPIES,
+              [],
+              dataSetMetadata
+            )
             for (const context of contexts) {
               const provider = context.provider
               setUploadState((prev) => ({
@@ -470,7 +504,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           }
           return executeFundedUpload(
             contexts == null
-              ? { ...baseOptions, metadata: { clientId: getOrCreateClientId() } }
+              ? { ...baseOptions, metadata: { clientId: getOrCreateClientId(), ...dataSetMetadata } }
               : { ...baseOptions, contexts }
           )
         }
@@ -480,7 +514,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           result = await executeFundedUpload({
             ...baseOptions,
             providerIds: [debugParams.providerId],
-            metadata: { clientId: getOrCreateClientId() },
+            metadata: { clientId: getOrCreateClientId(), ...dataSetMetadata },
           })
         } else if (walletAddress != null && storedDataSetIds.length > 0) {
           // Resume into this browser's known datasets. Passing explicit ids
@@ -490,6 +524,9 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
             result = await executeFundedUpload({
               ...baseOptions,
               dataSetIds: storedDataSetIds.map((id) => BigInt(id)),
+              // Filter cached candidates by this upload's encryption metadata;
+              // any missing copies use the same metadata when created.
+              metadata: dataSetMetadata,
             })
           } catch (error) {
             // Resolution/quote reads already distinguish dead datasets from
@@ -556,6 +593,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
         setUploadState((prev) => ({
           ...prev,
           error: errorMessage,
+          errorCode: error instanceof UploadSetupError ? error.code : classifyUploadFailure(errorMessage),
           expectedCopies: error instanceof UploadFundingRequired ? error.copies : prev.expectedCopies,
           funding:
             error instanceof UploadFundingRequired
@@ -583,6 +621,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
       addDataSetId,
       debugParams,
       storageScope,
+      encryption,
       ensurePermissions,
       retainLockForDirectory,
       releaseUploadLock,

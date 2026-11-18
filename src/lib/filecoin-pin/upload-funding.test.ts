@@ -3,6 +3,66 @@ import type { StorageContext } from '@filoz/synapse-sdk/storage'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { formatFundingAmount, prepareUploadContexts } from './upload-funding.ts'
 
+it('blocks a currently funded account when the selected upload would consume its seven-day safety balance', async () => {
+  const priceList = {
+    token: '0x0000000000000000000000000000000000000001',
+    rates: {
+      storagePerTibPerMonth: 2500000000000000000n,
+      datasetFeePerMonth: 120000000000000000n,
+      cdnEgressPerTib: 0n,
+      cacheMissEgressPerTib: 0n,
+    },
+    fees: {
+      createDataSetFee: 25000000000000000n,
+      addPiecesBaseFee: 8000000000000000n,
+      addPiecesPerPieceFee: 3000000000000000n,
+      schedulePieceRemovalsFee: 0n,
+      terminateFee: 0n,
+    },
+    lockups: {
+      lifecycleReserveTarget: 500000000000000000n,
+      replenishThreshold: 25000000000000000n,
+      defaultLockupPeriod: 86400n,
+      cdnLockupAmount: 0n,
+      cacheMissLockupAmount: 0n,
+      cdnLockupPeriod: 0n,
+    },
+  } as Parameters<typeof calculateUploadCosts>[0]['priceList']
+  const currentRate = 2n * (120000000000000000n / 86400n)
+  const account = {
+    currentLockupRate: currentRate,
+    debt: 0n,
+    availableFunds: 56100000000000000n,
+    runwayInEpochs: 56100000000000000n / currentRate,
+    fwssMaxApproved: true,
+  }
+  expect(account.runwayInEpochs).toBeGreaterThan(20160n)
+  const sizes = [100n * 1024n * 1024n]
+  const pricedContexts = [4n, 5n].map(() => ({
+    pieceSizes: sizes,
+    withCDN: false,
+    dataSet: {
+      leafCount: 32768n,
+      lifecycleReserveBalance: 500000000000000000n,
+      pendingOneTimePayments: 0n,
+      pdpEndEpoch: 0n,
+    },
+  }))
+  expect(calculateUploadCosts({ priceList, account, contexts: pricedContexts, extraRunwayEpochs: 0n }).ready).toBe(true)
+  const prepare = vi.fn(async (options: { extraRunwayEpochs: bigint }) => ({
+    costs: calculateUploadCosts({
+      priceList,
+      account,
+      contexts: pricedContexts,
+      extraRunwayEpochs: options.extraRunwayEpochs,
+    }),
+  }))
+  const synapse = { storage: { prepare } } as unknown as Synapse
+  await expect(prepareUploadContexts(synapse, sizes, { contexts: [{}, {}] as StorageContext[] })).rejects.toThrow(
+    'required 7-day safety balance'
+  )
+})
+
 vi.mock('./storage-chain.ts', () => ({ assertCurrentStorageChain: vi.fn() }))
 const { freshContexts, live } = vi.hoisted(() => ({ freshContexts: vi.fn(), live: vi.fn() }))
 vi.mock('@filoz/synapse-core/pdp-verifier', () => ({ dataSetLive: live }))
@@ -24,7 +84,7 @@ it('quotes all selected contexts without executing an offered deposit or approva
   await expect(prepareUploadContexts(synapse, 1000n, { contexts })).rejects.toThrow(
     '0.05 more USDFC for these 2 storage copies'
   )
-  expect(prepare).toHaveBeenCalledWith({ context: contexts, pieceSizes: [1000n] })
+  expect(prepare).toHaveBeenCalledWith({ context: contexts, pieceSizes: [1000n], extraRunwayEpochs: 20160n })
   expect(execute).not.toHaveBeenCalled()
 })
 
@@ -39,8 +99,12 @@ it('keeps the existing dataset and quotes its missing copy before returning uplo
   const synapse = { storage: { prepare, createContexts } } as unknown as Synapse
   expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [123n] })).toEqual([...contexts, additional])
   expect(createContexts).toHaveBeenCalledWith({ withCDN: false, dataSetIds: [123n] })
-  expect(freshContexts).toHaveBeenCalledWith(synapse, expect.any(String), 1, [4n])
-  expect(prepare).toHaveBeenCalledWith({ context: [...contexts, additional], pieceSizes: [10n] })
+  expect(freshContexts).toHaveBeenCalledWith(synapse, expect.any(String), 1, [4n], undefined)
+  expect(prepare).toHaveBeenCalledWith({
+    context: [...contexts, additional],
+    pieceSizes: [10n],
+    extraRunwayEpochs: 20160n,
+  })
 })
 
 it('checks funding for both the reused and new copies before sending any data', async () => {
@@ -58,7 +122,11 @@ it('checks funding for both the reused and new copies before sending any data', 
   await expect(prepareUploadContexts(synapse, 10n, { dataSetIds: [123n] })).rejects.toThrow(
     '1 more USDFC for these 2 storage copies'
   )
-  expect(prepare).toHaveBeenCalledWith({ context: [...contexts, additional], pieceSizes: [10n] })
+  expect(prepare).toHaveBeenCalledWith({
+    context: [...contexts, additional],
+    pieceSizes: [10n],
+    extraRunwayEpochs: 20160n,
+  })
 })
 
 it('preserves IPFS indexing and browser metadata for smart-selected providers', async () => {
@@ -86,8 +154,8 @@ it('skips non-Drive datasets and fills the missing copy on a different provider'
   const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
   const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
   expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [1n, 2n] })).toEqual([drive, fresh])
-  expect(freshContexts).toHaveBeenLastCalledWith(synapse, expect.any(String), 1, [4n])
-  expect(prepare).toHaveBeenCalledWith({ context: [drive, fresh], pieceSizes: [10n] })
+  expect(freshContexts).toHaveBeenLastCalledWith(synapse, expect.any(String), 1, [4n], undefined)
+  expect(prepare).toHaveBeenCalledWith({ context: [drive, fresh], pieceSizes: [10n], extraRunwayEpochs: 20160n })
 })
 
 it('creates two fresh copies when none of the known datasets has the Drive marker', async () => {
@@ -100,7 +168,18 @@ it('creates two fresh copies when none of the known datasets has the Drive marke
   const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
   const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
   expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [1n, 2n] })).toEqual(fresh)
-  expect(freshContexts).toHaveBeenLastCalledWith(synapse, expect.any(String), 2, [])
+  expect(freshContexts).toHaveBeenLastCalledWith(synapse, expect.any(String), 2, [], undefined)
+})
+
+it('threads the caller metadata into fresh data sets created to fill missing copies', async () => {
+  const createContexts = vi.fn().mockResolvedValueOnce([{ dataSetMetadata: {} }])
+  const fresh = [{ provider: { id: 2n } }, { provider: { id: 4n } }]
+  freshContexts.mockResolvedValueOnce(fresh)
+  const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
+  const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
+  const metadata = { 'foc/enc': '1', 'foc/ks': '0xgroupkey', 'foc/kc': 'commitment' }
+  expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [1n], metadata })).toEqual(fresh)
+  expect(freshContexts).toHaveBeenLastCalledWith(synapse, expect.any(String), 2, [], metadata)
 })
 
 it('keeps the two-copy target when discovery finds datasets on more providers', async () => {
@@ -111,7 +190,7 @@ it('keeps the two-copy target when discovery finds datasets on more providers', 
   const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
   const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
   expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [1n, 2n, 3n] })).toEqual(contexts.slice(0, 2))
-  expect(prepare).toHaveBeenCalledWith({ context: contexts.slice(0, 2), pieceSizes: [10n] })
+  expect(prepare).toHaveBeenCalledWith({ context: contexts.slice(0, 2), pieceSizes: [10n], extraRunwayEpochs: 20160n })
   expect(createContexts).toHaveBeenCalledTimes(2)
   expect(live).not.toHaveBeenCalled()
 })
@@ -131,7 +210,7 @@ it('skips a chain-confirmed dead dataset and keeps the healthy candidates', asyn
   expect(live).toHaveBeenCalledExactlyOnceWith(readClient, { dataSetId: 1n })
   expect(createContexts).toHaveBeenCalledTimes(3)
   expect(freshContexts).not.toHaveBeenCalled()
-  expect(prepare).toHaveBeenCalledWith({ context: healthy, pieceSizes: [10n] })
+  expect(prepare).toHaveBeenCalledWith({ context: healthy, pieceSizes: [10n], extraRunwayEpochs: 20160n })
 })
 
 it('selects two fresh copies when every candidate is confirmed dead', async () => {
@@ -142,8 +221,8 @@ it('selects two fresh copies when every candidate is confirmed dead', async () =
   const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
   const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
   expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [1n, 2n] })).toEqual(fresh)
-  expect(freshContexts).toHaveBeenCalledExactlyOnceWith(synapse, expect.any(String), 2, [])
-  expect(prepare).toHaveBeenCalledWith({ context: fresh, pieceSizes: [10n] })
+  expect(freshContexts).toHaveBeenCalledExactlyOnceWith(synapse, expect.any(String), 2, [], undefined)
+  expect(prepare).toHaveBeenCalledWith({ context: fresh, pieceSizes: [10n], extraRunwayEpochs: 20160n })
 })
 
 it.each(['live', 'unknown'] as const)('preserves resolution errors when liveness is %s', async (state) => {
@@ -162,4 +241,55 @@ it('rounds displayed funding up without losing small shortfalls', () => {
   expect(formatFundingAmount(645192894000747211n)).toBe('0.6452')
   expect(formatFundingAmount(1n)).toBe('0.0001')
   expect(formatFundingAmount(0n)).toBe('0')
+})
+
+it('resumes only datasets matching the upload encryption group and commitment', async () => {
+  const metadata = { 'foc/enc': '1', 'foc/ks': 'group', 'foc/kc': 'commitment' }
+  const incompatible = [
+    { source: 'filecoin-drive' },
+    { source: 'filecoin-drive', ...metadata, 'foc/ks': 'other' },
+    { source: 'filecoin-drive', ...metadata, 'foc/kc': 'other' },
+  ]
+  const matching = { provider: { id: 4n }, dataSetMetadata: { source: 'filecoin-drive', ...metadata } }
+  const createContexts = vi.fn()
+  for (const dataSetMetadata of incompatible)
+    createContexts.mockResolvedValueOnce([{ provider: { id: 4n }, dataSetMetadata }])
+  createContexts.mockResolvedValueOnce([matching])
+  const additional = { provider: { id: 2n } }
+  freshContexts.mockResolvedValue([additional])
+  const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
+  await prepareUploadContexts({ storage: { createContexts, prepare } } as unknown as Synapse, 10n, {
+    dataSetIds: [1n, 2n, 3n, 4n],
+    metadata,
+  })
+  expect(prepare).toHaveBeenCalledWith({
+    context: [matching, additional],
+    pieceSizes: [10n],
+    extraRunwayEpochs: 20160n,
+  })
+})
+
+import { calculateUploadCosts } from '@filoz/synapse-core/utils'
+
+it('reuses public datasets while excluding encrypted datasets from public uploads', async () => {
+  const encrypted = {
+    provider: { id: 4n },
+    dataSetMetadata: { source: 'filecoin-drive', 'foc/enc': '1', 'foc/ks': 'group', 'foc/kc': 'commitment' },
+  }
+  const publicContext = { provider: { id: 4n }, dataSetMetadata: { source: 'filecoin-drive' } }
+  const additional = { provider: { id: 2n } }
+  const createContexts = vi.fn().mockResolvedValueOnce([encrypted]).mockResolvedValueOnce([publicContext])
+  freshContexts.mockResolvedValueOnce([additional])
+  const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
+  const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
+  expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [1n, 2n], metadata: {} })).toEqual([
+    publicContext,
+    additional,
+  ])
+  expect(freshContexts).toHaveBeenCalledWith(synapse, expect.any(String), 1, [4n], {})
+  expect(prepare).toHaveBeenCalledWith({
+    context: [publicContext, additional],
+    pieceSizes: [10n],
+    extraRunwayEpochs: 20160n,
+  })
 })

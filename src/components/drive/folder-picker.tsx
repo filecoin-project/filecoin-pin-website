@@ -1,3 +1,4 @@
+import { Loader2 } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { MAX_FILE_SIZE } from '../../constants/files.ts'
 import { type DirectoryUpload, directoryUpload } from '../../lib/filecoin-pin/upload-source.ts'
@@ -8,12 +9,21 @@ import { ButtonBase as Button } from '../ui/button/button-base.tsx'
 export function FolderPicker({
   onUpload,
   disabled = false,
+  isChecking = false,
+  selection,
+  onSelectionChange,
 }: {
   onUpload: (source: DirectoryUpload) => void
   disabled?: boolean
+  isChecking?: boolean
+  selection?: DirectoryUpload | null
+  onSelectionChange?: (selection: DirectoryUpload | null) => void
 }) {
+  const busy = disabled || isChecking
   const picker = useRef<HTMLInputElement>(null)
-  const [selected, setSelected] = useState<DirectoryUpload | null>(null)
+  const [localSelection, setLocalSelection] = useState<DirectoryUpload | null>(null)
+  const selected = selection === undefined ? localSelection : selection
+  const setSelected = onSelectionChange ?? setLocalSelection
   const [error, setError] = useState('')
   const reset = () => {
     setSelected(null)
@@ -24,7 +34,7 @@ export function FolderPicker({
       <input
         aria-label="Select folder to upload"
         className="hidden"
-        disabled={disabled}
+        disabled={busy}
         multiple
         onChange={(event) => {
           try {
@@ -42,18 +52,12 @@ export function FolderPicker({
       />
       <div className="group/container relative h-60 w-full md:h-52">
         {selected ? (
-          <SelectedFile
-            count={selected.files.length}
-            disabled={disabled}
-            file={selected}
-            kind="folder"
-            onReset={reset}
-          />
+          <SelectedFile count={selected.files.length} disabled={busy} file={selected} kind="folder" onReset={reset} />
         ) : (
           <button
             aria-label="Choose a folder"
             className="h-full w-full rounded-xl focus:brand-outline disabled:cursor-not-allowed"
-            disabled={disabled}
+            disabled={busy}
             onClick={() => picker.current?.click()}
             type="button"
           >
@@ -70,7 +74,7 @@ export function FolderPicker({
       <div className="flex justify-end gap-2">
         <Button
           className="w-auto min-w-24"
-          disabled={!selected || disabled}
+          disabled={!selected || busy}
           onClick={reset}
           size="sm"
           type="button"
@@ -79,15 +83,18 @@ export function FolderPicker({
           Cancel
         </Button>
         <Button
+          aria-busy={isChecking}
           className="w-auto min-w-24"
-          disabled={!selected || disabled}
+          disabled={!selected || busy}
+          loading={isChecking}
           onClick={() => {
-            if (selected) onUpload(selected)
+            if (selected && !busy) onUpload(selected)
           }}
           size="sm"
           type="button"
         >
-          Upload
+          {isChecking && <Loader2 aria-hidden="true" className="animate-spin" size={16} />}
+          {isChecking ? 'Checking upload…' : 'Upload'}
         </Button>
       </div>
     </div>
