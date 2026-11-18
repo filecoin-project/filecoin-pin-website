@@ -136,18 +136,27 @@ async function detectEnvelope(entry: NonNullable<Awaited<ReturnType<typeof carRo
   })
 }
 
-export async function carRootFileBytes(carBytes: Uint8Array): Promise<Uint8Array | undefined> {
+export async function carRootFileBytes(
+  carBytes: Uint8Array,
+  allowPartialArchive = false
+): Promise<Uint8Array | undefined> {
   const entry = await carRootFile(await CarReader.fromBytes(carBytes))
-  if (entry) return readRootFile(entry)
+  if (entry) return readRootFile(entry, allowPartialArchive)
 }
 
-async function readRootFile(entry: NonNullable<Awaited<ReturnType<typeof carRootFile>>>) {
+async function readRootFile(entry: NonNullable<Awaited<ReturnType<typeof carRootFile>>>, allowPartialArchive = false) {
   const chunks: Uint8Array[] = []
   let size = 0
-  for await (const chunk of entry.content()) {
-    const bytes = new Uint8Array(chunk)
-    chunks.push(bytes)
-    size += bytes.length
+  try {
+    for await (const chunk of entry.content()) {
+      const bytes = new Uint8Array(chunk)
+      chunks.push(bytes)
+      size += bytes.length
+    }
+  } catch (cause) {
+    // A known plaintext import can be saved as the original partial archive.
+    if (allowPartialArchive && cause instanceof MissingCarBlockError) return undefined
+    throw cause
   }
   const bytes = new Uint8Array(size)
   let offset = 0
@@ -158,12 +167,28 @@ async function readRootFile(entry: NonNullable<Awaited<ReturnType<typeof carRoot
   return bytes
 }
 
+async function downloadEnvelope(reader: CarReader, file: DatasetPiece): Promise<Uint8Array | undefined> {
+  const entry = await carRootFile(reader)
+  if (!entry) return
+  // Only ordinary downloads would extract this same UnixFS file again to save it.
+  if (!file.encrypted && !file.importedCar) {
+    if (await detectEnvelope(entry)) return readRootFile(entry)
+    return
+  }
+  const bytes = await readRootFile(entry, file.importedCar === true && !file.encrypted)
+  if (bytes && (await isEncryptionEnvelope(bytes))) return bytes
+}
+
+export async function fetchPieceCar(synapse: Synapse | null, file: DatasetPiece): Promise<Uint8Array> {
+  return (await fetchPieceCarWithReader(synapse, file)).bytes
+}
+
 /**
  * Fetch a piece's CAR from any dataset context or storage-provider endpoint
  * holding a copy. A copy whose root does not match the record falls through to
  * the next copy; content processing happens once, after retrieval.
  */
-export async function fetchPieceCar(synapse: Synapse | null, file: DatasetPiece): Promise<Uint8Array> {
+async function fetchPieceCarWithReader(synapse: Synapse | null, file: DatasetPiece) {
   const attempts: (() => Promise<Uint8Array>)[] = []
   if (synapse)
     for (const datasetId of file.datasetIds ?? [file.datasetId]) {
@@ -199,7 +224,7 @@ export async function fetchPieceCar(synapse: Synapse | null, file: DatasetPiece)
       const reader = await CarReader.fromBytes(bytes)
       if (!(await reader.getRoots()).some((cid) => cid.toString() === expectedRoot))
         throw new Error('Downloaded CAR does not contain the expected root CID')
-      return bytes
+      return { bytes, reader }
     } catch (cause) {
       failure = cause
     }
@@ -283,20 +308,12 @@ export async function downloadFile(
   if (!file.cid)
     throw new Error('The IPFS root CID is missing from this record. Use Load from Filecoin after the index catches up.')
   onStage?.('downloading')
-  const bytes = await fetchPieceCar(synapse, file)
+  const { bytes, reader } = await fetchPieceCarWithReader(synapse, file)
   onStage?.('preparing')
   // Detection is by content, not trust: a piece is encrypted exactly when its
   // root is a single file that parses as an FEE envelope.
-  const reader = await CarReader.fromBytes(bytes)
-  const entry = await carRootFile(reader)
-  const encrypted =
-    entry &&
-    (await detectEnvelope(entry).catch((cause) => {
-      if (file.importedCar && !file.encrypted && cause instanceof MissingCarBlockError) return false
-      throw cause
-    }))
-  if (entry && encrypted) {
-    const envelope = await readRootFile(entry)
+  const envelope = await downloadEnvelope(reader, file)
+  if (envelope) {
     const inner = await decryptWithCredentials(envelope, credentials, onStage)
     const target = await decryptedTarget(inner)
     if (file.importedCar) {

@@ -181,12 +181,7 @@ export const useFilecoinUpload = (retainLockForDirectory = false) => {
           const payload = importedCar
             ? await buildEncryptedPayload({ kind: 'car', carBytes: carResult.carBytes, name: file.name })
             : await wrapCarPayload(carResult, file.name)
-          const envelope = await encryptCarFile(
-            encryption.sessionPrivateKey,
-            encryption.credential,
-            payload.carBytes,
-            MAX_FILE_SIZE
-          )
+          const envelope = await encryptCarFile(encryption.sessionPrivateKey, encryption.credential, payload.carBytes)
           innerRoot = payload.rootCid
           outerCar = await createCarFromFile(envelope)
         }

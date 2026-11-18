@@ -176,22 +176,15 @@ export async function encryptCar(
 export async function encryptCarFile(
   sessionPrivateKey: Hex,
   credential: EncryptionCredential,
-  innerCar: Uint8Array,
-  maxSize: number
+  innerCar: Uint8Array
 ): Promise<File> {
   return withEncryptedCar(sessionPrivateKey, credential, innerCar, async (stream) => {
     const chunks: BlobPart[] = []
     const reader = stream.getReader()
-    let size = 0
     try {
       while (true) {
         const { done, value } = await reader.read()
         if (done) return new File(chunks, 'encrypted.fee')
-        size += value.byteLength
-        if (size > maxSize) {
-          await reader.cancel()
-          throw new Error('The encrypted upload exceeds the 200 MB browser upload limit.')
-        }
         chunks.push(value as BlobPart)
       }
     } finally {

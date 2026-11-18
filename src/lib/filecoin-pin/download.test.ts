@@ -357,7 +357,7 @@ describe('encrypted piece retrieval', () => {
     ).rejects.toThrow(/invalid or unsupported encryption envelope/)
   })
 
-  it('decrypts through the session grant silently and saves the original bytes', async () => {
+  it.each([true, undefined])('decrypts silently with encrypted metadata %s', async (encryptedFlag) => {
     const original = Uint8Array.from({ length: 3000 }, (_, index) => index % 199)
     const inner = await createCarFromFile(new File([original], 'secret.bin'))
     const { sessionPrivateKey, credential, outer } = await encrypted(inner.carBytes)
@@ -366,7 +366,7 @@ describe('encrypted piece retrieval', () => {
     try {
       const contentRootCid = await downloadFile(
         synapseFor(outer.carBytes),
-        piece({ cid: outer.rootCid.toString() }),
+        piece({ cid: outer.rootCid.toString(), encrypted: encryptedFlag }),
         { session: { privateKey: sessionPrivateKey, credential } },
         (stage) => stages.push(stage)
       )
