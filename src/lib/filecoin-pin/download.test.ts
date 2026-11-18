@@ -3,7 +3,9 @@
 import { decodeGrant, keyForEnvelope, keyspaceKeys, unwrapWith } from '@filoz/keysmith'
 import type { Synapse } from '@filoz/synapse-sdk'
 import { CarReader, CarWriter } from '@ipld/car'
+import * as dagPb from '@ipld/dag-pb'
 import * as fee from 'filecoin-encryption-envelope'
+import { UnixFS } from 'ipfs-unixfs'
 import { base64url } from 'multiformats/bases/base64'
 import { CID } from 'multiformats/cid'
 import { sha256 } from 'multiformats/hashes/sha2'
@@ -326,6 +328,51 @@ describe('encrypted piece retrieval', () => {
         })
       )
       expect(new Uint8Array(await save.blobs[0].arrayBuffer())).toEqual(partial.bytes)
+    } finally {
+      save.restore()
+    }
+  })
+
+  it('preserves the legacy empty download for a UnixFS symlink that reports a size', async () => {
+    const bytes = dagPb.encode({
+      Data: new UnixFS({ type: 'symlink', data: new TextEncoder().encode('target.txt') }).marshal(),
+      Links: [],
+    })
+    const root = CID.createV1(dagPb.code, await sha256.digest(bytes))
+    const car = await packCar([root], [{ cid: root, bytes }])
+    const save = captureSaves()
+    try {
+      await downloadFile(synapseFor(car), piece({ cid: root.toString(), encrypted: undefined }))
+      expect(save.anchor.download).toBe('secret.bin')
+      expect(save.blobs).toHaveLength(1)
+      expect(save.blobs[0].size).toBe(0)
+    } finally {
+      save.restore()
+    }
+  })
+
+  it('detects an unmarked encrypted file when the envelope header exceeds the initial range', async () => {
+    const plaintext = new Blob(['payload'])
+    const envelope = await new Response(
+      plaintext.stream().pipeThrough(
+        fee.encrypt({
+          cek: crypto.getRandomValues(new Uint8Array(32)),
+          contentLength: plaintext.size,
+          appMetadata: { padding: 'x'.repeat(8192) },
+        })
+      )
+    ).blob()
+    const outer = await createCarFromFile(new File([envelope], 'encrypted.fee'))
+    const save = captureSaves()
+    const signer = vi.fn(() => undefined)
+    try {
+      await expect(
+        downloadFile(synapseFor(outer.carBytes), piece({ cid: outer.rootCid.toString(), encrypted: undefined }), {
+          ownerSigner: signer,
+        })
+      ).rejects.toThrow()
+      expect(signer).toHaveBeenCalledOnce()
+      expect(save.blobs).toHaveLength(0)
     } finally {
       save.restore()
     }

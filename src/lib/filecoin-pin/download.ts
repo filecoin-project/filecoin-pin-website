@@ -118,10 +118,15 @@ async function carRootFile(reader: CarReader) {
 }
 
 async function detectEnvelope(entry: NonNullable<Awaited<ReturnType<typeof carRootFile>>>) {
+  // The exporter yields no file content for these legacy entry types.
+  if (entry.type === 'file' && (entry.unixfs.type === 'metadata' || entry.unixfs.type === 'symlink')) return false
   return isEncryptionEnvelope({
     size: Number(entry.size),
     async openRange(offset, length) {
-      const chunks = entry.content({ offset, length })
+      // Legacy UnixFS entries with inline data can report inaccurate nonzero ranges.
+      // If the parser needs more than the prefix, use the full extraction below.
+      if (offset > 0) throw new Error('Envelope detection needs more than the file prefix')
+      const chunks = entry.content({ length })
       return new ReadableStream<Uint8Array>({
         async pull(controller) {
           const next = await chunks.next()
@@ -172,8 +177,10 @@ async function downloadEnvelope(reader: CarReader, file: DatasetPiece): Promise<
   if (!entry) return
   // Only ordinary downloads would extract this same UnixFS file again to save it.
   if (!file.encrypted && !file.importedCar) {
-    if (await detectEnvelope(entry)) return readRootFile(entry)
-    return
+    // Retry through the full read if the legacy entry cannot supply the requested range.
+    const encrypted = await detectEnvelope(entry).catch(() => undefined)
+    if (encrypted === false) return
+    if (encrypted) return readRootFile(entry)
   }
   const bytes = await readRootFile(entry, file.importedCar === true && !file.encrypted)
   if (bytes && (await isEncryptionEnvelope(bytes))) return bytes
