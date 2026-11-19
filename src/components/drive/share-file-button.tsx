@@ -16,6 +16,19 @@ import { describeFileAccessError } from '../../utils/file-access-error.ts'
 import { buttonVariants } from '../ui/button/button-base.tsx'
 import { CopyButton } from '../ui/copy-button.tsx'
 
+/**
+ * Whether sharing an encrypted file will ask the wallet to sign. A file's Keysmith
+ * format is only known once its envelope is read, so with a saved key for just one
+ * format the answer is "maybe".
+ */
+function signatureHint(encryption: { ready: boolean; legacyCredential?: unknown }): string {
+  const savedKeys = Number(encryption.ready) + Number(encryption.legacyCredential != null)
+  if (savedKeys === 2) return 'Show the share link and QR code'
+  return savedKeys === 0
+    ? 'Show the share link. Your wallet signs to unlock sharing this session.'
+    : 'Show the share link. Your wallet may ask for a signature.'
+}
+
 export function ShareFileButton({
   file,
   disabled = false,
@@ -127,8 +140,8 @@ export function ShareFileButton({
           disabled={disabled || !shareable}
           title={
             shareable
-              ? file.encrypted && !encryption.ready
-                ? 'Show the share link. Your wallet signs once to unlock sharing this session.'
+              ? file.encrypted
+                ? signatureHint(encryption)
                 : 'Show the share link and QR code'
               : 'A share link is unavailable for this record.'
           }

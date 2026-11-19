@@ -51,7 +51,7 @@ it('reports encryption readiness only for a live session whose grant matches the
   const encryption = {
     grant: 'mGrantBytes',
     groupKeyId: `0x${'a'.repeat(32)}` as const,
-    commitment: `v1.${'b'.repeat(32)}`,
+    commitment: `v2.${'b'.repeat(32)}`,
     owner,
   }
   const live = Math.floor(Date.now() / 1000) + 3600
@@ -69,4 +69,31 @@ it('reports encryption readiness only for a live session whose grant matches the
   )
   // Expired session: the grant dies with the key it is wrapped to.
   expect(browserSynapse(owner, 'mainnet', { ...session, expiresAt: 1, encryption }).encryptionReady()).toBe(false)
+})
+
+it('never counts a keysmith 0.1.0 grant as encryption set up, but still offers it for old uploads', () => {
+  const owner = '0x1111111111111111111111111111111111111111' as const
+  const legacyEncryption = {
+    grant: 'mOldGrant',
+    groupKeyId: `0x${'a'.repeat(32)}` as const,
+    commitment: `v1.${'b'.repeat(32)}`,
+    owner,
+  }
+  const live = Math.floor(Date.now() / 1000) + 3600
+  const upgraded = browserSynapse(owner, 'mainnet', { ...session, expiresAt: live, legacyEncryption })
+  expect(upgraded.encryptionReady()).toBe(false)
+  expect(upgraded.legacyEncryptionReady()).toBe(true)
+  // Same limits as the current grant: the connected owner, in a live session.
+  const foreign = { ...legacyEncryption, owner: '0x2222222222222222222222222222222222222222' as const }
+  expect(
+    browserSynapse(owner, 'mainnet', {
+      ...session,
+      expiresAt: live,
+      legacyEncryption: foreign,
+    }).legacyEncryptionReady()
+  ).toBe(false)
+  expect(browserSynapse(owner, 'mainnet', { ...session, expiresAt: 1, legacyEncryption }).legacyEncryptionReady()).toBe(
+    false
+  )
+  expect(browserSynapse(owner, 'mainnet', { ...session, expiresAt: live }).legacyEncryptionReady()).toBe(false)
 })

@@ -15,12 +15,15 @@ import {
   createShareLink,
   decryptEnvelope,
   type EncryptionCredential,
+  GROUP_KEY_ID_KEY,
   grantKeyResolver,
   isEncryptionEnvelope,
+  KeyAccessError,
   type OwnerSigner,
   ownerKeyResolver,
   ShareCredentialError,
 } from './encryption.ts'
+import * as legacyEncryption from './encryption-v1.ts'
 import { contentReader } from './ipfs-content.ts'
 
 /** Stages surfaced to the download queue; 'unlocking' marks the owner-wallet signature fallback. */
@@ -32,7 +35,8 @@ export type DownloadStage = 'downloading' | 'preparing' | 'unlocking'
  * without). All optional — plaintext pieces need none of it.
  */
 export type DecryptCredentials = {
-  session?: { privateKey: Hex; credential: EncryptionCredential }
+  /** `legacyCredential` opens uploads written by keysmith 0.1.0; `credential` opens everything newer. */
+  session?: { privateKey: Hex; credential?: EncryptionCredential; legacyCredential?: EncryptionCredential }
   ownerSigner?: () => Promise<OwnerSigner | undefined> | OwnerSigner | undefined
   /** Target-group commitment when no session is supplied; session commitments are matched to envelope labels. */
   commitment?: string
@@ -46,18 +50,51 @@ export type DecryptCredentials = {
  * signature on its own.
  */
 export function decryptCredentials(
-  encryption: { ready: boolean; sessionPrivateKey?: Hex; credential?: EncryptionCredential },
+  encryption: {
+    ready: boolean
+    sessionPrivateKey?: Hex
+    credential?: EncryptionCredential
+    legacyCredential?: EncryptionCredential
+  },
   ownerSigner?: DecryptCredentials['ownerSigner']
 ): DecryptCredentials {
+  const credential = encryption.ready ? encryption.credential : undefined
+  // The legacy credential keeps old uploads opening silently even before a current key is added.
+  const { sessionPrivateKey, legacyCredential } = encryption
   return {
-    ...(encryption.ready && encryption.sessionPrivateKey && encryption.credential
+    ...(sessionPrivateKey && (credential || legacyCredential)
       ? {
-          session: { privateKey: encryption.sessionPrivateKey, credential: encryption.credential },
-          commitment: encryption.credential.commitment,
+          session: {
+            privateKey: sessionPrivateKey,
+            ...(credential ? { credential } : {}),
+            ...(legacyCredential ? { legacyCredential } : {}),
+          },
         }
       : {}),
+    ...(credential ? { commitment: credential.commitment } : {}),
     ...(ownerSigner ? { ownerSigner } : {}),
   }
+}
+
+const currentEncryption = { grantKeyResolver, ownerKeyResolver, createShareLink }
+
+/**
+ * The one place that picks a Keysmith format for an envelope: uploads written
+ * by keysmith 0.1.0 (`foc/v` 1) go to the read-only legacy module with the
+ * legacy credential, format 2 to the current code.
+ *
+ * @throws For any other format, before a credential is tried or a wallet is asked to sign.
+ */
+function envelopeFormat(credentials: DecryptCredentials, labels: Record<string, unknown> | undefined) {
+  if (legacyEncryption.isLegacyEnvelope(labels))
+    return {
+      keys: legacyEncryption,
+      credential: credentials.session?.legacyCredential,
+      groupKeyLabel: legacyEncryption.LEGACY_GROUP_KEY_LABEL,
+    }
+  if (labels?.['foc/v'] !== 2)
+    throw new KeyAccessError('This file uses an unsupported encryption format. Update Drive to open it.')
+  return { keys: currentEncryption, credential: credentials.session?.credential, groupKeyLabel: GROUP_KEY_ID_KEY }
 }
 
 export async function unpackFile(
@@ -252,14 +289,15 @@ async function fetchPieceCarWithReader(synapse: Synapse | null, file: DatasetPie
   )
 }
 
-/** A session's commitment is valid only for its own owner and group key. */
+/** A session's commitment is valid only for its own owner, group key and Keysmith format. */
 function commitmentForEnvelope(credentials: DecryptCredentials, labels: Record<string, unknown> | undefined) {
-  const credential = credentials.session?.credential
-  if (!credential) return credentials.commitment
+  if (!credentials.session) return credentials.commitment
+  const { credential, groupKeyLabel } = envelopeFormat(credentials, labels)
   const owner = labels?.['foc/own']
-  return typeof owner === 'string' &&
+  return credential &&
+    typeof owner === 'string' &&
     owner.toLowerCase() === credential.owner.toLowerCase() &&
-    labels?.['foc/ks'] === credential.groupKeyId
+    labels?.[groupKeyLabel] === credential.groupKeyId
     ? credential.commitment
     : undefined
 }
@@ -272,12 +310,12 @@ export async function decryptWithCredentials(
   signal?: AbortSignal
 ): Promise<Uint8Array> {
   signal?.throwIfAborted()
-  if (credentials.session) {
+  const info = await fee.parse(envelope)
+  signal?.throwIfAborted()
+  const { keys, credential } = envelopeFormat(credentials, info.appMetadata)
+  if (credentials.session && credential) {
     try {
-      return await decryptEnvelope(
-        envelope,
-        grantKeyResolver(credentials.session.privateKey, credentials.session.credential)
-      )
+      return await decryptEnvelope(envelope, keys.grantKeyResolver(credentials.session.privateKey, credential))
     } catch (cause) {
       // Only unusable saved credentials warrant an owner-wallet prompt.
       signal?.throwIfAborted()
@@ -288,13 +326,14 @@ export async function decryptWithCredentials(
   onStage?.('unlocking')
   const signer = await credentials.ownerSigner?.()
   signal?.throwIfAborted()
-  const info = await fee.parse(envelope)
-  signal?.throwIfAborted()
   // One signature serves the whole page session: later decrypts under the
   // same group key reuse the remembered key with no further prompts.
   return decryptEnvelope(
     envelope,
-    ownerKeyResolver(() => signer, commitmentForEnvelope(credentials, info.appMetadata), { remember: true, signal })
+    keys.ownerKeyResolver(() => signer, commitmentForEnvelope(credentials, info.appMetadata), {
+      remember: true,
+      signal,
+    })
   )
 }
 
@@ -372,10 +411,11 @@ export async function encryptedPieceShareLink(
   const info = await readShareEnvelope(synapse, file, signal)
   signal?.throwIfAborted()
   const appMetadata = info.appMetadata as Record<string, unknown>
-  if (credentials.session) {
+  const { keys, credential } = envelopeFormat(credentials, appMetadata)
+  if (credentials.session && credential) {
     try {
-      return await createShareLink({
-        sender: { sessionPrivateKey: credentials.session.privateKey, credential: credentials.session.credential },
+      return await keys.createShareLink({
+        sender: { sessionPrivateKey: credentials.session.privateKey, credential },
         rootCid: file.cid,
         appMetadata,
         signal,
@@ -390,7 +430,7 @@ export async function encryptedPieceShareLink(
   const signer = await credentials.ownerSigner?.()
   signal?.throwIfAborted()
   if (!signer) throw new Error('Connect the wallet that owns this file to share it.')
-  return createShareLink({
+  return keys.createShareLink({
     sender: { signer, commitment: commitmentForEnvelope(credentials, appMetadata) },
     rootCid: file.cid,
     appMetadata,

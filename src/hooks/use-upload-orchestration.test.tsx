@@ -80,7 +80,7 @@ const context = {
     credential: {
       grant: 'mGrant',
       groupKeyId: `0x${'a'.repeat(32)}`,
-      commitment: `v1.${'b'.repeat(32)}`,
+      commitment: `v2.${'b'.repeat(32)}`,
       owner: scope.slice(4).toLowerCase(),
     },
   },

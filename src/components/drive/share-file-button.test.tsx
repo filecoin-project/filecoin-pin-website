@@ -97,7 +97,7 @@ it('mints a keysmith link for an encrypted file when opened, and only then', asy
   mocks.encryption = {
     ready: true,
     sessionPrivateKey: `0x${'1'.repeat(64)}`,
-    credential: { grant: 'mAA', groupKeyId: `0x${'a'.repeat(32)}`, commitment: 'v1.b', owner: '0xabc' },
+    credential: { grant: 'mAA', groupKeyId: `0x${'a'.repeat(32)}`, commitment: `v2.${'b'.repeat(32)}`, owner: '0xabc' },
   }
   let resolve!: (link: string) => void
   mocks.mint.mockImplementation(() => new Promise<string>((r) => (resolve = r)))
@@ -134,6 +134,17 @@ it('shares an encrypted file without a grant: minting falls back to the owner wa
   const credentials = mocks.mint.mock.lastCall?.[2] as Record<string, unknown>
   expect(credentials.session).toBeUndefined()
   expect(credentials.ownerSigner).toBe(mocks.ownerSigner)
+})
+
+it.each([
+  ['no saved key', { ready: false }, 'Your wallet signs to unlock sharing this session.'],
+  ['only the current key', { ready: true }, 'Your wallet may ask for a signature.'],
+  ['only a keysmith 0.1.0 key', { ready: false, legacyCredential: {} }, 'Your wallet may ask for a signature.'],
+  ['both keys', { ready: true, legacyCredential: {} }, 'Show the share link and QR code'],
+])('says whether sharing an encrypted file needs a signature with %s', (_name, encryption, hint) => {
+  mocks.encryption = encryption
+  render(<ShareFileButton file={{ ...file, id: 'hint', encrypted: true } as DatasetPiece} />)
+  expect(screen.getByRole('button', { name: 'Share' }).getAttribute('title')).toContain(hint)
 })
 
 it('warns about indexing only on a confirmed live IPNI miss, not a stale local flag', async () => {

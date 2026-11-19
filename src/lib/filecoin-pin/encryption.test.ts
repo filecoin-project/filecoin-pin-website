@@ -14,6 +14,7 @@ import {
   defaultGroupKeyId,
   encryptCar,
   encryptCarFile,
+  encryptedDataSetMetadata,
   grantKeyResolver,
   isEncryptionEnvelope,
   issueEncryptionCredential,
@@ -61,7 +62,7 @@ describe('defaultGroupKeyId', () => {
 describe('oldestValidGroupKey', () => {
   const valid = (dataSetId: bigint, groupKeyId: string, commitment: string, version = '1') => ({
     dataSetId,
-    metadata: { 'foc/ks': groupKeyId, 'foc/kc': commitment, 'foc/enc': version },
+    metadata: { 'foc/gkid': groupKeyId, 'foc/kc': commitment, 'foc/enc': version },
   })
   const idA = `0x${'a'.repeat(32)}`
   const idB = `0x${'b'.repeat(32)}`
@@ -72,23 +73,23 @@ describe('oldestValidGroupKey', () => {
   })
 
   it('picks the group key holding the lowest data set id', () => {
-    const chosen = oldestValidGroupKey([valid(7n, idB, 'v1.b1'), valid(3n, idA, 'v1.a1'), valid(9n, idA, 'v1.a1')])
-    expect(chosen).toEqual({ groupKeyId: idA, commitment: 'v1.a1' })
+    const chosen = oldestValidGroupKey([valid(7n, idB, 'v2.b1'), valid(3n, idA, 'v2.a1'), valid(9n, idA, 'v2.a1')])
+    expect(chosen).toEqual({ groupKeyId: idA, commitment: 'v2.a1' })
   })
 
   it('skips group keys whose data sets disagree on the commitment', () => {
     const chosen = oldestValidGroupKey([
-      valid(1n, idA, 'v1.a1'),
-      valid(2n, idA, 'v1.DIFFERENT'),
-      valid(5n, idB, 'v1.b1'),
+      valid(1n, idA, 'v2.a1'),
+      valid(2n, idA, 'v2.DIFFERENT'),
+      valid(5n, idB, 'v2.b1'),
     ])
-    expect(chosen).toEqual({ groupKeyId: idB, commitment: 'v1.b1' })
+    expect(chosen).toEqual({ groupKeyId: idB, commitment: 'v2.b1' })
   })
 
   it('skips group keys with a non-canonical id or a foreign foc/enc version', () => {
-    expect(oldestValidGroupKey([valid(1n, '0xNOTHEX', 'v1.x')])).toBeUndefined()
-    expect(oldestValidGroupKey([valid(1n, idA.toUpperCase().replace('0X', '0x'), 'v1.x')])).toBeUndefined()
-    expect(oldestValidGroupKey([valid(1n, idA, 'v1.a1', '2')])).toBeUndefined()
+    expect(oldestValidGroupKey([valid(1n, '0xNOTHEX', 'v2.x')])).toBeUndefined()
+    expect(oldestValidGroupKey([valid(1n, idA.toUpperCase().replace('0X', '0x'), 'v2.x')])).toBeUndefined()
+    expect(oldestValidGroupKey([valid(1n, idA, 'v2.a1', '2')])).toBeUndefined()
   })
 })
 
@@ -97,7 +98,7 @@ describe('issueEncryptionCredential', () => {
     const signer = ownerSigner()
     const credential = await issueEncryptionCredential(signer, generatePrivateKey())
     expect(credential.groupKeyId).toBe(defaultGroupKeyId(signer.address))
-    expect(credential.commitment).toMatch(/^v1\.[0-9a-f]{32}$/)
+    expect(credential.commitment).toMatch(/^v2\.[0-9a-f]{32}$/)
     expect(credential.owner).toBe(signer.address.toLowerCase())
     expect(credential.grant.length).toBeGreaterThan(0)
     // New group key: keysmith signs twice to check the wallet signs deterministically.
@@ -121,7 +122,7 @@ describe('issueEncryptionCredential', () => {
     await expect(
       issueEncryptionCredential(signer, generatePrivateKey(), {
         groupKeyId: defaultGroupKeyId(signer.address),
-        commitment: `v1.${'0'.repeat(32)}`,
+        commitment: `v2.${'0'.repeat(32)}`,
       })
     ).rejects.toThrow()
   })
@@ -168,6 +169,29 @@ describe('encryptCar / decryptEnvelope', () => {
     if (info.scheme !== 'chunked') throw new Error(`expected a chunked envelope, got ${info.scheme}`)
     expect(info.contentType).toBe('application/vnd.ipld.car')
     expect(Number(info.params.plaintextLength)).toBe(innerCar.length)
+  })
+
+  it('writes Keysmith format 2 labels and data set metadata, never the 0.1.0 names', async () => {
+    const { sessionPrivateKey, credential } = await setup()
+    const info = await fee.parse(await encryptCar(sessionPrivateKey, credential, innerCar))
+    expect(info.appMetadata).toMatchObject({
+      'foc/v': 2,
+      'foc/own': credential.owner,
+      'foc/gkid': credential.groupKeyId,
+    })
+    expect(info.appMetadata).not.toHaveProperty('foc/ks')
+    expect(encryptedDataSetMetadata(credential)).toEqual({
+      'foc/enc': '1',
+      'foc/gkid': credential.groupKeyId,
+      'foc/kc': credential.commitment,
+    })
+    expect(credential.commitment).toMatch(/^v2\./)
+  })
+
+  it('refuses to record data set metadata from a keysmith 0.1.0 credential', async () => {
+    const { credential } = await setup()
+    const legacy = { ...credential, commitment: `v1.${'0'.repeat(32)}` }
+    expect(() => encryptedDataSetMetadata(legacy)).toThrow(/format 1/)
   })
 
   it('detects envelopes and rejects plain bytes', async () => {

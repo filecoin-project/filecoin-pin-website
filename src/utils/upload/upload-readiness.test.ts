@@ -71,6 +71,7 @@ it.each([
   ['Upload session expired or was revoked. Authorize it again.', 'session'],
   ['Insufficient FIL balance', 'gas'],
   ['Cannot root a keyspace', 'unsupported_wallet'],
+  ['Smart wallets cannot root a group key.', 'unsupported_wallet'],
 ])('classifies legacy error %s', (message, code) => expect(classifyUploadFailure(message)).toBe(code))
 
 it('keeps unsupported-wallet retry blocked until a usable encryption key is available', () => {

@@ -51,9 +51,15 @@ Every upload is encrypted by default with [Keysmith](https://github.com/FilOzone
 
 **CIDs are no longer deterministic.** Each upload uses a fresh salt, so uploading identical content twice produces different stored CIDs and piece CIDs. Drive deduplicates and locks on the plaintext content CID it records locally. The public CID of an encrypted file identifies the envelope, not the content; gateway links to it serve ciphertext, which is why Preview and Share open an external viewer using a Keysmith share link instead of a gateway URL. The viewer decrypts the content; Drive never renders decrypted files on its own origin. Preview links have the same permanent access as share links. For folder uploads, both actions grant access to the entire uploaded folder, including every file and subfolder.
 
-**Sharing.** Share on an encrypted file wraps that one file's key to a fresh throwaway key and builds a viewer link carrying everything in the URL fragment, so nothing reaches a server. Anyone with the link can read that one file, forever: share links cannot be revoked. The same link opens with `filecoin-pin get --share`.
+**Sharing.** Share on an encrypted file wraps that one file's key to a fresh throwaway key and builds a viewer link carrying everything in the URL fragment, so nothing reaches a server. Anyone with the link can read that one file, forever: share links cannot be revoked. The same link opens with `filecoin-pin get --share`, except for files encrypted before Keysmith format 2 (below): the viewer opens those, the current CLI does not.
 
-**Data sets and cost.** Encrypted uploads go to data sets created with the Keysmith metadata (`foc/enc`, `foc/ks`, `foc/kc`). Existing plain data sets cannot be upgraded (data-set metadata is immutable), so the first encrypted upload creates new data sets while public uploads use unencrypted data sets; wallets storing both pay for both sets. Legacy plaintext files keep downloading and sharing exactly as before.
+**Data sets and cost.** Encrypted uploads go to data sets created with the Keysmith metadata (`foc/enc`, `foc/gkid`, `foc/kc`). Existing plain data sets cannot be upgraded (data-set metadata is immutable), so the first encrypted upload creates new data sets while public uploads use unencrypted data sets; wallets storing both pay for both sets. Legacy plaintext files keep downloading and sharing exactly as before.
+
+**Files encrypted before Keysmith format 2.** Drive now writes Keysmith format 2 (keysmith 0.2.0), which the current filecoin-pin CLI and share viewer read. Files encrypted by earlier versions of Drive used format 1 and stay readable: they download, preview and share through the viewer as before, but Drive never adds to their data sets.
+
+- After this update, add your encryption key once more in Wallet setup before uploading. Your wallet signs a new message, and the first new upload creates new data sets.
+- A browser that already held your key keeps opening old files without a prompt. In any other browser, opening an old file asks your wallet to sign the earlier message.
+- Format 1 support is read-only and temporary.
 
 **Compromise is permanent.** The group key is deterministic and grants are irrevocable. Anyone who extracts the session vault (grant plus session key) from this browser profile can read everything under the group key, and revoking the session key does not undo that. Recovery means a new group key and re-encrypting and re-uploading everything. See [SECURITY.md](SECURITY.md).
 

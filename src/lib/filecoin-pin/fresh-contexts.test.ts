@@ -45,7 +45,7 @@ it('merges extra data-set metadata into the metadata every created dataset carri
   mocks.providers.mockResolvedValue([{ id: 4n, pdp: { serviceURL: 'https://existing.example' } }])
   const contexts = await createFreshUploadContexts({ client: {} } as Synapse, 'browser', 1, [], {
     'foc/enc': '1',
-    'foc/ks': '0xgroupkey',
+    'foc/gkid': '0xgroupkey',
     'foc/kc': 'commitment',
   })
   expect(contexts).toHaveLength(1)
@@ -53,7 +53,7 @@ it('merges extra data-set metadata into the metadata every created dataset carri
     clientId: 'browser',
     source: 'filecoin-drive',
     'foc/enc': '1',
-    'foc/ks': '0xgroupkey',
+    'foc/gkid': '0xgroupkey',
     'foc/kc': 'commitment',
   })
 })
