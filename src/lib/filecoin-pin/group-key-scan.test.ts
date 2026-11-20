@@ -20,7 +20,7 @@ const dataSet = (dataSetId: bigint, groupKeyId: string, commitment: string, vers
   ({
     dataSetId,
     isLive: true,
-    metadata: { 'foc/ks': groupKeyId, 'foc/kc': commitment, 'foc/enc': version },
+    metadata: { 'foc/gkid': groupKeyId, 'foc/kc': commitment, 'foc/enc': version },
   }) as never
 
 beforeEach(() => {
@@ -34,15 +34,15 @@ describe('scanGroupKey', () => {
     expect(listed).toHaveBeenCalledWith(synapse, { filter: expect.any(Function) })
     const filter = listed.mock.calls[0]?.[1]?.filter
     if (!filter) throw new Error('scanGroupKey passed no filter')
-    expect(filter({ isLive: true, metadata: { 'foc/ks': idA } } as never)).toBe(true)
-    expect(filter({ isLive: false, metadata: { 'foc/ks': idA } } as never)).toBe(false)
+    expect(filter({ isLive: true, metadata: { 'foc/gkid': idA } } as never)).toBe(true)
+    expect(filter({ isLive: false, metadata: { 'foc/gkid': idA } } as never)).toBe(false)
     expect(filter({ isLive: true, metadata: { source: 'filecoin-drive' } } as never)).toBe(false)
     expect(filter({ isLive: true } as never)).toBe(false)
   })
 
   it('returns the oldest valid group key across the data sets', async () => {
-    listed.mockResolvedValue([dataSet(7n, idB, 'v1.b1'), dataSet(3n, idA, 'v1.a1'), dataSet(9n, idA, 'v1.a1')])
-    await expect(scanGroupKey(synapse)).resolves.toEqual({ groupKeyId: idA, commitment: 'v1.a1' })
+    listed.mockResolvedValue([dataSet(7n, idB, 'v2.b1'), dataSet(3n, idA, 'v2.a1'), dataSet(9n, idA, 'v2.a1')])
+    await expect(scanGroupKey(synapse)).resolves.toEqual({ groupKeyId: idA, commitment: 'v2.a1' })
   })
 
   it('returns undefined when no data set records a group key', async () => {
@@ -52,26 +52,26 @@ describe('scanGroupKey', () => {
   it('throws rather than growing an invalid default group', async () => {
     // The owner's default group key id is on chain, but its records conflict:
     // issuing a credential for it would grow a group no key can fully read.
-    listed.mockResolvedValue([dataSet(1n, DEFAULT_ID, 'v1.first'), dataSet(2n, DEFAULT_ID, 'v1.second')])
+    listed.mockResolvedValue([dataSet(1n, DEFAULT_ID, 'v2.first'), dataSet(2n, DEFAULT_ID, 'v2.second')])
     await expect(scanGroupKey(synapse)).rejects.toThrow(new RegExp(DEFAULT_ID))
   })
 
   it('also refuses a default group with a foreign foc/enc version', async () => {
-    listed.mockResolvedValue([dataSet(1n, DEFAULT_ID, 'v1.first', '2')])
+    listed.mockResolvedValue([dataSet(1n, DEFAULT_ID, 'v2.first', '2')])
     await expect(scanGroupKey(synapse)).rejects.toThrow(new RegExp(DEFAULT_ID))
   })
 
   it('skips an invalid non-default group without blocking setup', async () => {
-    listed.mockResolvedValue([dataSet(1n, idA, 'v1.first'), dataSet(2n, idA, 'v1.second')])
+    listed.mockResolvedValue([dataSet(1n, idA, 'v2.first'), dataSet(2n, idA, 'v2.second')])
     await expect(scanGroupKey(synapse)).resolves.toBeUndefined()
   })
 
   it('prefers a valid group key even when the default group is broken', async () => {
     listed.mockResolvedValue([
-      dataSet(1n, DEFAULT_ID, 'v1.first'),
-      dataSet(2n, DEFAULT_ID, 'v1.second'),
-      dataSet(5n, idB, 'v1.b1'),
+      dataSet(1n, DEFAULT_ID, 'v2.first'),
+      dataSet(2n, DEFAULT_ID, 'v2.second'),
+      dataSet(5n, idB, 'v2.b1'),
     ])
-    await expect(scanGroupKey(synapse)).resolves.toEqual({ groupKeyId: idB, commitment: 'v1.b1' })
+    await expect(scanGroupKey(synapse)).resolves.toEqual({ groupKeyId: idB, commitment: 'v2.b1' })
   })
 })

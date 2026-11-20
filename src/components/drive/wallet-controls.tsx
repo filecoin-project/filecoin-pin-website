@@ -234,7 +234,7 @@ export function WalletSetup({
   const active = connection.sessionStatus === 'active'
   const disabled =
     connection.busy || connection.uploading || connection.deleting || Boolean(connection.pendingTransaction)
-  // Keysmith refuses signers that cannot root a keyspace (smart accounts, some
+  // Keysmith refuses signers that cannot root a group key (smart accounts, some
   // embedded wallets); detection is empirical, from the surfaced error message.
   const unsupportedWallet = Boolean(
     connection.error && classifyUploadFailure(connection.error) === 'unsupported_wallet'

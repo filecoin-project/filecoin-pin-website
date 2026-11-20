@@ -34,7 +34,7 @@ export interface UploadSetupInput {
   walletError?: string | null
 }
 export function classifyUploadFailure(message = ''): UploadFailureCode {
-  if (/not deterministic|ECDSA signature|cannot root a keyspace/i.test(message)) return 'unsupported_wallet'
+  if (/not deterministic|ECDSA signature|cannot root a (group key|keyspace)/i.test(message)) return 'unsupported_wallet'
   if (/add your encryption key|encryption key.*not ready/i.test(message)) return 'encryption'
   if (/session.*(?:expired|revoked|not authorized)|authorize.*(?:browser|session)/i.test(message)) return 'session'
   if (/insufficient.*FIL|insufficient.*gas|gas balance|FIL balance/i.test(message)) return 'gas'

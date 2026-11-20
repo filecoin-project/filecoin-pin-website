@@ -25,7 +25,14 @@ vi.mock('../../hooks/use-filecoin-pin-context.ts', () => ({
     ensurePermissions: mocks.ensurePermissions,
     debugParams: { providerId: null, dataSetId: null },
     storageSetup: { status: 'ready', gasReady: true, depositReady: true, approvalReady: true },
-    encryption: { ready: true, credential: { groupKeyId: 'group', commitment: 'commitment' } },
+    encryption: {
+      ready: true,
+      credential: {
+        owner: `0x${'1'.repeat(40)}`,
+        groupKeyId: `0x${'a'.repeat(32)}`,
+        commitment: `v2.${'b'.repeat(32)}`,
+      },
+    },
     refreshWallet: mocks.refreshWallet,
   }),
 }))

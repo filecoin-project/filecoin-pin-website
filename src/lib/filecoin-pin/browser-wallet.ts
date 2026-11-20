@@ -10,6 +10,7 @@ import {
 import { calibration, mainnet, Synapse } from '@filoz/synapse-sdk'
 import { type Address, createClient, createPublicClient, http } from 'viem'
 import type { BrowserSession } from '../local-storage/session-vault.ts'
+import type { EncryptionCredential } from './encryption.ts'
 import { APPLICATION_SOURCE } from './synapse.ts'
 
 export type DriveNetwork = 'mainnet' | 'calibration'
@@ -50,21 +51,26 @@ export function browserSynapse(
     await key.syncExpirations(SESSION_PERMISSIONS)
     if (!key.hasPermissions(SESSION_PERMISSIONS)) throw new SessionPermissionError()
   }
+  /** A grant is usable only in a live session, and only when the connected owner issued it. */
+  const usable = (credential: EncryptionCredential | undefined) =>
+    session != null &&
+    credential != null &&
+    credential.owner === address.toLowerCase() &&
+    session.expiresAt > Math.floor(Date.now() / 1000)
   /**
    * True when this session can encrypt uploads and silently decrypt downloads:
    * a live session carrying a group-key grant issued by the connected owner.
    * The grant is wrapped to the session key, so an expired session makes the
    * stored grant dead weight and the setup flow must re-issue it.
    */
-  const encryptionReady = () =>
-    session != null &&
-    session.encryption != null &&
-    session.encryption.owner === address.toLowerCase() &&
-    session.expiresAt > Math.floor(Date.now() / 1000)
+  const encryptionReady = () => usable(session?.encryption)
+  /** True when uploads written by keysmith 0.1.0 still open silently. Never enough to upload. */
+  const legacyEncryptionReady = () => usable(session?.legacyEncryption)
   return {
     synapse,
     validate,
     encryptionReady,
+    legacyEncryptionReady,
     isRevoked: async () => {
       if (!key) return false
       await key.syncExpirations(SESSION_REVOCATION_PERMISSIONS)

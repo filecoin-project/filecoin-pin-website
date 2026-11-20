@@ -10,7 +10,7 @@ vi.mock('./fresh-contexts.ts', () => ({ createFreshUploadContexts: fresh }))
 vi.mock('./storage-chain.ts', () => ({ assertCurrentStorageChain: vi.fn() }))
 
 const scope = '314:0x1111111111111111111111111111111111111111'
-const metadata = { 'foc/enc': '1', 'foc/ks': 'group', 'foc/kc': 'commitment' }
+const metadata = { 'foc/enc': '1', 'foc/gkid': 'group', 'foc/kc': 'commitment' }
 const contexts = [4n, 5n].map((id) => ({
   provider: { id },
   dataSetId: id + 10n,

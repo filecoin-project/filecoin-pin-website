@@ -1,27 +1,33 @@
 /**
  * Keysmith encryption for Drive uploads, following filecoin-pin's conventions so
- * the CLI and Drive read each other's data: a Keysmith *keyspace* is a **group
- * key**, data sets carrying encrypted pieces are tagged `foc/enc`/`foc/ks`/`foc/kc`,
- * and every envelope names its own group key and salt.
+ * the CLI and Drive read each other's data: data sets carrying encrypted pieces
+ * are tagged `foc/enc`/`foc/gkid`/`foc/kc`, and every envelope names its own
+ * group key and salt.
  *
- * Ported from filecoin-pin@2.3.0 `dist/common/group-key.js`, which the package
- * builds but does not export. Delete this once filecoin-pin exports its
- * browser-safe encryption modules.
+ * Keysmith format 2 only (keysmith 0.2.0). Uploads written by keysmith 0.1.0
+ * are read through `encryption-v1.ts`, never from here.
+ *
+ * Ported from filecoin-pin `src/common/group-key.ts` and `share-link.ts`, which
+ * the package builds but does not export. Delete this once filecoin-pin exports
+ * its browser-safe encryption modules.
  */
 import {
   COMMITMENT_KEY,
+  type DecodedGrant,
+  dataSetMetadata,
   decodeGrant,
+  deriveGroupKey,
   encodeGrant,
   type GrantNode,
   grantDescriptor,
-  KEYSPACE_ID_KEY,
   keyForEnvelope,
-  keyspaceKeys,
   newSalt,
+  type PieceMetadataView,
   pieceKey,
   pieceMetadata,
   pieceNode,
   publicKeyOf,
+  readPieceMetadata,
   type TypedDataSigner,
   unwrapWith,
   wrapTo,
@@ -33,16 +39,25 @@ import { concat, hexToBytes, isAddress, keccak256, slice, toHex } from 'viem'
 import { generatePrivateKey } from 'viem/accounts'
 import { readStreamBytes } from './read-stream.ts'
 
-/** A wallet that can sign for a group key (Keysmith's `KeyspaceKey` message): the owner's own key, never a session key. */
+/** A wallet that can sign for a group key (Keysmith's `GroupKey` message): the owner's own key, never a session key. */
 export type OwnerSigner = TypedDataSigner & { address: Address }
 
 /** Data set metadata key that marks a data set as encrypted and versions its rules. */
 export const ENCRYPTION_VERSION_KEY = 'foc/enc'
 /** The only `foc/enc` value this version writes and reuses. */
 export const ENCRYPTION_VERSION = '1'
-export const GROUP_KEY_ID_KEY = KEYSPACE_ID_KEY
+/** Data set metadata key naming a data set's group key (Keysmith format 2). */
+export const GROUP_KEY_ID_KEY = 'foc/gkid'
+/** keysmith 0.1.0's group key id key: such data sets are encrypted, but Drive never writes to them. */
+const LEGACY_GROUP_KEY_ID_KEY = 'foc/ks'
 export const GROUP_KEY_COMMITMENT_KEY = COMMITMENT_KEY
-export const ENCRYPTED_DATA_SET_KEYS = [ENCRYPTION_VERSION_KEY, GROUP_KEY_ID_KEY, GROUP_KEY_COMMITMENT_KEY] as const
+/** Keys that mark a data set as encrypted; an upload reuses a data set only when all of them match. */
+export const ENCRYPTED_DATA_SET_KEYS = [
+  ENCRYPTION_VERSION_KEY,
+  GROUP_KEY_ID_KEY,
+  LEGACY_GROUP_KEY_ID_KEY,
+  GROUP_KEY_COMMITMENT_KEY,
+] as const
 
 /**
  * The id of an owner's first group key, identical across every client that sets
@@ -70,7 +85,7 @@ export interface GroupKeyDataSet {
 const CANONICAL_GROUP_KEY_ID = /^0x[0-9a-f]{32}$/
 
 /**
- * "Oldest wins": group data sets by `foc/ks`, skip any group key whose id is not
+ * "Oldest wins": group data sets by `foc/gkid`, skip any group key whose id is not
  * canonical, whose data sets disagree on `foc/kc`, or that are not all `foc/enc`
  * "1", and return the remaining group key holding the lowest data set id.
  * Inconsistent group keys are skipped, not refused, so one bad group key cannot
@@ -129,13 +144,13 @@ export async function issueEncryptionCredential(
   recorded?: GroupKeyRecord
 ): Promise<EncryptionCredential> {
   const groupKeyId = recorded?.groupKeyId ?? defaultGroupKeyId(signer.address)
-  const keys = await keyspaceKeys(
+  const keys = await deriveGroupKey(
     signer,
-    { owner: signer.address, keyspace: groupKeyId },
+    { owner: signer.address, groupKeyId },
     recorded == null ? {} : { commitment: recorded.commitment }
   )
   try {
-    const grant = await wrapTo(publicKeyOf(sessionPrivateKey), keys.kk, keys.descriptor)
+    const grant = await wrapTo(publicKeyOf(sessionPrivateKey), keys.groupKey, keys.descriptor)
     return {
       grant: base64.baseEncode(encodeGrant(grant)),
       groupKeyId,
@@ -143,7 +158,7 @@ export async function issueEncryptionCredential(
       owner: signer.address.toLowerCase() as Address,
     }
   } finally {
-    keys.kk.fill(0)
+    keys.groupKey.fill(0)
   }
 }
 
@@ -151,8 +166,7 @@ export async function issueEncryptionCredential(
 export function encryptedDataSetMetadata(credential: EncryptionCredential): Record<string, string> {
   return {
     [ENCRYPTION_VERSION_KEY]: ENCRYPTION_VERSION,
-    [GROUP_KEY_ID_KEY]: credential.groupKeyId,
-    [GROUP_KEY_COMMITMENT_KEY]: credential.commitment,
+    ...dataSetMetadata({ owner: credential.owner, groupKeyId: credential.groupKeyId }, credential.commitment),
   }
 }
 
@@ -204,7 +218,7 @@ async function withEncryptedCar<T>(
   try {
     const salt = newSalt()
     const cek = pieceKey(node, salt)
-    const appMetadata = pieceMetadata({ owner: credential.owner, keyspace: credential.groupKeyId }, { salt })
+    const appMetadata = pieceMetadata({ owner: credential.owner, groupKeyId: credential.groupKeyId }, { salt })
     try {
       let offset = 0
       const plaintext = new ReadableStream<Uint8Array>({
@@ -250,20 +264,20 @@ export async function isEncryptionEnvelope(bytes: Uint8Array | fee.RandomAccessS
  */
 export function grantKeyResolver(sessionPrivateKey: Hex, credential: EncryptionCredential): fee.KeyResolver {
   return async ({ appMetadata }) => {
-    let grant: ReturnType<typeof decodeGrant>
+    let grant: DecodedGrant
     try {
       grant = decodeGrant(base64.baseDecode(credential.grant))
-      grantDescriptor({ owner: grant.owner, keyspace: grant.keyspace }, grant.node as GrantNode)
+      grantDescriptor(grant, grant.node as GrantNode)
     } catch (cause) {
       throw new CredentialAccessError('The saved encryption credential is invalid.', { cause })
     }
-    const labels = (appMetadata ?? {}) as Record<string, unknown>
-    if (typeof labels['foc/own'] !== 'string' || typeof labels['foc/ks'] !== 'string')
-      throw new KeyAccessError('The encryption envelope has invalid owner or keyspace labels.')
-    if (
-      labels['foc/own'].toLowerCase() !== grant.owner.toLowerCase() ||
-      labels['foc/ks'].toLowerCase() !== grant.keyspace.toLowerCase()
-    )
+    let piece: PieceMetadataView
+    try {
+      piece = readPieceMetadata(appMetadata)
+    } catch (cause) {
+      throw new KeyAccessError('The encryption envelope has invalid owner or group key labels.', { cause })
+    }
+    if (!sameGroupKey(piece, grant))
       throw new CredentialAccessError('The saved encryption credential belongs to another owner or encryption group.')
     let node: Uint8Array
     try {
@@ -279,6 +293,14 @@ export function grantKeyResolver(sessionPrivateKey: Hex, credential: EncryptionC
       node.fill(0)
     }
   }
+}
+
+/** An envelope without `foc/own` belongs to whoever holds its group key, so only a named owner can mismatch. */
+function sameGroupKey(piece: PieceMetadataView, held: { owner: string; groupKeyId: string }): boolean {
+  return (
+    (piece.owner == null || piece.owner.toLowerCase() === held.owner.toLowerCase()) &&
+    piece.groupKeyId === held.groupKeyId.toLowerCase()
+  )
 }
 
 /** Decrypt an FEE envelope back to its inner bytes, mapping FEE errors to user vocabulary. */
@@ -325,13 +347,13 @@ export class NotOwnerError extends KeyAccessError {
 }
 
 /**
- * Memory-only cache of owner-derived group keys, keyed `owner/keyspace`.
+ * Memory-only cache of owner-derived group keys, keyed `owner/groupKeyId`.
  * Lets one wallet signature serve a whole page session when the stored grant
  * is unusable (expired session, fresh browser). Never persisted: it dies with
  * the tab. Holding root key material in JS memory is the same exposure class
  * as the vaulted grant+session pair, for a shorter lifetime.
  */
-const rememberedOwnerKeys = new Map<string, Uint8Array>()
+export const rememberedOwnerKeys = new Map<string, Uint8Array>()
 let ownerKeyGeneration = 0
 
 /** Drop every remembered group key (tests; wallet disconnect). */
@@ -342,7 +364,7 @@ export function clearRememberedOwnerKeys(): void {
 }
 
 /** Reject stale derivations before each wallet prompt and after each response. */
-function guardedOwnerSigner(wallet: OwnerSigner, check: () => void): OwnerSigner {
+export function guardedOwnerSigner(wallet: OwnerSigner, check: () => void): OwnerSigner {
   return {
     address: wallet.address,
     signTypedData: async (args) => {
@@ -354,7 +376,7 @@ function guardedOwnerSigner(wallet: OwnerSigner, check: () => void): OwnerSigner
   }
 }
 
-function ownerKeyGuard(signal?: AbortSignal): () => void {
+export function ownerKeyGuard(signal?: AbortSignal): () => void {
   const generation = ownerKeyGeneration
   return () => {
     signal?.throwIfAborted()
@@ -378,11 +400,15 @@ export function ownerKeyResolver(
   const check = ownerKeyGuard(options?.signal)
   return async ({ appMetadata }) => {
     check()
-    const groupKeyId = appMetadata?.['foc/ks']
-    if (appMetadata?.['foc/v'] !== 1 || typeof groupKeyId !== 'string') throw new Error('not a Keysmith envelope')
-    const owner = appMetadata['foc/own']
+    let piece: PieceMetadataView
+    try {
+      piece = readPieceMetadata(appMetadata)
+    } catch (cause) {
+      throw new Error('not a Keysmith envelope', { cause })
+    }
+    const { owner, groupKeyId } = piece
     const wallet = typeof signer === 'function' ? signer() : signer
-    if (wallet == null || typeof owner !== 'string' || owner.toLowerCase() !== wallet.address.toLowerCase()) {
+    if (wallet == null || owner == null || owner.toLowerCase() !== wallet.address.toLowerCase()) {
       throw new NotOwnerError(
         String(owner),
         groupKeyId,
@@ -392,22 +418,22 @@ export function ownerKeyResolver(
     const cacheKey = `${owner.toLowerCase()}/${groupKeyId}`
     const remembered = options?.remember ? rememberedOwnerKeys.get(cacheKey) : undefined
     if (remembered) return keyForEnvelope(remembered, appMetadata)
-    const keys = await keyspaceKeys(
+    const keys = await deriveGroupKey(
       guardedOwnerSigner(wallet, check),
-      { owner: wallet.address, keyspace: groupKeyId as Hex },
+      { owner: wallet.address, groupKeyId },
       commitment == null ? {} : { commitment }
     )
     let retained = false
     try {
       check()
-      const key = keyForEnvelope(keys.kk, appMetadata)
+      const key = keyForEnvelope(keys.groupKey, appMetadata)
       if (options?.remember) {
-        rememberedOwnerKeys.set(cacheKey, keys.kk)
+        rememberedOwnerKeys.set(cacheKey, keys.groupKey)
         retained = true
       }
       return key
     } finally {
-      if (!retained) keys.kk.fill(0)
+      if (!retained) keys.groupKey.fill(0)
     }
   }
 }
@@ -439,24 +465,29 @@ export async function createShareLink(options: {
   const check = ownerKeyGuard(options.signal)
   check()
   const labels = options.appMetadata
-  const owner = labels['foc/own']
-  const keyspace = labels['foc/ks']
-  if (labels['foc/v'] !== 1 || typeof owner !== 'string' || typeof keyspace !== 'string')
-    throw new KeyAccessError('This file is not a Keysmith envelope.')
-  const descriptor = grantDescriptor({ owner: owner as Address, keyspace: keyspace as Hex }, pieceNode(labels as never))
+  let piece: PieceMetadataView
+  try {
+    piece = readPieceMetadata(labels)
+  } catch (cause) {
+    throw new KeyAccessError('This file is not a Keysmith envelope.', { cause })
+  }
+  const { groupKeyId } = piece
+  // An envelope that names no owner belongs to the sender's own group key.
+  const owner =
+    piece.owner ?? ('credential' in options.sender ? options.sender.credential.owner : options.sender.signer.address)
+  const descriptor = grantDescriptor({ owner, groupKeyId }, pieceNode(labels as never))
   let pieceEnvelopeKey: Uint8Array
   if ('credential' in options.sender) {
-    let grant: ReturnType<typeof decodeGrant>
+    let grant: DecodedGrant
     try {
       grant = decodeGrant(base64.baseDecode(options.sender.credential.grant))
-      grantDescriptor({ owner: grant.owner, keyspace: grant.keyspace }, grant.node as GrantNode)
+      grantDescriptor(grant, grant.node as GrantNode)
     } catch (cause) {
       throw new ShareCredentialError('The saved sharing credential is invalid.', { cause })
     }
     if (
       owner.toLowerCase() !== options.sender.credential.owner.toLowerCase() ||
-      owner.toLowerCase() !== grant.owner.toLowerCase() ||
-      keyspace.toLowerCase() !== grant.keyspace.toLowerCase()
+      !sameGroupKey({ ...piece, owner }, grant)
     )
       throw new ShareCredentialError('The saved sharing credential belongs to another owner or encryption group.')
     let node: Uint8Array
@@ -478,20 +509,20 @@ export async function createShareLink(options: {
     const wallet = options.sender.signer
     if (owner.toLowerCase() !== wallet.address.toLowerCase())
       throw new KeyAccessError(`This file belongs to ${owner}, not ${wallet.address.toLowerCase()}.`)
-    const cacheKey = `${owner.toLowerCase()}/${keyspace}`
+    const cacheKey = `${owner.toLowerCase()}/${groupKeyId}`
     let node = rememberedOwnerKeys.get(cacheKey)
     if (node == null) {
-      const keys = await keyspaceKeys(
+      const keys = await deriveGroupKey(
         guardedOwnerSigner(wallet, check),
-        { owner: wallet.address, keyspace: keyspace as Hex },
+        { owner: wallet.address, groupKeyId },
         options.sender.commitment == null ? {} : { commitment: options.sender.commitment }
       )
       try {
         check()
-        rememberedOwnerKeys.set(cacheKey, keys.kk)
-        node = keys.kk
+        rememberedOwnerKeys.set(cacheKey, keys.groupKey)
+        node = keys.groupKey
       } catch (cause) {
-        keys.kk.fill(0)
+        keys.groupKey.fill(0)
         throw cause
       }
     }

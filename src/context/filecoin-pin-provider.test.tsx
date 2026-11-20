@@ -4,7 +4,13 @@ import { useContext } from 'react'
 import { beforeEach, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  connection: { address: '0x1111111111111111111111111111111111111111', network: 'mainnet', session: null },
+  connection: {
+    address: '0x1111111111111111111111111111111111111111',
+    network: 'mainnet',
+    session: null as Record<string, unknown> | null,
+  },
+  ready: false,
+  legacyReady: false,
   snapshot: vi.fn(),
   account: vi.fn(),
 }))
@@ -14,7 +20,8 @@ vi.mock('../lib/filecoin-pin/browser-wallet.ts', async (importOriginal) => ({
   browserSynapse: (address: string, network: string) => ({
     synapse: { address, network, payments: { accountSummary: () => mocks.account({ address, network }) } },
     validate: vi.fn(),
-    encryptionReady: () => false,
+    encryptionReady: () => mocks.ready,
+    legacyEncryptionReady: () => mocks.legacyReady,
   }),
 }))
 vi.mock('../lib/filecoin-pin/storage-chain.ts', () => ({ resolveStorageChain: vi.fn(async (chain) => chain) }))
@@ -35,6 +42,9 @@ import { FilecoinPinContext, FilecoinPinProvider } from './filecoin-pin-provider
 
 beforeEach(() => {
   mocks.connection.network = 'mainnet'
+  mocks.connection.session = null
+  mocks.ready = false
+  mocks.legacyReady = false
   mocks.snapshot.mockReset()
   mocks.account.mockReset().mockResolvedValue({
     availableFunds: 1n,
@@ -297,4 +307,46 @@ it('retries missing chain configuration immediately and then loads balances', as
     unmount()
     queryClient.clear()
   }
+})
+
+it('offers a keysmith 0.1.0 credential for old uploads without treating encryption as set up', async () => {
+  mocks.snapshot.mockResolvedValue({
+    address: mocks.connection.address,
+    network: 'mainnet',
+    filBalance: 1n,
+    raw: { filecoinPayBalance: 1n },
+  })
+  const legacyEncryption = { grant: 'old', groupKeyId: '0xid', commitment: 'v1.c', owner: mocks.connection.address }
+  const encryption = { ...legacyEncryption, grant: 'new', commitment: 'v2.c' }
+  const privateKey = `0x${'1'.repeat(64)}`
+  mocks.connection.session = { privateKey, expiresAt: 1800000000, legacyEncryption }
+  mocks.legacyReady = true
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const { result, rerender } = renderHook(() => useContext(FilecoinPinContext), {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>
+        <FilecoinPinProvider>{children}</FilecoinPinProvider>
+      </QueryClientProvider>
+    ),
+  })
+  // Uploads stay blocked, old files still open silently.
+  await waitFor(() =>
+    expect(result.current?.encryption).toEqual({
+      ready: false,
+      sessionPrivateKey: privateKey,
+      legacyCredential: legacyEncryption,
+    })
+  )
+  // Once the current key is added, both are available.
+  mocks.connection.session = { privateKey, expiresAt: 1800000000, encryption, legacyEncryption }
+  mocks.ready = true
+  rerender()
+  await waitFor(() =>
+    expect(result.current?.encryption).toEqual({
+      ready: true,
+      sessionPrivateKey: privateKey,
+      credential: encryption,
+      legacyCredential: legacyEncryption,
+    })
+  )
 })

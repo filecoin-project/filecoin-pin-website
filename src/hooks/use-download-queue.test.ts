@@ -108,18 +108,30 @@ it('never starts a queued download after unmount', async () => {
 })
 
 it('assembles decrypt credentials from the session context and surfaces the unlocking stage', async () => {
-  const credential = { grant: 'grant', groupKeyId: '0xid', commitment: 'v1.c', owner: '0xabc' }
+  const credential = { grant: 'grant', groupKeyId: '0xid', commitment: 'v2.c', owner: '0xabc' }
   mocks.encryption = { ready: true, sessionPrivateKey: '0x11', credential }
   const { result } = renderHook(() => useDownloadQueue(synapse, '314:alice'))
   act(() => result.current.enqueueDownload(files[0]))
   const credentials = mocks.download.mock.calls[0][2]
   expect(credentials.session).toEqual({ privateKey: '0x11', credential })
-  expect(credentials.commitment).toBe('v1.c')
+  expect(credentials.commitment).toBe('v2.c')
   // The wallet provider does not expose its EIP-712 signer yet; the owner
   // fallback stays typed but inactive, so decrypt errors name the owner wallet.
   expect(await credentials.ownerSigner()).toBeUndefined()
   act(() => jobs.get('first')?.progress('unlocking'))
   expect(result.current.download?.stage).toBe('Sign to unlock your files')
+  await act(async () => jobs.get('first')?.finish())
+})
+
+it('passes the legacy credential for old uploads even while encryption is not ready', async () => {
+  const legacyCredential = { grant: 'old', groupKeyId: '0xid', commitment: 'v1.c', owner: '0xabc' }
+  mocks.encryption = { ready: false, sessionPrivateKey: '0x11', legacyCredential }
+  const { result } = renderHook(() => useDownloadQueue(synapse, '314:alice'))
+  act(() => result.current.enqueueDownload(files[0]))
+  const credentials = mocks.download.mock.calls[0][2]
+  expect(credentials.session).toEqual({ privateKey: '0x11', legacyCredential })
+  // A current-format commitment exists only with a current-format credential.
+  expect(credentials.commitment).toBeUndefined()
   await act(async () => jobs.get('first')?.finish())
 })
 
