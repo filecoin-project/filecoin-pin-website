@@ -37,7 +37,7 @@
     "clsx": "^2.1.1",
     "fflate": "^0.8.3",
     "filecoin-encryption-envelope": "^0.1.0",
-    "filecoin-pin": "^2.3.0",
+    "filecoin-pin": "^2.4.0",
     "idb-keyval": "^6.3.0",
     "ipfs-unixfs": "^12.0.2",
     "ipfs-unixfs-exporter": "^15.0.4",
