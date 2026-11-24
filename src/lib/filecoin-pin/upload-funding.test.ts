@@ -177,7 +177,7 @@ it('threads the caller metadata into fresh data sets created to fill missing cop
   freshContexts.mockResolvedValueOnce(fresh)
   const prepare = vi.fn().mockResolvedValue({ costs: { ready: true } })
   const synapse = { storage: { createContexts, prepare } } as unknown as Synapse
-  const metadata = { 'foc/enc': '1', 'foc/ks': '0xgroupkey', 'foc/kc': 'commitment' }
+  const metadata = { 'foc/enc': '1', 'foc/gkid': '0xgroupkey', 'foc/kc': 'commitment' }
   expect(await prepareUploadContexts(synapse, 10n, { dataSetIds: [1n], metadata })).toEqual(fresh)
   expect(freshContexts).toHaveBeenLastCalledWith(synapse, expect.any(String), 2, [], metadata)
 })
@@ -244,10 +244,10 @@ it('rounds displayed funding up without losing small shortfalls', () => {
 })
 
 it('resumes only datasets matching the upload encryption group and commitment', async () => {
-  const metadata = { 'foc/enc': '1', 'foc/ks': 'group', 'foc/kc': 'commitment' }
+  const metadata = { 'foc/enc': '1', 'foc/gkid': 'group', 'foc/kc': 'commitment' }
   const incompatible = [
     { source: 'filecoin-drive' },
-    { source: 'filecoin-drive', ...metadata, 'foc/ks': 'other' },
+    { source: 'filecoin-drive', ...metadata, 'foc/gkid': 'other' },
     { source: 'filecoin-drive', ...metadata, 'foc/kc': 'other' },
   ]
   const matching = { provider: { id: 4n }, dataSetMetadata: { source: 'filecoin-drive', ...metadata } }
@@ -274,7 +274,7 @@ import { calculateUploadCosts } from '@filoz/synapse-core/utils'
 it('reuses public datasets while excluding encrypted datasets from public uploads', async () => {
   const encrypted = {
     provider: { id: 4n },
-    dataSetMetadata: { source: 'filecoin-drive', 'foc/enc': '1', 'foc/ks': 'group', 'foc/kc': 'commitment' },
+    dataSetMetadata: { source: 'filecoin-drive', 'foc/enc': '1', 'foc/gkid': 'group', 'foc/kc': 'commitment' },
   }
   const publicContext = { provider: { id: 4n }, dataSetMetadata: { source: 'filecoin-drive' } }
   const additional = { provider: { id: 2n } }

@@ -1,6 +1,7 @@
 // @vitest-environment node
 
-import { decodeGrant, keyForEnvelope, keyspaceKeys, unwrapWith } from '@filoz/keysmith'
+import { decodeGrant, deriveGroupKey, keyForEnvelope, unwrapWith } from '@filoz/keysmith'
+import * as keysmithV1 from '@filoz/keysmith-v1'
 import type { Synapse } from '@filoz/synapse-sdk'
 import { CarReader, CarWriter } from '@ipld/car'
 import * as dagPb from '@ipld/dag-pb'
@@ -34,6 +35,7 @@ import {
   issueEncryptionCredential,
   type OwnerSigner,
 } from './encryption.ts'
+import { encryptLegacyCar, issueLegacyCredential } from './encryption-v1.test-helpers.ts'
 
 async function packCar(roots: CID[], blocks: { cid: CID; bytes: Uint8Array }[]) {
   const { writer, out } = CarWriter.create(roots)
@@ -200,13 +202,14 @@ describe('encrypted piece retrieval', () => {
   // The remembered-key cache spans the page session; isolate it per test.
   beforeEach(() => clearRememberedOwnerKeys())
 
-  function owner(): OwnerSigner & { signatures: () => number } {
+  function owner(): OwnerSigner & { signatures: () => number; primaryTypes: () => string[] } {
     const account = privateKeyToAccount(OWNER_PRIVATE_KEY)
     const signTypedData = vi.fn((args: Parameters<typeof account.signTypedData>[0]) => account.signTypedData(args))
     return {
       address: account.address,
       signTypedData: signTypedData as never,
       signatures: () => signTypedData.mock.calls.length,
+      primaryTypes: () => signTypedData.mock.calls.map(([args]) => String(args.primaryType)),
     }
   }
 
@@ -370,13 +373,50 @@ describe('encrypted piece retrieval', () => {
         downloadFile(synapseFor(outer.carBytes), piece({ cid: outer.rootCid.toString(), encrypted: undefined }), {
           ownerSigner: signer,
         })
-      ).rejects.toThrow()
-      expect(signer).toHaveBeenCalledOnce()
+        // Recognised as an envelope (not saved as a plain file), and refused as a
+        // format Drive cannot open before the wallet is asked for anything.
+      ).rejects.toThrow(/unsupported encryption format/)
+      expect(signer).not.toHaveBeenCalled()
       expect(save.blobs).toHaveLength(0)
     } finally {
       save.restore()
     }
   })
+
+  it.each([3, undefined])(
+    'refuses an envelope of unknown format (foc/v %s) before any credential or wallet',
+    async (version) => {
+      const { sessionPrivateKey, credential } = await encrypted(new Uint8Array([1]))
+      const labels = {
+        'foc/own': credential.owner,
+        'foc/gkid': credential.groupKeyId,
+        'foc/salt': `0x${'00'.repeat(16)}`,
+      }
+      const envelope = new Uint8Array(
+        await new Response(
+          new Blob([new Uint8Array([1, 2, 3])]).stream().pipeThrough(
+            fee.encrypt({
+              cek: crypto.getRandomValues(new Uint8Array(32)),
+              appMetadata: version == null ? labels : { 'foc/v': version, ...labels },
+              contentLength: 3,
+              contentType: 'application/vnd.ipld.car',
+            })
+          )
+        ).arrayBuffer()
+      )
+      const outer = await createCarFromFile(new File([envelope as BlobPart], 'encrypted.fee'))
+      const signer = vi.fn(() => owner())
+      const credentials: DecryptCredentials = {
+        session: { privateKey: sessionPrivateKey, credential },
+        ownerSigner: signer,
+      }
+      await expect(decryptWithCredentials(envelope, credentials)).rejects.toThrow(/unsupported encryption format/)
+      await expect(
+        encryptedPieceShareLink(synapseFor(outer.carBytes), piece({ cid: outer.rootCid.toString() }), credentials)
+      ).rejects.toThrow(/unsupported encryption format/)
+      expect(signer).not.toHaveBeenCalled()
+    }
+  )
 
   it('reports unexpected WebCrypto failures without requesting an owner signature', async () => {
     const inner = await createCarFromFile(new File(['secret'], 'secret.bin'))
@@ -587,7 +627,7 @@ describe('encrypted piece retrieval', () => {
     const wallet = owner()
     const privateKey = generatePrivateKey()
     const groupKeyId = `0x${'ab'.repeat(16)}` as const
-    const keys = await keyspaceKeys(wallet, { owner: wallet.address, keyspace: groupKeyId })
+    const keys = await deriveGroupKey(wallet, { owner: wallet.address, groupKeyId })
     try {
       const credential = await issueEncryptionCredential(wallet, privateKey, {
         groupKeyId,
@@ -595,7 +635,7 @@ describe('encrypted piece retrieval', () => {
       })
       return { privateKey, credential }
     } finally {
-      keys.kk.fill(0)
+      keys.groupKey.fill(0)
     }
   }
 
@@ -735,7 +775,7 @@ describe('encrypted piece retrieval', () => {
           credential: {
             grant: 'mAA',
             groupKeyId: `0x${'a'.repeat(32)}`,
-            commitment: 'v1.x',
+            commitment: 'v2.x',
             owner: '0x0000000000000000000000000000000000000000',
           },
         },
@@ -836,6 +876,111 @@ describe('encrypted piece retrieval', () => {
     const info = await fee.parse(envelope)
     const plaintext = await decryptEnvelope(envelope, () => keyForEnvelope(key, info.appMetadata as never, grant))
     expect(plaintext).toEqual(inner.carBytes)
+  })
+
+  describe('uploads written by keysmith 0.1.0 (format 1, read-only)', () => {
+    /** An old upload, with the browser credential of that time. */
+    async function oldUpload(contents = 'written before the format change') {
+      const inner = await createCarFromFile(new File([contents], 'old-notes.txt'))
+      const sessionPrivateKey = generatePrivateKey()
+      const { credential: legacyCredential, groupKey } = await issueLegacyCredential(owner(), sessionPrivateKey)
+      const envelope = await encryptLegacyCar(groupKey, legacyCredential, inner.carBytes)
+      const outer = await createCarFromFile(new File([envelope as BlobPart], 'encrypted.fee'))
+      return { contents, inner, sessionPrivateKey, legacyCredential, envelope, outer }
+    }
+
+    it('downloads an old file silently with the legacy credential, before any current key is added', async () => {
+      const { contents, outer, sessionPrivateKey, legacyCredential } = await oldUpload()
+      const wallet = owner()
+      const save = captureSaves()
+      const stages: string[] = []
+      try {
+        await downloadFile(
+          synapseFor(outer.carBytes),
+          piece({ cid: outer.rootCid.toString(), fileName: 'old-notes.txt', encrypted: true }),
+          { session: { privateKey: sessionPrivateKey, legacyCredential }, ownerSigner: () => wallet },
+          (stage) => stages.push(stage)
+        )
+        expect(await save.blobs[0].text()).toBe(contents)
+        expect(stages).not.toContain('unlocking')
+        expect(wallet.signatures()).toBe(0)
+      } finally {
+        save.restore()
+      }
+    })
+
+    it('opens old and new files in the same session, each with the credential of its own format', async () => {
+      const old = await oldUpload()
+      const credential = await issueEncryptionCredential(owner(), old.sessionPrivateKey)
+      const inner = await createCarFromFile(new File(['written after'], 'new-notes.txt'))
+      const envelope = await encryptCar(old.sessionPrivateKey, credential, inner.carBytes)
+      const wallet = owner()
+      const credentials: DecryptCredentials = {
+        session: { privateKey: old.sessionPrivateKey, credential, legacyCredential: old.legacyCredential },
+        commitment: credential.commitment,
+        ownerSigner: () => wallet,
+      }
+      expect(await decryptWithCredentials(old.envelope, credentials)).toEqual(old.inner.carBytes)
+      expect(await decryptWithCredentials(envelope, credentials)).toEqual(inner.carBytes)
+      expect(wallet.signatures()).toBe(0)
+    })
+
+    it('asks the owner for the keysmith 0.1.0 signature in a browser without the legacy credential', async () => {
+      const old = await oldUpload()
+      // A fresh browser: the current key is set up, under the same default group key id.
+      const sessionPrivateKey = generatePrivateKey()
+      const credential = await issueEncryptionCredential(owner(), sessionPrivateKey)
+      expect(credential.groupKeyId).toBe(old.legacyCredential.groupKeyId)
+      const wallet = owner()
+      const stages: string[] = []
+      expect(
+        await decryptWithCredentials(
+          old.envelope,
+          {
+            session: { privateKey: sessionPrivateKey, credential },
+            commitment: credential.commitment,
+            ownerSigner: () => wallet,
+          },
+          (stage) => stages.push(stage)
+        )
+      ).toEqual(old.inner.carBytes)
+      expect(stages).toContain('unlocking')
+      // The old message, twice: the current credential's commitment says nothing about a format 1 key.
+      expect(wallet.primaryTypes()).toEqual(['KeyspaceKey', 'KeyspaceKey'])
+    })
+
+    it('falls back to the owner wallet with one signature when the legacy credential no longer opens', async () => {
+      const old = await oldUpload()
+      const wallet = owner()
+      expect(
+        await decryptWithCredentials(old.envelope, {
+          session: { privateKey: generatePrivateKey(), legacyCredential: old.legacyCredential },
+          ownerSigner: () => wallet,
+        })
+      ).toEqual(old.inner.carBytes)
+      expect(wallet.primaryTypes()).toEqual(['KeyspaceKey'])
+    })
+
+    it('shares an old file through the legacy credential as a link keysmith 0.1.0 opens', async () => {
+      const old = await oldUpload()
+      const rootCid = old.outer.rootCid.toString()
+      const link = await encryptedPieceShareLink(synapseFor(old.outer.carBytes), piece({ cid: rootCid }), {
+        session: { privateKey: old.sessionPrivateKey, legacyCredential: old.legacyCredential },
+      })
+      const params = Object.fromEntries(
+        link
+          .split('#')[1]
+          .slice(`v1/${rootCid}&`.length)
+          .split('&')
+          .map((part) => part.split('=') as [string, string])
+      )
+      const grant = keysmithV1.decodeGrant(base64url.baseDecode(params.d))
+      const key = await keysmithV1.unwrapWith(bytesToHex(base64url.baseDecode(params.k.slice('fak1_'.length))), grant)
+      const info = await fee.parse(old.envelope)
+      expect(
+        await decryptEnvelope(old.envelope, () => keysmithV1.keyForEnvelope(key, info.appMetadata as never, grant))
+      ).toEqual(old.inner.carBytes)
+    })
   })
 
   it('downloads a legacy encrypted piece (no wrapper directory) exactly as before', async () => {

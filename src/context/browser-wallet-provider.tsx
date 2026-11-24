@@ -595,6 +595,7 @@ function BrowserWalletSession({ children }: { children: ReactNode }) {
                 // The grant is wrapped to the session key pair. Re-authorizing reuses
                 // the key, so a preserved credential stays valid: no new signature.
                 ...(current?.encryption ? { encryption: current.encryption } : {}),
+                ...(current?.legacyEncryption ? { legacyEncryption: current.legacyEncryption } : {}),
               }
             })
             if (!next) throw new Error('Unable to save the upload session.')

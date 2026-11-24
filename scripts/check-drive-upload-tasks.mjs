@@ -186,7 +186,7 @@ export async function checkUploadTasks(browser) {
       const envelope = await fee.parse(new Uint8Array(Buffer.concat(chunks)))
       assert.equal(envelope.contentType, 'application/vnd.ipld.car')
       assert.equal(envelope.appMetadata['foc/own'].toLowerCase(), mockBrowser.walletAddress.toLowerCase())
-      assert.equal(envelope.appMetadata['foc/v'], 1)
+      assert.equal(envelope.appMetadata['foc/v'], 2)
     }
     await start('first.txt')
     await checkEncryptedUpload('first.txt', 'first.txt')

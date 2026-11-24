@@ -161,7 +161,7 @@ const fakeContexts = [
     dataSetMetadata: {
       source: 'filecoin-drive',
       'foc/enc': '1',
-      'foc/ks': credential.groupKeyId,
+      'foc/gkid': credential.groupKeyId,
       'foc/kc': credential.commitment,
     },
   },
@@ -170,7 +170,7 @@ const fakeContexts = [
     dataSetMetadata: {
       source: 'filecoin-drive',
       'foc/enc': '1',
-      'foc/ks': credential.groupKeyId,
+      'foc/gkid': credential.groupKeyId,
       'foc/kc': credential.commitment,
     },
   },

@@ -42,8 +42,8 @@ export interface FilecoinPinContextValue {
    * the owner wallet when no grant is usable.
    */
   encryption:
-    | { ready: true; sessionPrivateKey: Hex; credential: EncryptionCredential }
-    | { ready: false; sessionPrivateKey?: undefined; credential?: undefined }
+    | { ready: true; sessionPrivateKey: Hex; credential: EncryptionCredential; legacyCredential?: EncryptionCredential }
+    | { ready: false; sessionPrivateKey?: Hex; credential?: undefined; legacyCredential?: EncryptionCredential }
   ensurePermissions?: () => Promise<void>
 }
 
@@ -183,17 +183,17 @@ export const FilecoinPinProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [wallet.status, runtime, checkIfDatasetExists, dataSet.status])
 
-  const encryption = useMemo<FilecoinPinContextValue['encryption']>(
-    () =>
-      runtime?.encryptionReady() && connection.session?.encryption
-        ? {
-            ready: true,
-            sessionPrivateKey: connection.session.privateKey,
-            credential: connection.session.encryption,
-          }
-        : { ready: false },
-    [runtime, connection.session]
-  )
+  const encryption = useMemo<FilecoinPinContextValue['encryption']>(() => {
+    const session = connection.session
+    if (!runtime || !session) return { ready: false }
+    // Uploads written by keysmith 0.1.0 keep opening silently, with or without a current key.
+    const legacy = runtime.legacyEncryptionReady() ? { legacyCredential: session.legacyEncryption } : {}
+    if (runtime.encryptionReady() && session.encryption)
+      return { ready: true, sessionPrivateKey: session.privateKey, credential: session.encryption, ...legacy }
+    return legacy.legacyCredential
+      ? { ready: false, sessionPrivateKey: session.privateKey, ...legacy }
+      : { ready: false }
+  }, [runtime, connection.session])
 
   const value = useMemo<FilecoinPinContextValue>(
     () => ({
