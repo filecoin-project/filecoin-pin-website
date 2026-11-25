@@ -1,6 +1,7 @@
 import { createStore, del, get, set } from 'idb-keyval'
 import type { Hex } from 'viem'
 import type { EncryptionCredential } from '../filecoin-pin/encryption.ts'
+import { isLegacyCredential } from '../filecoin-pin/encryption-v1.ts'
 
 export interface BrowserSession {
   privateKey: Hex
@@ -9,9 +10,36 @@ export interface BrowserSession {
   revision?: string
   /** Keysmith group-key grant wrapped to this session key; absent on pre-encryption sessions. */
   encryption?: EncryptionCredential
+  /** A grant issued by keysmith 0.1.0. It only opens uploads from that version and never counts as set up. */
+  legacyEncryption?: EncryptionCredential
 }
 
 // Keep the existing database, store and record format so authorized sessions survive upgrades.
+//
+// Stored credentials keep the layout builds on keysmith 0.1.0 expect: `encryption` holds a
+// 0.1.0 grant, as it always has, and the current grant sits beside it in `encryption2`. A tab
+// still on an older build, or a rollback, therefore finds either its own grant or none, never
+// one it cannot open. Only this module knows the stored names.
+type StoredSession = Omit<BrowserSession, 'encryption' | 'legacyEncryption'> & {
+  encryption?: EncryptionCredential
+  encryption2?: EncryptionCredential
+}
+
+function toStored({ encryption, legacyEncryption, ...rest }: BrowserSession): StoredSession {
+  return {
+    ...rest,
+    ...(legacyEncryption ? { encryption: legacyEncryption } : {}),
+    ...(encryption ? { encryption2: encryption } : {}),
+  }
+}
+
+/** Sorted by what each grant is, not by the field it was found in. */
+function fromStored({ encryption, encryption2, ...rest }: StoredSession): BrowserSession {
+  const held = [encryption, encryption2].filter((credential) => credential != null)
+  const legacy = held.find(isLegacyCredential)
+  const current = held.find((credential) => !isLegacyCredential(credential))
+  return { ...rest, ...(current ? { encryption: current } : {}), ...(legacy ? { legacyEncryption: legacy } : {}) }
+}
 const sessions = createStore('filecoin-drive-session-vault', 'sessions')
 const CHANGE_EVENT = 'filecoin-drive-session-change'
 const source = crypto.randomUUID?.() ?? String(Math.random())
@@ -23,7 +51,7 @@ async function writeBrowserSession(scope: string, session: BrowserSession | null
   const ciphertext = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(scope) },
     key,
-    new TextEncoder().encode(JSON.stringify(session))
+    new TextEncoder().encode(JSON.stringify(toStored(session)))
   )
   await set(scope, { key, iv, ciphertext }, sessions)
 }
@@ -89,7 +117,7 @@ export async function loadBrowserSession(scope: string): Promise<BrowserSession 
     stored.key,
     stored.ciphertext
   )
-  const session = JSON.parse(new TextDecoder().decode(bytes)) as BrowserSession
+  const session = JSON.parse(new TextDecoder().decode(bytes)) as StoredSession
   if (!/^0x[0-9a-f]{64}$/i.test(session.privateKey) || !Number.isFinite(session.expiresAt)) return null
-  return session
+  return fromStored(session)
 }

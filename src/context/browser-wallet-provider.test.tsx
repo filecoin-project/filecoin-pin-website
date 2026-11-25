@@ -951,7 +951,7 @@ it.each(['rotated', 'removed', 'unchanged'] as const)(
     const credential: encryptionModule.EncryptionCredential = {
       owner: ALICE,
       groupKeyId: `0x${'a'.repeat(32)}`,
-      commitment: 'v1.test',
+      commitment: `v2.${'b'.repeat(32)}`,
       grant: 'test-grant',
     }
     let finish!: (value: encryptionModule.EncryptionCredential) => void
@@ -993,3 +993,50 @@ it.each(['rotated', 'removed', 'unchanged'] as const)(
     }
   }
 )
+
+describe('a browser that still holds a keysmith 0.1.0 credential', () => {
+  const legacyEncryption: encryptionModule.EncryptionCredential = {
+    owner: ALICE,
+    groupKeyId: `0x${'a'.repeat(32)}`,
+    commitment: `v1.${'b'.repeat(32)}`,
+    grant: 'old-grant',
+  }
+  const stored = () => ({
+    privateKey: `0x${'1'.repeat(64)}` as const,
+    expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    legacyEncryption,
+  })
+
+  it('keeps the legacy credential when the session is renewed', async () => {
+    await mocks.save(`314:${ALICE}`, stored())
+    const { result } = renderHook(useBrowserWallet, { wrapper })
+    await act(async () => result.current.connect())
+    await waitFor(() => expect(result.current.session?.legacyEncryption).toEqual(legacyEncryption))
+    await act(async () => result.current.authorize(7))
+    const renewed = await mocks.load(`314:${ALICE}`)
+    // Renewal reuses the session key, so the grant wrapped to it still opens old uploads.
+    expect(renewed.privateKey).toBe(stored().privateKey)
+    expect(renewed.legacyEncryption).toEqual(legacyEncryption)
+    expect(renewed.encryption).toBeUndefined()
+  })
+
+  it('adds the current key from a fresh scan, never from the legacy record, and keeps both', async () => {
+    const scan = vi.spyOn(groupKeyScan, 'scanGroupKey').mockResolvedValue(undefined)
+    const credential: encryptionModule.EncryptionCredential = {
+      ...legacyEncryption,
+      commitment: `v2.${'c'.repeat(32)}`,
+      grant: 'new-grant',
+    }
+    const issue = vi.spyOn(encryptionModule, 'issueEncryptionCredential').mockResolvedValue(credential)
+    await mocks.save(`314:${ALICE}`, stored())
+    const { result } = renderHook(useBrowserWallet, { wrapper })
+    await act(async () => result.current.connect())
+    await waitFor(() => expect(result.current.session?.legacyEncryption).toEqual(legacyEncryption))
+    await act(async () => result.current.addEncryptionKey())
+    expect(result.current.error).toBeNull()
+    expect(scan).toHaveBeenCalledOnce()
+    // No recorded group key is passed: a 0.1.0 commitment says nothing about the current key.
+    expect(issue).toHaveBeenCalledWith(expect.anything(), stored().privateKey, undefined)
+    expect(await mocks.load(`314:${ALICE}`)).toMatchObject({ encryption: credential, legacyEncryption })
+  })
+})

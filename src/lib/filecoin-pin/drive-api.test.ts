@@ -94,7 +94,7 @@ it('marks pieces from foc/enc data sets as encrypted and everything else as publ
                 data: [
                   {
                     ...dataset('1'),
-                    metadata: { source: 'filecoin-drive', 'foc/enc': '1', 'foc/ks': '0xaa', 'foc/kc': 'v1.bb' },
+                    metadata: { source: 'filecoin-drive', 'foc/enc': '1', 'foc/gkid': '0xaa', 'foc/kc': 'v2.bb' },
                   },
                   { ...dataset('2'), metadata: { source: 'filecoin-drive' } },
                 ],
