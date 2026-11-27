@@ -21,9 +21,9 @@
   "dependencies": {
     "@filoz/keysmith": "^0.2.0",
     "@filoz/keysmith-v1": "npm:@filoz/keysmith@0.1.0",
-    "@filoz/synapse-core": "^0.10.3",
-    "@filoz/synapse-react": "^0.5.1",
-    "@filoz/synapse-sdk": "^2.0.2",
+    "@filoz/synapse-core": "^0.11.1",
+    "@filoz/synapse-react": "^0.6.1",
+    "@filoz/synapse-sdk": "^3.0.1",
     "@ipld/car": "^5.4.7",
     "@ipld/dag-pb": "^4.2.0",
     "@radix-ui/react-accordion": "^1.2.12",
